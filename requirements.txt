@@ -1,0 +1,23 @@
+# Core ML stack
+torch>=2.2,<3.0
+torchvision>=0.17,<1.0
+snntorch>=0.9.0
+numpy>=1.26,<3.0
+
+# Config + data
+pyyaml>=6.0
+
+# Experiment tracking
+wandb>=0.16
+tensorboard>=2.15
+
+# Visualization
+matplotlib>=3.8
+seaborn>=0.13
+
+# Reinforcement learning (used from Phase 0 L4 onward)
+gymnasium>=0.29
+
+# Notebook + dev convenience
+jupyter>=1.0
+ipykernel>=6.29

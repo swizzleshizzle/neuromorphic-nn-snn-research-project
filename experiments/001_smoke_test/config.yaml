@@ -1,0 +1,31 @@
+# Smoke test config — verify the entire scaffold works end-to-end.
+# Trains a tiny MLP on MNIST for 1 epoch with everything wired up.
+# If this runs cleanly, the scaffold is healthy.
+
+run_name: "001_smoke_test"
+notes: "First end-to-end run. Verifies config loading, model construction, training loop, tracker, and checkpointing."
+tags:
+  - smoke-test
+  - phase-0
+
+seed: 42
+
+dataset: mnist
+batch_size: 64
+num_workers: 0
+data_root: "./data"
+
+arch: baseline_mlp
+hidden_dims: [128, 64]
+
+optimizer: sgd
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.0
+epochs: 1
+
+tracker: both
+wandb_project: "neuromorphic-research"
+
+checkpoint_dir: "checkpoints"
+tensorboard_log_dir: "runs"
