@@ -40,6 +40,8 @@ runs/*
 !runs/.gitkeep
 outputs/*
 !outputs/.gitkeep
+experiments/*/outputs/
+!experiments/*/outputs/.gitkeep
 wandb/
 *.pt
 *.pth
