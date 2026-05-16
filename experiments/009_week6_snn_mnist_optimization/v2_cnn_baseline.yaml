@@ -1,0 +1,33 @@
+# experiments/009_week6_snn_mnist_optimization/v2_cnn_baseline.yaml
+# Variant 2: spiking CNN, baseline hyperparameters.
+
+run_name: "v2_cnn_baseline"
+experiment_id: "EXP-002-V2"
+tags:
+  - phase-1
+  - snn
+  - mnist
+  - optimization
+  - cnn
+
+seed: 42
+
+arch: "spiking_cnn"
+num_outputs: 10
+
+beta: 0.95
+threshold: 1.0
+reset_mechanism: "subtract"
+
+num_steps: 25
+encoding: "rate"
+gain: 1.0
+
+batch_size: 128
+epochs: 3
+optimizer: "adam"
+lr: 5.0e-4
+
+tracker: "both"
+log_interval: 50
+viz_output_dir: "experiments/009_week6_snn_mnist_optimization/outputs/v2_cnn_baseline"
