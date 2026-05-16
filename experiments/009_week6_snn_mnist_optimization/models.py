@@ -80,3 +80,57 @@ class FeedforwardSNN(nn.Module):
             spk_out_rec.append(spk3)
             mem_out_rec.append(mem3)
         return torch.stack(spk_out_rec, dim=0), torch.stack(mem_out_rec, dim=0)
+
+
+class SpikingCNN(nn.Module):
+    """Three-layer spiking CNN for MNIST.
+
+    Topology (hardcoded — see design doc §3):
+        Conv2d(1, 16, k=5, padding=2)  -> MaxPool2d(2) -> snn.Leaky    # 28x28 -> 14x14
+        Conv2d(16, 32, k=5, padding=2) -> MaxPool2d(2) -> snn.Leaky    # 14x14 -> 7x7
+        Flatten                                                          # -> 32*7*7 = 1568
+        Linear(1568, num_outputs)                  -> snn.Leaky          # output
+    """
+
+    def __init__(
+        self,
+        num_outputs: int = 10,
+        beta: float = 0.95,
+        threshold: float = 1.0,
+        reset_mechanism: str = "subtract",
+        num_steps: int = 25,
+    ):
+        super().__init__()
+        self.num_steps = num_steps
+
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, padding=2)
+        self.pool1 = nn.MaxPool2d(2)
+        self.lif1 = snn.Leaky(beta=beta, threshold=threshold,
+                              reset_mechanism=reset_mechanism)
+
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, padding=2)
+        self.pool2 = nn.MaxPool2d(2)
+        self.lif2 = snn.Leaky(beta=beta, threshold=threshold,
+                              reset_mechanism=reset_mechanism)
+
+        self.fc = nn.Linear(32 * 7 * 7, num_outputs)
+        self.lif3 = snn.Leaky(beta=beta, threshold=threshold,
+                              reset_mechanism=reset_mechanism)
+
+    def forward(self, spk_in: torch.Tensor):
+        """``spk_in``: ``[num_steps, B, 1, 28, 28]``.
+        Returns ``(spk_out, mem_out)`` each ``[num_steps, B, num_outputs]``."""
+        mem1 = self.lif1.init_leaky()
+        mem2 = self.lif2.init_leaky()
+        mem3 = self.lif3.init_leaky()
+        spk_out_rec, mem_out_rec = [], []
+        for step in range(self.num_steps):
+            cur1 = self.pool1(self.conv1(spk_in[step]))     # [B, 16, 14, 14]
+            spk1, mem1 = self.lif1(cur1, mem1)
+            cur2 = self.pool2(self.conv2(spk1))             # [B, 32, 7, 7]
+            spk2, mem2 = self.lif2(cur2, mem2)
+            cur3 = self.fc(spk2.flatten(start_dim=1))       # [B, num_outputs]
+            spk3, mem3 = self.lif3(cur3, mem3)
+            spk_out_rec.append(spk3)
+            mem_out_rec.append(mem3)
+        return torch.stack(spk_out_rec, dim=0), torch.stack(mem_out_rec, dim=0)
