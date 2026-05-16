@@ -48,3 +48,22 @@ def test_select_sample_rejects_1d():
     from neuromorphic.viz.core import _select_sample
     with pytest.raises(ValueError, match="2D or 3D"):
         _select_sample(torch.zeros(20), sample_idx=0)
+
+
+# ---------- spike_raster ----------
+
+def test_spike_raster_returns_fig_ax(spk):
+    from neuromorphic.viz import spike_raster
+    fig, ax = spike_raster(spk)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_spike_raster_respects_provided_ax(spk):
+    from neuromorphic.viz import spike_raster
+    fig, ax = plt.subplots()
+    fig2, ax2 = spike_raster(spk, ax=ax)
+    assert ax2 is ax
+    assert fig2 is fig
+    plt.close(fig)
