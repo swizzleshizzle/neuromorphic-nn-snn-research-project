@@ -82,3 +82,44 @@ def population_rate(
     ax.set_ylim(bottom=0.0)
     ax.grid(alpha=0.3)
     return fig, ax
+
+
+def psth(
+    spk: torch.Tensor,
+    bin_size: int = 5,
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes]:
+    """Peri-stimulus time histogram: total population spikes per time bin.
+
+    Pools across batch and neuron axes into ``bin_size``-wide time bins, then
+    bar-plots the sum per bin. If ``T`` is not divisible by ``bin_size``,
+    trailing time steps that don't fill a full bin are dropped.
+
+    Args:
+        spk: ``[T, B, N]`` spike tensor.
+        bin_size: width of each bin in time steps.
+        ax: matplotlib Axes. If None, a fresh fig/ax is created.
+
+    Returns:
+        ``(fig, ax)``.
+    """
+    if spk.ndim != 3:
+        raise ValueError(
+            f"psth expects a [T, B, N] tensor, got shape {tuple(spk.shape)}"
+        )
+    if bin_size < 1:
+        raise ValueError(f"bin_size must be >= 1, got {bin_size}")
+
+    fig, ax = _ensure_ax(ax)
+    per_step = spk.sum(dim=(1, 2)).detach().cpu()  # [T]
+    T = per_step.shape[0]
+    n_bins = T // bin_size
+    truncated = per_step[: n_bins * bin_size].reshape(n_bins, bin_size).sum(dim=1)
+    bin_centers = (torch.arange(n_bins) + 0.5) * bin_size
+
+    ax.bar(bin_centers.numpy(), truncated.numpy(), width=bin_size * 0.9,
+           color="C0", edgecolor="black", linewidth=0.4)
+    ax.set_xlabel("Time step")
+    ax.set_ylabel(f"Total spikes per {bin_size}-step bin")
+    ax.set_title(f"PSTH — {n_bins} bins of width {bin_size}")
+    return fig, ax

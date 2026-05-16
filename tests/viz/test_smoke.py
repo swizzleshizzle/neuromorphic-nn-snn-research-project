@@ -207,3 +207,30 @@ def test_population_rate_smoothing_shrinks_line(spk):
     # Valid convolution: length T - window + 1.
     assert lines[0].get_xdata().size == spk.shape[0] - 5 + 1
     plt.close(fig)
+
+
+# ---------- psth ----------
+
+def test_psth_returns_fig_ax(spk):
+    from neuromorphic.viz import psth
+    fig, ax = psth(spk, bin_size=5)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_psth_correct_bin_count(spk):
+    from neuromorphic.viz import psth
+    # T=20, bin_size=5 → 4 bins.
+    fig, ax = psth(spk, bin_size=5)
+    assert len(ax.patches) == 4
+    plt.close(fig)
+
+
+def test_psth_truncates_when_T_not_divisible():
+    from neuromorphic.viz import psth
+    # T=22 with bin_size=5: only 4 full bins; last 2 time steps dropped.
+    spk = (torch.rand(22, 4, 50) < 0.2).float()
+    fig, ax = psth(spk, bin_size=5)
+    assert len(ax.patches) == 4
+    plt.close(fig)

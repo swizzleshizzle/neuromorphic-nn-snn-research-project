@@ -6,7 +6,7 @@ accept tensors in the canonical ``[T, B, N]`` shape. See
 """
 
 from neuromorphic.viz.membrane import membrane_trace
-from neuromorphic.viz.spikes import population_rate, spike_raster
+from neuromorphic.viz.spikes import population_rate, psth, spike_raster
 from neuromorphic.viz.training import training_curve
 from neuromorphic.viz.weights import weight_heatmap, weight_histogram
 
@@ -17,4 +17,5 @@ __all__ = [
     "weight_heatmap",
     "training_curve",
     "population_rate",
+    "psth",
 ]
