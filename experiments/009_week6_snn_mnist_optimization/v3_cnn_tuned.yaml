@@ -1,0 +1,34 @@
+# experiments/009_week6_snn_mnist_optimization/v3_cnn_tuned.yaml
+# Variant 3: spiking CNN, faster leak (beta=0.90 vs 0.95).
+
+run_name: "v3_cnn_tuned"
+experiment_id: "EXP-002-V3"
+tags:
+  - phase-1
+  - snn
+  - mnist
+  - optimization
+  - cnn
+  - beta-tuned
+
+seed: 42
+
+arch: "spiking_cnn"
+num_outputs: 10
+
+beta: 0.90
+threshold: 1.0
+reset_mechanism: "subtract"
+
+num_steps: 25
+encoding: "rate"
+gain: 1.0
+
+batch_size: 128
+epochs: 3
+optimizer: "adam"
+lr: 5.0e-4
+
+tracker: "both"
+log_interval: 50
+viz_output_dir: "experiments/009_week6_snn_mnist_optimization/outputs/v3_cnn_tuned"
