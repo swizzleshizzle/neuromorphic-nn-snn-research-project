@@ -139,3 +139,43 @@ def test_weight_heatmap_uses_symmetric_color_limits(W):
     vmin, vmax = images[0].get_clim()
     assert abs(vmin + vmax) < 1e-6, f"expected symmetric clim, got ({vmin}, {vmax})"
     plt.close(fig)
+
+
+# ---------- training_curve ----------
+
+def test_training_curve_returns_fig_ax(history):
+    from neuromorphic.viz import training_curve
+    fig, ax = training_curve(history, log_interval=10)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_training_curve_creates_twin_axis_when_acc_present(history):
+    from neuromorphic.viz import training_curve
+    fig, ax = training_curve(history, log_interval=10)
+    # A twin y-axis shares the same x-axis but has its own ylim.
+    twins = [a for a in fig.axes if a is not ax]
+    assert len(twins) >= 1, "expected a twin axis for accuracy series"
+    plt.close(fig)
+
+
+def test_training_curve_skips_missing_series():
+    from neuromorphic.viz import training_curve
+    only_loss = {"train_loss": [1.0, 0.5, 0.3]}
+    fig, ax = training_curve(only_loss)
+    twins = [a for a in fig.axes if a is not ax]
+    assert len(twins) == 0, "no acc keys → no twin axis"
+    plt.close(fig)
+
+
+def test_training_curve_warns_on_unknown_key():
+    import warnings
+    from neuromorphic.viz import training_curve
+    weird = {"train_loss": [1.0, 0.5], "mystery_metric": [0.2, 0.4]}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fig, _ = training_curve(weird)
+        assert any("mystery_metric" in str(w.message) for w in caught)
+    import matplotlib.pyplot as plt
+    plt.close(fig)
