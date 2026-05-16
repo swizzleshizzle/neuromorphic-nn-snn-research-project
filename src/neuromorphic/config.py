@@ -42,6 +42,7 @@ class ExperimentConfig:
     run_name: str = "unnamed_run"
     notes: str = ""
     tags: list[str] = field(default_factory=list)
+    experiment_id: str = ""
 
     # --- Reproducibility ---
     seed: int = 42
@@ -52,9 +53,23 @@ class ExperimentConfig:
     num_workers: int = 0  # Windows: keep 0 to avoid multiprocessing pickling issues
     data_root: str = "./data"
 
-    # --- Model ---
-    arch: str = "baseline_mlp"  # baseline_mlp | tiny_mlp | simple_cnn | (later) snn variants
-    hidden_dims: list[int] = field(default_factory=lambda: [128, 64])
+    # --- Model architecture ---
+    arch: str = "baseline_mlp"  # baseline_mlp | tiny_mlp | simple_cnn | feedforward_snn | spiking_cnn
+    num_inputs: int = 784
+    hidden_dims: list[int] = field(default_factory=lambda: [1000, 1000])
+    num_outputs: int = 10
+
+    # --- Neuron dynamics (SNN) ---
+    beta: float = 0.95
+    threshold: float = 1.0
+    reset_mechanism: str = "subtract"
+
+    # --- Temporal simulation (SNN) ---
+    num_steps: int = 25
+
+    # --- Spike encoding (SNN) ---
+    encoding: str = "rate"
+    gain: float = 1.0
 
     # --- Optimization ---
     optimizer: str = "sgd"  # sgd | adam
@@ -67,10 +82,12 @@ class ExperimentConfig:
     tracker: str = "both"  # wandb | tensorboard | both | none
     wandb_project: str = "neuromorphic-research"
     wandb_entity: str | None = None  # None = use default account
+    log_interval: int = 50
 
     # --- Output paths (relative to repo root) ---
     checkpoint_dir: str = "checkpoints"
     tensorboard_log_dir: str = "runs"
+    viz_output_dir: str = "outputs"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to plain dict for logging / W&B."""
