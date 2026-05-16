@@ -1,0 +1,35 @@
+# experiments/009_week6_snn_mnist_optimization/v1_mlp_tuned.yaml
+# Variant 1: week-5 baseline MLP + 2 extra epochs.
+
+run_name: "v1_mlp_tuned"
+experiment_id: "EXP-002-V1"
+tags:
+  - phase-1
+  - snn
+  - mnist
+  - optimization
+  - mlp
+
+seed: 42
+
+arch: "feedforward_snn"
+num_inputs: 784
+hidden_dims: [1000, 1000]
+num_outputs: 10
+
+beta: 0.95
+threshold: 1.0
+reset_mechanism: "subtract"
+
+num_steps: 25
+encoding: "rate"
+gain: 1.0
+
+batch_size: 128
+epochs: 5
+optimizer: "adam"
+lr: 5.0e-4
+
+tracker: "both"
+log_interval: 50
+viz_output_dir: "experiments/009_week6_snn_mnist_optimization/outputs/v1_mlp_tuned"
