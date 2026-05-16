@@ -2,6 +2,7 @@
 asserting it returns a (Figure, Axes) tuple without raising."""
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 import torch
 from matplotlib.axes import Axes
@@ -66,4 +67,39 @@ def test_spike_raster_respects_provided_ax(spk):
     fig2, ax2 = spike_raster(spk, ax=ax)
     assert ax2 is ax
     assert fig2 is fig
+    plt.close(fig)
+
+
+# ---------- membrane_trace ----------
+
+def test_membrane_trace_returns_fig_ax(mem):
+    from neuromorphic.viz import membrane_trace
+    fig, ax = membrane_trace(mem)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_membrane_trace_draws_threshold_line(mem):
+    from neuromorphic.viz import membrane_trace
+    fig, ax = membrane_trace(mem, threshold=1.0, show_threshold=True)
+    # axhline adds a Line2D; check at least one line is at y=1.0.
+    # matplotlib 3.10's axhline returns ydata as a Python list, not ndarray —
+    # wrap in np.asarray so .size / element comparison work uniformly.
+    threshold_lines = [
+        ln for ln in ax.get_lines()
+        if (yd := np.asarray(ln.get_ydata())).size == 2 and (yd == 1.0).all()
+    ]
+    assert len(threshold_lines) >= 1
+    plt.close(fig)
+
+
+def test_membrane_trace_omits_threshold_when_disabled(mem):
+    from neuromorphic.viz import membrane_trace
+    fig, ax = membrane_trace(mem, threshold=1.0, show_threshold=False)
+    threshold_lines = [
+        ln for ln in ax.get_lines()
+        if (yd := np.asarray(ln.get_ydata())).size == 2 and (yd == 1.0).all()
+    ]
+    assert len(threshold_lines) == 0
     plt.close(fig)

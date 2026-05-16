@@ -5,6 +5,7 @@ accept tensors in the canonical ``[T, B, N]`` shape. See
 ``docs/design/stage-1-visualization-toolkit.md``.
 """
 
+from neuromorphic.viz.membrane import membrane_trace
 from neuromorphic.viz.spikes import spike_raster
 
-__all__ = ["spike_raster"]
+__all__ = ["spike_raster", "membrane_trace"]
