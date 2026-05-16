@@ -179,3 +179,31 @@ def test_training_curve_warns_on_unknown_key():
         assert any("mystery_metric" in str(w.message) for w in caught)
     import matplotlib.pyplot as plt
     plt.close(fig)
+
+
+# ---------- population_rate ----------
+
+def test_population_rate_returns_fig_ax(spk):
+    from neuromorphic.viz import population_rate
+    fig, ax = population_rate(spk)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_population_rate_line_length_matches_T(spk):
+    from neuromorphic.viz import population_rate
+    fig, ax = population_rate(spk)
+    lines = ax.get_lines()
+    assert len(lines) == 1
+    assert lines[0].get_xdata().size == spk.shape[0]
+    plt.close(fig)
+
+
+def test_population_rate_smoothing_shrinks_line(spk):
+    from neuromorphic.viz import population_rate
+    fig, ax = population_rate(spk, smoothing_window=5)
+    lines = ax.get_lines()
+    # Valid convolution: length T - window + 1.
+    assert lines[0].get_xdata().size == spk.shape[0] - 5 + 1
+    plt.close(fig)
