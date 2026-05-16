@@ -1,0 +1,44 @@
+# experiments/002_snn_mnist_baseline/config.yaml
+# EXP-001 in the experiment log: Feedforward SNN MNIST baseline
+# Phase 1, Step 1.2 (Saturday hands-on)
+
+run_name: "snn_mnist_baseline"
+experiment_id: "EXP-001"
+tags:
+  - phase-1
+  - snn
+  - mnist
+  - feedforward
+  - rate-coded
+
+# Reproducibility
+seed: 42
+
+# Architecture: 784 -> 1000 -> 1000 -> 10
+arch: "feedforward_snn"
+num_inputs: 784
+hidden_dims: [1000, 1000]
+num_outputs: 10
+
+# Neuron dynamics
+beta: 0.95            # membrane decay (Tutorial 5 value)
+threshold: 1.0        # spike threshold U_thr
+reset_mechanism: "subtract"  # soft reset
+
+# Temporal simulation
+num_steps: 25         # BPTT depth; matches Tutorial 5
+
+# Spike encoding (the new piece vs Tutorial 5)
+encoding: "rate"      # rate | static
+gain: 1.0             # multiplier on pixel intensities before Bernoulli sampling
+
+# Training
+batch_size: 128
+epochs: 3         # 1 epoch first; bump to 3-5 if accuracy < 90%
+optimizer: "adam"
+lr: 5.0e-4
+
+# Logging
+tracker: "both"       # wandb + tensorboard
+log_interval: 50      # iterations between train_printer() blocks
+viz_output_dir: "outputs/snn_mnist_baseline"  # where to save the 4 plots
