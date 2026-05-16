@@ -103,3 +103,39 @@ def test_membrane_trace_omits_threshold_when_disabled(mem):
     ]
     assert len(threshold_lines) == 0
     plt.close(fig)
+
+
+# ---------- weights ----------
+
+def test_weight_histogram_returns_fig_ax(W):
+    from neuromorphic.viz import weight_histogram
+    fig, ax = weight_histogram(W)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_weight_histogram_bins_count(W):
+    from neuromorphic.viz import weight_histogram
+    fig, ax = weight_histogram(W, bins=20)
+    # ax.hist returns BarContainer; count its patches.
+    assert len(ax.patches) == 20
+    plt.close(fig)
+
+
+def test_weight_heatmap_returns_fig_ax(W):
+    from neuromorphic.viz import weight_heatmap
+    fig, ax = weight_heatmap(W)
+    assert isinstance(fig, Figure)
+    assert isinstance(ax, Axes)
+    plt.close(fig)
+
+
+def test_weight_heatmap_uses_symmetric_color_limits(W):
+    from neuromorphic.viz import weight_heatmap
+    fig, ax = weight_heatmap(W, center=0.0)
+    images = ax.get_images()
+    assert len(images) == 1
+    vmin, vmax = images[0].get_clim()
+    assert abs(vmin + vmax) < 1e-6, f"expected symmetric clim, got ({vmin}, {vmax})"
+    plt.close(fig)
