@@ -21,3 +21,4 @@ gymnasium>=0.29
 # Notebook + dev convenience
 jupyter>=1.0
 ipykernel>=6.29
+pytest>=8.0

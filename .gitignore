@@ -38,6 +38,8 @@ checkpoints/*
 !checkpoints/.gitkeep
 runs/*
 !runs/.gitkeep
+outputs/*
+!outputs/.gitkeep
 wandb/
 *.pt
 *.pth
