@@ -1,0 +1,141 @@
+# HANDOFF — EXP-011 Sequential MNIST (Recurrent SNN)
+
+**Project:** neuromorphic-nn-snn-research-project
+**Phase/Step:** Phase 1, Step 1.3 / Module L7
+**Experiment ID:** EXP-011 → folder `experiments/011_week7_sequential_mnist/`
+**Date planned:** Saturday 2026-05-23
+**Prereq reading:** This doc, then the EXP-011 spec at
+`docs/design/2026-05-23-sequential-mnist.md` (write the spec first if it
+doesn't exist — see "Spec must exist" below).
+
+---
+
+## 0. What you're building, in one sentence
+
+A recurrent SNN that classifies MNIST digits presented one pixel-row per
+timestep (28 steps), plus a feedforward control with identical structure,
+to measure how much recurrence buys on a task that genuinely requires
+temporal integration.
+
+## 1. Hard context — read before writing code
+
+- **Single repo, src-layout.** Package is `neuromorphic` under `src/`.
+  Reusable code goes in the package; experiment-specific code stays in
+  `experiments/011_week7_sequential_mnist/`.
+- **Reuse, don't reinvent.** The viz toolkit (`neuromorphic.viz`:
+  `spike_raster`, `membrane_trace`, `training_curve`, `weight_histogram`,
+  etc.) and the `ExperimentConfig` dataclass + YAML loader already exist
+  from weeks 5–6. Use them. Canonical spike tensor shape is `[T, B, N]`.
+- **Pre-flight git check (lesson from week 6).** Before modifying ANY
+  existing file, run `git status && git diff <file>` to confirm it
+  matches HEAD. The week-6 build bundled stale uncommitted changes into
+  an unrelated commit — do not repeat this. If the working tree is dirty,
+  STOP and surface it.
+- **Env:** Windows, PowerShell, VS Code. Single parent-level `.venv`.
+  CUDA-enabled PyTorch on RTX 2080. snnTorch 0.9.x.
+- **TDD by prediction, not pytest, for the training runs.** Pytest is
+  appropriate for any new reusable helper (e.g. a row-encoder function).
+  The training runs themselves use the predict-before-execute gate:
+  write the expected outcome in the spec, run, compare.
+
+## 2. The architecture (locked)
+
+Sequential input: each MNIST image `[28, 28]` is fed one ROW per timestep.
+T = 28 timesteps. Per-step input to the network is `[B, 28]`.
+LOCKED decisions (do not re-litigate during build):
+- **Input is direct current, NOT rate-coded.** Feed analog pixel-row
+  values straight into `Linear(28,128)`. Do not Bernoulli-encode the
+  input. Rationale: the time axis must mean exactly "row index" — rate
+  coding would conflate it with spike-sampling. (This differs from
+  weeks 5–6, which DID rate-code. Intentional.)
+- **Recurrent layer is `all_to_all=True`** (full W_rec matrix via the
+  internal Linear(128,128)). Not the per-neuron `V` self-feedback from
+  Session 1 — that was a diagnostic. Lateral coupling is the point.
+- **Hidden size H = 128.**
+- **Readout:** accumulate output-layer spike counts over the LAST 4
+  timesteps (steps 24–27). Loss = cross-entropy on those summed counts.
+  Rationale: by step 24 the whole image has been seen; pure last-step
+  is brittle, full-28-sum dilutes the integration requirement.
+- **beta:** start at 0.9 for both layers. It's a config field, sweepable
+  later, not this run.
+
+## 3. The mandatory baseline — this is the experiment's actual deliverable
+
+Build a SECOND network, identical except `snn.RLeaky(...all_to_all=True)`
+is replaced by `snn.Leaky(...)`. Same H=128, same readout, same training
+budget. This is the feedforward control.
+
+The experiment's result is **the accuracy gap between recurrent and
+feedforward**, not the recurrent accuracy alone. Both nets must run under
+identical seeds, identical config, identical epoch count. Produce a
+comparison table: `{variant, test_acc, params, train_time}`.
+
+DO NOT expect the feedforward net to fail outright. A plain `Leaky`
+layer integrates membrane potential across all 28 steps — that is real
+memory. The feedforward net lacks LATERAL MIXING, not memory. Expected
+outcome: recurrent wins by a meaningful margin; report the margin
+honestly whatever it is. A small gap is a valid (if less exciting)
+result, not a bug to chase away.
+
+## 4. Config fields to add to ExperimentConfig
+
+Check which already exist before adding (`git diff` the dataclass first):
+- `sequential: bool` — whether to feed row-at-a-time
+- `recurrent: bool` — RLeaky vs Leaky for the hidden layer
+- `hidden_size: int` (128)
+- `readout_window: int` (4 — number of trailing steps to sum for loss)
+- `num_steps` is forced to 28 when `sequential=True`; assert this.
+
+## 5. Build order (suggested task breakdown)
+
+1. Scaffold `experiments/011_week7_sequential_mnist/` (config.yaml ×2 —
+   one recurrent, one feedforward — plus run.py, run_all.py).
+2. Row-encoder: a function that reshapes an MNIST batch into a
+   `[28, B, 28]` sequence. Small, pure, pytest-testable. Write the test.
+3. `SequentialSNN` model class with an `recurrent: bool` switch that
+   selects RLeaky vs Leaky for the hidden layer. Forward pass loops 28
+   steps, accumulates output spikes over the readout window.
+4. Forward-shape gate: assert per-step input `[B,28]`, hidden state
+   shapes, output `[B,10]`. Predict the param counts for both variants
+   and assert them.
+5. Training loop. Reuse week-5/6 scaffolding. BPTT over 28 steps.
+6. `run_all.py`: run both variants, emit `comparison.{md,csv}`, copy
+   the better checkpoint to `outputs/best_checkpoint.pt`.
+7. Dogfood the viz toolkit: for one test image, render the hidden-layer
+   spike raster across all 28 steps for BOTH variants. The recurrent
+   raster should show structured sustained activity; the FF raster
+   should look more like 28 independent columns. Save both PNGs.
+8. Reload-and-verify gate: reload best checkpoint, re-evaluate, confirm
+   accuracy within 0.1% of recorded.
+
+## 6. Watch out for
+
+- **BPTT depth.** 28 timesteps of backprop is deeper than week 5's 25 /
+  week 6's 50 — but each step is cheaper (small layers). Should be fine
+  on the 2080. If gradients explode, surrogate-gradient clipping or a
+  lower LR is the first lever, not architecture changes.
+- **RLeaky state init.** `init_rleaky()` returns `(spk, mem)` — both
+  must be reset per sample. With `all_to_all=True` you pass
+  `linear_features`, NOT a `V` scalar.
+- **RLeaky forward signature** takes the previous spike explicitly:
+  `spk, mem = rlif(cur, spk, mem)`. Plain `Leaky` does not. The model's
+  forward pass must branch on this.
+- **Don't rate-code the input.** Said twice on purpose.
+
+## 7. Done criteria
+
+- [ ] Both variants train to completion under identical config/seed
+- [ ] `comparison.{md,csv}` produced with acc / params / train_time
+- [ ] Recurrent-vs-feedforward gap reported (whatever its sign/size)
+- [ ] Hidden-layer spike rasters rendered for both variants, one image
+- [ ] Best checkpoint saved + reload-verified within 0.1%
+- [ ] EXP-011 row in `experiment-log.md` filled in
+- [ ] Commits are scoped; commit messages match actual scope
+
+## 8. Spec must exist before build
+
+If `docs/design/2026-05-23-sequential-mnist.md` does not exist, write it
+FIRST (10 min): lock the signatures, the file layout, the predicted
+param counts, the predicted accuracy gap, and the verification gates.
+Get it approved before touching code. This handoff is the briefing; the
+spec is the contract.
