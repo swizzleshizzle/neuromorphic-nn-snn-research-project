@@ -151,6 +151,12 @@ def main():
         f.write(f"Weight std ratio (post/init): {(W_final.std() / W_init.std()).item():.2f}\n")
     print(f"\nWrote {report_path}")
 
+    viz_weight_evolution(snapshots, out_dir / "weight_matrix_evolution.png")
+    viz_weight_final(W_final, post_resp, out_dir / "weight_matrix_final.png")
+    viz_tuning_curves(post_resp, out_dir / "tuning_curves.png")
+    viz_spike_raster(layer, cfg, out_dir / "spike_raster_late.png", gen)
+    print(f"Wrote 4 viz PNGs to {out_dir}/")
+
     assert n_selective >= 2, f"gate 4 FAILED: only {n_selective}/4 outputs selective"
     # Gate 5 calibration: spec said >= 2.0 but uniform [0,1] init has std=0.289 (theoretical max
     # for that distribution); maximum achievable post-training std (perfect bimodal) is 0.5, so
@@ -169,6 +175,107 @@ def main():
         "n_selective": n_selective,
         "cfg": cfg,
     }
+
+
+# ---- Visualizations ----
+
+
+def _plot_weight_heatmap(ax, W, title, vmin=0.0, vmax=1.0):
+    im = ax.imshow(W.cpu().numpy(), aspect="auto", cmap="viridis", vmin=vmin, vmax=vmax)
+    ax.set_xlabel("output neuron")
+    ax.set_ylabel("input neuron")
+    ax.set_title(title)
+    ax.set_xticks(range(W.shape[1]))
+    ax.set_yticks(range(W.shape[0]))
+    for y in (3.5, 7.5):
+        ax.axhline(y, color="white", linewidth=1.0, alpha=0.6)
+    return im
+
+
+def viz_weight_evolution(snapshots, save_path):
+    import matplotlib.pyplot as plt
+    keys = sorted(snapshots.keys())
+    fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+    for ax, t in zip(axes.flat, keys[:4]):
+        im = _plot_weight_heatmap(ax, snapshots[t], title=f"trial {t}")
+    fig.suptitle("Weight matrix evolution")
+    fig.colorbar(im, ax=axes.ravel().tolist(), shrink=0.7, label="weight")
+    fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+
+def viz_weight_final(W_final, post_resp, save_path):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(figsize=(5, 5))
+    _plot_weight_heatmap(ax, W_final, title="Final weight matrix (post-training)")
+    preferred = post_resp.argmax(dim=0).cpu().tolist()
+    labels = [f"out {j}\n→ {PATTERN_NAMES[preferred[j]]}" for j in range(W_final.shape[1])]
+    ax.set_xticks(range(W_final.shape[1]))
+    ax.set_xticklabels(labels)
+    ax.set_yticks([1.5, 5.5, 9.5])
+    ax.set_yticklabels(["A inputs\n(0-3)", "B inputs\n(4-7)", "C inputs\n(8-11)"])
+    fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+
+def viz_tuning_curves(post_resp, save_path):
+    import matplotlib.pyplot as plt
+    n_outputs = post_resp.shape[1]
+    fig, axes = plt.subplots(1, n_outputs, figsize=(3 * n_outputs, 3), sharey=True)
+    if n_outputs == 1:
+        axes = [axes]
+    for j, ax in enumerate(axes):
+        rates = post_resp[:, j].cpu().numpy()
+        ax.bar(PATTERN_NAMES, rates, color=["#1f77b4", "#ff7f0e", "#2ca02c"])
+        ax.set_title(f"output {j}")
+        ax.set_xlabel("pattern")
+        if j == 0:
+            ax.set_ylabel("mean firing rate\n(spikes / step)")
+    fig.suptitle("Post-training tuning curves")
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+
+def viz_spike_raster(layer, cfg, save_path, generator):
+    import matplotlib.pyplot as plt
+    pattern_seq = [0, 1, 2, 0]
+    all_in, all_out = [], []
+    state = layer.init_state()
+    for p_idx in pattern_seq:
+        spikes_in, spikes_out, state = run_trial(layer, state, p_idx, cfg, learn=False, generator=generator)
+        all_in.append(spikes_in)
+        all_out.append(spikes_out)
+    spikes_in = torch.cat(all_in, dim=0)
+    spikes_out = torch.cat(all_out, dim=0)
+    trial_len = cfg["pattern_steps"] + cfg["gap_steps"]
+    dt = cfg["dt_ms"]
+
+    fig, (ax_in, ax_out) = plt.subplots(2, 1, figsize=(10, 5), sharex=True,
+                                        gridspec_kw={"height_ratios": [3, 1]})
+    t_in, n_in = spikes_in.nonzero(as_tuple=True)
+    ax_in.scatter(t_in.cpu() * dt, n_in.cpu(), s=8, c="black", marker="|")
+    ax_in.set_ylabel("input #")
+    ax_in.set_ylim(-0.5, cfg["n_inputs"] - 0.5)
+    ax_in.set_title("Spike raster (post-training, learning frozen)")
+
+    t_out, n_out = spikes_out.nonzero(as_tuple=True)
+    ax_out.scatter(t_out.cpu() * dt, n_out.cpu(), s=40, c="red", marker="|")
+    ax_out.set_xlabel("time (ms)")
+    ax_out.set_ylabel("output #")
+    ax_out.set_ylim(-0.5, cfg["n_outputs"] - 0.5)
+
+    for trial_idx, p_idx in enumerate(pattern_seq):
+        onset = trial_idx * trial_len * dt
+        offset = onset + cfg["pattern_steps"] * dt
+        for ax in (ax_in, ax_out):
+            ax.axvspan(onset, offset, alpha=0.10, color="gray")
+            ax.axvline(onset, color="gray", linewidth=0.8, alpha=0.6)
+        ax_in.text(onset + 2, cfg["n_inputs"] - 0.5, PATTERN_NAMES[p_idx], fontsize=10, va="top")
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
