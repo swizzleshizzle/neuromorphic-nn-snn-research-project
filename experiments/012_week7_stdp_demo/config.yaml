@@ -1,0 +1,28 @@
+# EXP-012 STDP-WTA demo — locked hyperparameters per spec.
+seed: 0
+
+# Network
+n_inputs: 12
+n_outputs: 4
+beta: 0.9
+threshold: 1.0
+w_max: 1.0
+
+# STDP
+a_plus: 0.005
+a_minus: -0.0055
+tau_pre_ms: 20.0
+tau_post_ms: 20.0
+
+# Simulation
+dt_ms: 2.5
+pattern_steps: 20         # 50 ms presentation
+gap_steps: 8              # 20 ms gap
+n_trials: 1000
+
+# Input patterns (rates)
+active_rate_hz: 100.0
+background_rate_hz: 5.0
+
+# Eval
+n_eval_trials_per_pattern: 50
