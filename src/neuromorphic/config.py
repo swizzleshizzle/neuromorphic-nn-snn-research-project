@@ -54,10 +54,13 @@ class ExperimentConfig:
     data_root: str = "./data"
 
     # --- Model architecture ---
-    arch: str = "baseline_mlp"  # baseline_mlp | tiny_mlp | simple_cnn | feedforward_snn | spiking_cnn
+    arch: str = "baseline_mlp"  # baseline_mlp | tiny_mlp | simple_cnn | feedforward_snn | spiking_cnn | sequential_snn
     num_inputs: int = 784
     hidden_dims: list[int] = field(default_factory=lambda: [1000, 1000])
+    hidden_size: int = 128   # used by sequential_snn (single hidden layer)
     num_outputs: int = 10
+    recurrent: bool = False  # sequential_snn: RLeaky (True) vs Leaky (False) for the hidden layer
+    readout_window: int = 4  # sequential_snn: number of trailing timesteps summed for loss
 
     # --- Neuron dynamics (SNN) ---
     beta: float = 0.95
@@ -66,6 +69,7 @@ class ExperimentConfig:
 
     # --- Temporal simulation (SNN) ---
     num_steps: int = 25
+    sequential: bool = False  # if True, feed input row-at-a-time (forces num_steps=28, encoding='direct')
 
     # --- Spike encoding (SNN) ---
     encoding: str = "rate"
@@ -88,6 +92,20 @@ class ExperimentConfig:
     checkpoint_dir: str = "checkpoints"
     tensorboard_log_dir: str = "runs"
     viz_output_dir: str = "outputs"
+
+    def __post_init__(self) -> None:
+        """Cross-field invariants. Raised at load time, not at epoch 47."""
+        if self.sequential:
+            if self.num_steps != 28:
+                raise ValueError(
+                    f"sequential=True requires num_steps=28 (got {self.num_steps}). "
+                    "Sequential MNIST presents one row per timestep."
+                )
+            if self.encoding != "direct":
+                raise ValueError(
+                    f"sequential=True requires encoding='direct' (got {self.encoding!r}). "
+                    "Rate-coding the input would conflate the time axis with sampling noise."
+                )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to plain dict for logging / W&B."""
