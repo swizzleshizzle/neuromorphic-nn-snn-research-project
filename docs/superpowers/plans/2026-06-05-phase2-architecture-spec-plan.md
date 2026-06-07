@@ -46,12 +46,16 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Task 2: Resolve the open architectural choices
 
-- [ ] **Memory encoding scheme** — pick bind-and-superpose vs recurrent sequence-chaining for
-  the hippocampus (spec §2.2 / §5.1).
+- [x] **Memory encoding scheme** — **resolved 2026-06-06: recurrent attractor with a
+  one-shot Hebbian (Hopfield-style) imprint** (not bind-and-superpose). Single-pattern
+  working memory; holds the stored concept as a stable fixed point (spec §2.2 / §5.1).
 - [ ] **Router granularity** — confirm one-region/two-stage vs two-region split holds after a
   selection+gating co-tune (spec §2.5 / §5.2).
-- [ ] **Hippocampus primitive** — RLeaky vs Synaptic, decided by a delay-hold measurement
-  (spec §5.3).
+- [x] **Hippocampus primitive** — **resolved 2026-06-06: `snn.Leaky` + an explicit
+  hand-designed Hopfield recurrence** (outer-product `W_rec`), rather than RLeaky/Synaptic
+  — gives direct control of the attractor weights for the one-shot imprint. Held the
+  pattern at rate 1.00 across the full delay, so no longer-time-constant primitive was
+  needed (spec §5.3).
 - [ ] **Coding scheme** — rate vs latency for sensory input and inter-region codes (spec §5.4).
 - [ ] **Delays** — replace placeholder Δ=1 with measured/chosen values once ring-buffers
   exist (spec §5.5).
@@ -76,7 +80,11 @@ point through a closed-loop v2 that runs on grid-world.
   disinhibition gating, do-nothing floor) + `apply_gate` primitive. EXP-016 PASS —
   selects ch2, gates pathway 5 so Motor follows the selection, vetoes action below the
   floor. See `experiments/016_week9_router_gating_bringup/results.md`.)*
-- [ ] **Hippocampus** — store/recall (pathways 3/4) under router gates.
+- [x] **Hippocampus** — store/recall (pathways 3/4) under router gates.
+  *(2026-06-06: built `Hippocampus` — recurrent attractor, one-shot Hebbian imprint.
+  EXP-017 PASS — 30/150 pattern held at rate 1.00 / leak 0.00 across the delay,
+  content-specific recall (27/64), pathways 3/4 gated via `apply_gate`. See
+  `experiments/017_week9_hippocampus_bringup/results.md`.)*
 - [ ] **Neuromod bus** — dopamine/ACh on the closed loop.
 
 ## Task 4: Promote to v2
@@ -88,6 +96,12 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.⁴):** built `Hippocampus` (build-order step 5)
+  — recurrent attractor memory with a one-shot Hebbian (Hopfield) imprint; resolves the
+  §5.1 encoding choice (attractor, not bind-and-superpose) and the §5.3 primitive choice
+  (Leaky + explicit Hopfield recurrence). EXP-017: store→hold→recall under gated pathways
+  3/4 — 30/150 pattern held at rate 1.00 / leak 0.00 across the delay, content-specific
+  recall. 9 new tests; 113 total passing.
 - **2026-06-06 (Week 9, hands-on, cont.³):** built `ThalamicRouter` (build-order
   step 4) — Stage A basal-ganglia-like WTA selection + Stage B thalamus-like
   tonic-inhibition/disinhibition gating, with a constant-bias do-nothing floor.
