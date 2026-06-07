@@ -5,6 +5,7 @@ See ``docs/architecture-spec-v1.md`` and
 """
 
 from neuromorphic.regions.base_region import BrainRegion
+from neuromorphic.regions.hippocampus import Hippocampus
 from neuromorphic.regions.motor_cortex import MotorCortex
 from neuromorphic.regions.prefrontal import Prefrontal
 from neuromorphic.regions.sensory_cortex import SensoryCortex, encode_gridworld
@@ -17,4 +18,5 @@ __all__ = [
     "Prefrontal",
     "MotorCortex",
     "ThalamicRouter",
+    "Hippocampus",
 ]
