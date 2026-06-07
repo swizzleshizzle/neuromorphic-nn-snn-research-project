@@ -71,7 +71,11 @@ point through a closed-loop v2 that runs on grid-world.
   flow, every stage alive, utility code discriminates 5/5 agent positions. Untrained
   argmax stays a fixed favourite (expected). See
   `experiments/015_week9_open_loop_bringup/results.md`.)*
-- [ ] **Thalamic Router** — Stage A/B; gate action-enable (pathway 5) first.
+- [x] **Thalamic Router** — Stage A/B; gate action-enable (pathway 5) first.
+  *(2026-06-06: built `ThalamicRouter` (Stage A WTA select + Stage B tonic-inhibition/
+  disinhibition gating, do-nothing floor) + `apply_gate` primitive. EXP-016 PASS —
+  selects ch2, gates pathway 5 so Motor follows the selection, vetoes action below the
+  floor. See `experiments/016_week9_router_gating_bringup/results.md`.)*
 - [ ] **Hippocampus** — store/recall (pathways 3/4) under router gates.
 - [ ] **Neuromod bus** — dopamine/ACh on the closed loop.
 
@@ -84,6 +88,13 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.³):** built `ThalamicRouter` (build-order
+  step 4) — Stage A basal-ganglia-like WTA selection + Stage B thalamus-like
+  tonic-inhibition/disinhibition gating, with a constant-bias do-nothing floor.
+  Added the `apply_gate` control primitive (`connections/gating.py`). EXP-016 gates
+  pathway 5 (PFC→Motor): the router selects a channel, disinhibits only that relay,
+  Motor follows the selection, and below-floor utilities veto the action. 19 new
+  tests (router + gating + gated-loop integration); 104 total passing.
 - **2026-06-06 (Week 9, hands-on, cont.²):** built `Prefrontal` and wired the
   Sensory→PFC→Motor **open loop** (build-order step 3). PFC owns its afferent
   `Projection` (pathway 2, Δ=1) per the agreed composition model; RLeaky state-hold
