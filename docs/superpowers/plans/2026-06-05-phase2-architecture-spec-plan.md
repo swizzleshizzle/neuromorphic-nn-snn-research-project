@@ -10,7 +10,7 @@
 internal connectivity, I/O spike formats, and inter-region wiring — from a small v1 starting
 point through a closed-loop v2 that runs on grid-world.
 
-**Spec under management:** `docs/architecture-spec-v1.md`
+**Spec under management:** `docs/architecture-spec-v2.md` (v1 archived 2026-06-06)
 
 **Parent design notes:**
 - Obsidian — `300 Efforts/.../Weekly Notes/week-09-brain-architectures` (Sessions 1–3)
@@ -29,7 +29,7 @@ point through a closed-loop v2 that runs on grid-world.
 | Open questions logged | **DONE** | 2026-06-05 |
 | Decisions resolved (encoding, router granularity) | **DONE** | 2026-06-06 |
 | First implementation pass — all 6 build-order steps | **DONE** | 2026-06-06 |
-| v2 spec (counts/codings tuned from bring-up) | ready to start | — |
+| v2 spec (counts/codings tuned from bring-up) | **DONE** | 2026-06-06 |
 
 ---
 
@@ -95,13 +95,21 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Task 4: Promote to v2
 
-- [ ] Fold bring-up findings (real counts, codings, delays, resolved choices) into a
+- [x] Fold bring-up findings (real counts, codings, delays, resolved choices) into a
   `docs/architecture-spec-v2.md`; archive v1; update this tracker and the Obsidian note.
+  *(2026-06-06: `docs/architecture-spec-v2.md` written — real implemented counts/codings/
+  gains, resolved decisions, realized pathway status, EXP-013…018 findings, known limits.
+  v1 marked ARCHIVED in place (kept for the EXP results.md section references). Obsidian
+  week-9 note: update pending — user to sync.)*
 
 ---
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.⁶):** **promoted to v2** — wrote
+  `docs/architecture-spec-v2.md` from the working implementation (real counts/codings/gains,
+  resolved decisions, realized wiring status, EXP-013…018 findings, known limits). Archived v1
+  in place. Tracker spec-under-management now points at v2. **Phase 2 Step 2.1/2.2 complete.**
 - **2026-06-06 (Week 9, hands-on, cont.⁵):** built `NeuromodBus` (build-order step 6)
   — global broadcast of dopamine + ACh; Motor reads ACh to sharpen its WTA. EXP-018
   ties the loop together: ACh sweep raises winner share 0.55→0.85, dopamine exposes

@@ -1,6 +1,12 @@
 # Five-Region Architecture Specification — v1
 
-**Status:** Draft · v1 (starting point — expected to evolve)
+> **⚠️ ARCHIVED (2026-06-06) — superseded by `docs/architecture-spec-v2.md`.**
+> This is the pre-implementation starting point. v2 records what was actually built and
+> verified in the first implementation pass (real counts, resolved decisions, realized
+> wiring, bring-up findings). Kept in place for history and because the EXP-013…018
+> `results.md` files cite its section numbers.
+
+**Status:** Archived · v1 (starting point — superseded by v2)
 **Date:** 2026-06-05 · Week 9, Session 3
 **Phase:** 2 — Multi-region brain · **Step 2.1** — architecture specification
 **Author session:** drafted with Claude (Cowork)
