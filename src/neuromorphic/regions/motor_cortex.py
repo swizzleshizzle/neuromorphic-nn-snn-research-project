@@ -32,6 +32,8 @@ class MotorCortex(BrainRegion):
         input_gain: scale of the action-aligned (identity) input drive.
         inhibition: strength of the lateral (off-diagonal) inhibition.
         ach_gain: multiplies the inhibition — ACh-precision hook (default 1.0).
+        bus: optional :class:`~neuromorphic.neuromod.NeuromodBus`; its ``ach`` level
+            further scales the lateral inhibition (higher ACh → sharper WTA).
     """
 
     def __init__(
@@ -44,11 +46,13 @@ class MotorCortex(BrainRegion):
         input_gain: float = 2.0,
         inhibition: float = 3.0,
         ach_gain: float = 1.0,
+        bus=None,
     ):
         super().__init__(name="motor_cortex", n_neurons=n_actions)
         self.n_actions = n_actions
         self.num_steps = num_steps
         self.ach_gain = ach_gain
+        self.bus = bus  # optional NeuromodBus; its ACh scales the WTA precision
 
         # Action-aligned input drive: utility i drives output neuron i.
         self.fc_in = nn.Linear(n_actions, n_actions)
@@ -96,10 +100,11 @@ class MotorCortex(BrainRegion):
 
         B = input_spikes.shape[1]
         self.reset(batch_size=B)
+        ach = self.bus.ach if self.bus is not None else 1.0  # ACh sharpens the WTA
         out = []
         for t in range(input_spikes.shape[0]):
             drive = self.fc_in(input_spikes[t])               # [B, N_actions]
-            inhib = self.ach_gain * (self.spk_prev @ self.w_inh.t())
+            inhib = self.ach_gain * ach * (self.spk_prev @ self.w_inh.t())
             spk, self.mem_out = self.lif_out(drive + inhib, self.mem_out)
             self.spk_prev = spk
             self._record("action", spk)
