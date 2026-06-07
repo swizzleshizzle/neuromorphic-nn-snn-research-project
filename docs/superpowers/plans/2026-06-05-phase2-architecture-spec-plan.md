@@ -27,8 +27,9 @@ point through a closed-loop v2 that runs on grid-world.
 |---|---|---|
 | v1 spec drafted (5 regions, wiring, build order) | **DONE** | 2026-06-05 |
 | Open questions logged | **DONE** | 2026-06-05 |
-| Decisions resolved (encoding, router granularity) | open | — |
-| v2 spec (counts/codings tuned from bring-up) | not started | — |
+| Decisions resolved (encoding, router granularity) | **DONE** | 2026-06-06 |
+| First implementation pass — all 6 build-order steps | **DONE** | 2026-06-06 |
+| v2 spec (counts/codings tuned from bring-up) | ready to start | — |
 
 ---
 
@@ -56,7 +57,8 @@ point through a closed-loop v2 that runs on grid-world.
   — gives direct control of the attractor weights for the one-shot imprint. Held the
   pattern at rate 1.00 across the full delay, so no longer-time-constant primitive was
   needed (spec §5.3).
-- [ ] **Coding scheme** — rate vs latency for sensory input and inter-region codes (spec §5.4).
+- [x] **Coding scheme** — **resolved 2026-06-06: rate / Poisson** for the sensory input
+  and the population codes between regions (spec §5.4).
 - [ ] **Delays** — replace placeholder Δ=1 with measured/chosen values once ring-buffers
   exist (spec §5.5).
 
@@ -85,7 +87,11 @@ point through a closed-loop v2 that runs on grid-world.
   EXP-017 PASS — 30/150 pattern held at rate 1.00 / leak 0.00 across the delay,
   content-specific recall (27/64), pathways 3/4 gated via `apply_gate`. See
   `experiments/017_week9_hippocampus_bringup/results.md`.)*
-- [ ] **Neuromod bus** — dopamine/ACh on the closed loop.
+- [x] **Neuromod bus** — dopamine/ACh on the closed loop.
+  *(2026-06-06: built `NeuromodBus` (broadcast dopamine + ACh); Motor reads ACh to
+  sharpen its WTA. EXP-018 PASS — ACh sweep raises winner share 0.55→0.85, dopamine
+  toggles `learning_enabled` (plasticity hook). See
+  `experiments/018_week9_neuromod_bringup/results.md`.)*
 
 ## Task 4: Promote to v2
 
@@ -96,6 +102,13 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.⁵):** built `NeuromodBus` (build-order step 6)
+  — global broadcast of dopamine + ACh; Motor reads ACh to sharpen its WTA. EXP-018
+  ties the loop together: ACh sweep raises winner share 0.55→0.85, dopamine exposes
+  `learning_enabled` as the plasticity hook. **First implementation pass complete — all
+  6 build-order steps done** (5 region types + Projection + apply_gate + bus, all TDD,
+  120 tests passing, EXP-013…018). Ready to fold real counts/codings into a v2 spec
+  (Task 4).
 - **2026-06-06 (Week 9, hands-on, cont.⁴):** built `Hippocampus` (build-order step 5)
   — recurrent attractor memory with a one-shot Hebbian (Hopfield) imprint; resolves the
   §5.1 encoding choice (attractor, not bind-and-superpose) and the §5.3 primitive choice
