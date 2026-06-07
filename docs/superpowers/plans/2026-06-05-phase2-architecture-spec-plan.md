@@ -65,7 +65,12 @@ point through a closed-loop v2 that runs on grid-world.
   *(2026-06-06: built `MotorCortex` (WTA via lateral inhibition, decompression
   deferred); EXP-014 PASS — winner=argmax utility, share 0.97, inhibition sweep
   sharpens monotonically. See `experiments/014_week9_motor_wta_bringup/results.md`.)*
-- [ ] **Prefrontal** — Sensory→PFC→Motor open loop end-to-end.
+- [x] **Prefrontal** — Sensory→PFC→Motor open loop end-to-end.
+  *(2026-06-06: built `Prefrontal` (owns afferent `Projection` for pathway 2 Δ=1;
+  RLeaky state-hold → Leaky transform → utility readout). EXP-015 PASS — end-to-end
+  flow, every stage alive, utility code discriminates 5/5 agent positions. Untrained
+  argmax stays a fixed favourite (expected). See
+  `experiments/015_week9_open_loop_bringup/results.md`.)*
 - [ ] **Thalamic Router** — Stage A/B; gate action-enable (pathway 5) first.
 - [ ] **Hippocampus** — store/recall (pathways 3/4) under router gates.
 - [ ] **Neuromod bus** — dopamine/ACh on the closed loop.
@@ -79,6 +84,14 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.²):** built `Prefrontal` and wired the
+  Sensory→PFC→Motor **open loop** (build-order step 3). PFC owns its afferent
+  `Projection` (pathway 2, Δ=1) per the agreed composition model; RLeaky state-hold
+  → Leaky transform → utility readout. EXP-015 confirms end-to-end spike flow with
+  every stage alive and the utility code discriminating all 5 agent positions.
+  Surfaced + tuned the untrained-readout saturation trap (excitability kept moderate
+  so upstream selectivity propagates). 15 new tests (incl. open-loop integration);
+  85 total passing.
 - **2026-06-06 (Week 9, hands-on, cont.):** built `MotorCortex` — WTA action
   selection via lateral inhibition (decompression stage deferred until trainable).
   EXP-014 bring-up confirms a single winner = argmax utility (share 0.97) and
