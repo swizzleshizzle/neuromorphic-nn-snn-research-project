@@ -8,6 +8,7 @@ from neuromorphic.regions.base_region import BrainRegion
 from neuromorphic.regions.motor_cortex import MotorCortex
 from neuromorphic.regions.prefrontal import Prefrontal
 from neuromorphic.regions.sensory_cortex import SensoryCortex, encode_gridworld
+from neuromorphic.regions.thalamic_router import ThalamicRouter
 
 __all__ = [
     "BrainRegion",
@@ -15,4 +16,5 @@ __all__ = [
     "encode_gridworld",
     "Prefrontal",
     "MotorCortex",
+    "ThalamicRouter",
 ]
