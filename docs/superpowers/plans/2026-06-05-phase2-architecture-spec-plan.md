@@ -61,7 +61,10 @@ point through a closed-loop v2 that runs on grid-world.
 - [x] **Sensory** standalone — encode a grid-world observation; confirm a stable concept code.
   *(2026-06-06: built `SensoryCortex` + `encode_gridworld`; EXP-013 PASS — rate 0.41,
   45/64 active, position-selective. See `experiments/013_week9_sensory_bringup/results.md`.)*
-- [ ] **Motor + WTA** — single-winner check on hand-made utilities.
+- [x] **Motor + WTA** — single-winner check on hand-made utilities.
+  *(2026-06-06: built `MotorCortex` (WTA via lateral inhibition, decompression
+  deferred); EXP-014 PASS — winner=argmax utility, share 0.97, inhibition sweep
+  sharpens monotonically. See `experiments/014_week9_motor_wta_bringup/results.md`.)*
 - [ ] **Prefrontal** — Sensory→PFC→Motor open loop end-to-end.
 - [ ] **Thalamic Router** — Stage A/B; gate action-enable (pathway 5) first.
 - [ ] **Hippocampus** — store/recall (pathways 3/4) under router gates.
@@ -76,6 +79,11 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-06 (Week 9, hands-on, cont.):** built `MotorCortex` — WTA action
+  selection via lateral inhibition (decompression stage deferred until trainable).
+  EXP-014 bring-up confirms a single winner = argmax utility (share 0.97) and
+  monotonic sharpening under the inhibition sweep (Task 3, Motor step). 11 new
+  tests (70 total passing).
 - **2026-06-06 (Week 9, hands-on):** first implementation pass began. Built the
   multi-region framework foundation — `BrainRegion` ABC
   (`src/neuromorphic/regions/base_region.py`), sparse delayed `Projection`
