@@ -30,6 +30,10 @@ point through a closed-loop v2 that runs on grid-world.
 | Decisions resolved (encoding, router granularity) | **DONE** | 2026-06-06 |
 | First implementation pass — all 6 build-order steps | **DONE** | 2026-06-06 |
 | v2 spec (counts/codings tuned from bring-up) | **DONE** | 2026-06-06 |
+| Week-10: hippocampus pattern completion (EXP-019) | **DONE** | 2026-06-08 |
+| Week-10: sensory→hippocampus wiring decision | **DONE** | 2026-06-08 |
+| Week-10 S2: PFC multi-source design + Motor confirmed | **DONE** | 2026-06-08 |
+| Week-10 S3 (L11): router gain refinement + R-STDP rule designed | **DONE** | 2026-06-12 |
 
 ---
 
@@ -102,9 +106,53 @@ point through a closed-loop v2 that runs on grid-world.
   v1 marked ARCHIVED in place (kept for the EXP results.md section references). Obsidian
   week-9 note: update pending — user to sync.)*
 
+## Task 5: Week-10 hippocampus design closeout
+
+- [x] **Pattern completion** — partial cue recovers the full memory (EXP-019).
+  *(2026-06-08: built `experiments/019_week10_pattern_completion/`. A cue with up to 90% of
+  content dims masked still recovers the full 30/150 pattern — late-window held 1.00 / leak
+  0.00, a +0.89 lift over the recurrence-off control (~0.10 `fc_in` bias floor). Gates
+  complete / robust / attractor-driven all PASS. Confirms content-addressable memory, not
+  just persistence — spec §2.2.)*
+- [ ] **Place cells / spatial memory** — study pass (Week-10 goal); notes pending.
+- [x] **Sensory→Hippocampus wiring** — **resolved 2026-06-08: direct Sensory→Hippocampus content
+  path (the snapshot), store gated by the Router on a PFC store-command.** Content and command on
+  separate paths (L10); biologically the EC perforant-path content route with PFC as controller.
+  Interface-compatible (`fc_in` still 64-D); only the source rewires PFC→Sensory. Recorded in spec
+  §2.1 / §2.2 / §3.
+
 ---
 
 ## Change log
+
+- **2026-06-12 (Week 10, Session 3 — L11 study):** **router gain refinement + R-STDP learning rule
+  designed** (study session, no code). Router: the gate is multiplicative (`g·(Wx)=(gW)x`); generalise
+  `apply_gate` from binary to a continuous per-pathway gain `g∈[0,g_max]` so it can amplify, not just
+  veto (spec §2.5). Learning: chose **reward-modulated STDP / three-factor** `Δw=β(R−b)·e` (Izhikevich
+  2007; Frémaux & Gerstner 2016) — the dopamine bus (EXP-018) is the third factor `(R−b)`, with
+  per-synapse eligibility traces on trainable `Projection`s; first target the PFC readout (spec §6/§7).
+  Corrected the brief's citation (distal-reward paper is Izhikevich 2007, not Frémaux). Recorded in the
+  week-10 note (Session 3).
+- **2026-06-08 (Week 10, Session 2):** **PFC multi-source integration designed** (sketch-before-code).
+  Status check found **Motor Cortex already complete** (EXP-014 — 4-neuron WTA, lateral inhibition,
+  winner by spike count) — all session-2 Motor goals met. **Prefrontal** was built but single-source;
+  designed the fix — a **second summed afferent** `Projection(recall→n_state)` for hippocampal recall
+  (pathway 4), added to the sensory afferent into the RLeaky state-hold (two summed afferents, *not*
+  concatenation, so memory stays router-gateable). `forward(concept, recall=None)` keeps EXP-015
+  backward-compatible. Implementation deferred to the next build pass. Recorded in spec §2.3 / §3
+  pathway 4; sketched in the week-10 note (Session 2).
+- **2026-06-08 (Week 10, Session 1):** **sensory→hippocampus wiring resolved** — a **direct
+  Sensory→Hippocampus content pathway** carries the stored snapshot; the Router gates it on a PFC
+  store-command (content and command on separate paths). Mirrors the entorhinal perforant-path content
+  route with PFC as controller; interface-compatible (only the content source rewires PFC→Sensory).
+  Closes the last of the four Week-10 hippocampus design decisions. Recorded in spec §2.1/§2.2/§3.
+- **2026-06-08 (Week 10, Session 1):** **pattern completion verified** — EXP-019
+  (`experiments/019_week10_pattern_completion/`). A partial cue (up to 90% of content masked)
+  drives the attractor back to the full stored pattern: late-window held 1.00 / leak 0.00,
+  **+0.89 lift** over the recurrence-off control (which sits at a ~0.10 `fc_in` bias floor, not
+  zero — the gate measures the lift, not an absolute collapse). Confirms content-addressable
+  completion, not just persistence. Closes the third Week-10 hippocampus goal; place-cells
+  study + sensory-input wiring decision still open.
 
 - **2026-06-06 (Week 9, hands-on, cont.⁶):** **promoted to v2** — wrote
   `docs/architecture-spec-v2.md` from the working implementation (real counts/codings/gains,

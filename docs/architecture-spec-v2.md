@@ -84,6 +84,9 @@ emit `[T,B,N]` straight into the viz toolkit.
 - **Excitability:** `weight_gain=5.0` — the sparse 2-hot input needs it to drive the hierarchy.
 - **Finding (EXP-013):** concept rate ≈ 0.41, 45/64 neurons active, **position-selective**
   (pairwise L1 ≈ 475–773 between grid positions). Stable, non-saturated distributed code.
+- **Connects TO (resolved 2026-06-08):** Prefrontal (pathway 2, content) **and now directly to
+  Hippocampus** (store content, router-gated — the EC perforant-path analog). The position-selective
+  concept code *is* the place-code-like snapshot the hippocampus stores. See §2.2 / §3 pathway 3.
 
 ### 2.2 Hippocampus — `Hippocampus(content_dim=64, n_neurons=150, sparsity=0.2, input_gain=3.0, recurrent_gain=2.0)`
 
@@ -96,6 +99,17 @@ emit `[T,B,N]` straight into the viz toolkit.
 - **Finding (EXP-017):** 30/150 pattern **held at rate 1.00, leak 0.00 across the full delay** with no
   input — a clean fixed-point attractor. Recall is content-specific (27/64 read-out units differ
   between two stored patterns).
+- **Finding (EXP-019, pattern completion):** a partial cue with up to **90% of content dims masked**
+  still recovers the full pattern — late-window **held 1.00 / leak 0.00**, a **+0.89 lift** over the
+  recurrence-off control (which sits at a ~0.10 `fc_in` bias floor, not zero). Confirms the memory is
+  **content-addressable** (partial input → full pattern), not just persistent. See
+  `experiments/019_week10_pattern_completion/`.
+- **Store input (resolved 2026-06-08):** the stored content is the **Sensory concept code, delivered
+  directly** (Sensory→Hippocampus content pathway), *not* the PFC output — PFC emits action utilities,
+  not a snapshot. PFC/Router supply only the **store command** (when to store) by opening the gate.
+  This mirrors the biology: the entorhinal/sensory perforant path is the content route into CA3, while
+  PFC acts as a controller. Interface unchanged — `fc_in` still takes a 64-D content code; only the
+  *source* feeding it changes. PFC↔Hippo content is now one-way (recall, pathway 4).
 - **Gating:** store (pathway 3) and recall (pathway 4) released by `apply_gate` (router-driven).
 
 ### 2.3 Prefrontal — `Prefrontal(concept_dim=64, n_state=100, n_transform=50, n_actions=4, weight_gain=2.0, sparsity=1.0, delay=1)`
@@ -110,7 +124,15 @@ emit `[T,B,N]` straight into the viz toolkit.
   **discriminates 5/5 grid positions** (EXP-015).
 - **Honest limit:** untrained → the argmax action is a fixed structural favourite; task-appropriate
   selection needs training + reward (Phase 2+).
-- **Not yet wired:** hippocampal recall input to PFC (closed-loop memory) is deferred.
+- **Multi-source integration (designed 2026-06-08, Week 10 S2):** PFC gains a **second afferent**
+  `Projection(recall_dim=64 → n_state)` for the hippocampal recall (pathway 4), **summed** into the
+  RLeaky state-hold alongside the sensory afferent — `state_drive = afferent_sensory(concept) +
+  afferent_memory(recall)`. Two summed afferents (not concatenation) keep the streams separable, so the
+  router can gate memory independently; the memory afferent receives the **router-gated** recall and
+  reads zero when the gate is closed. `forward` becomes `forward(concept, recall=None)` — `recall=None`
+  → zeros, keeping the sensory-only open loop (EXP-015) backward-compatible. Memory-afferent scale
+  starts ≤ sensory so the sensory stream keeps driving (a tuning knob). Sketched this session;
+  implementation deferred to the next build pass.
 
 ### 2.4 Motor Cortex — `MotorCortex(n_actions=4, input_gain=2.0, inhibition=3.0, ach_gain=1.0, bus=None)`
 
@@ -135,6 +157,11 @@ emit `[T,B,N]` straight into the viz toolkit.
   `apply_gate`; convert with `open_mask = 1 − gate_closed`.
 - **Finding (EXP-016):** selects the strong channel, Motor follows the selection, and below-floor
   utilities **veto** the action (0 channels open, Motor silent). Gate raster shows clean disinhibition.
+- **Gain refinement (designed L11, 2026-06-12):** the gate is **multiplicative** — biologically thalamic
+  gain modulation, and `g·(Wx) = (gW)x`, so gating the signal ≡ scaling the projection weights. Current
+  `apply_gate` is **binary** (open/closed); generalise `gate_closed` → a per-pathway **gain** `g ∈
+  [0, g_max]` (`0` off · `<1` suppress · `>1` amplify) so the router can *amplify* as well as *veto*.
+  L10 tonic/burst maps onto this (burst = transient high gain). Small change; deferred to build.
 
 ---
 
@@ -144,13 +171,16 @@ emit `[T,B,N]` straight into the viz toolkit.
 |---|---|---|---|---:|---|---|
 | 1 | Environment → Sensory | encode | Poisson encoder | 0 | yes (relay) | encoder ✅; relay gate ⬜ deferred |
 | 2 | Sensory → Prefrontal | driver | dense (PFC-owned `Projection`) | 1 | no | ✅ EXP-015 |
-| 3 | Prefrontal → Hippocampus (store) | driver | dense | — | **yes (store)** | ✅ via `apply_gate` (EXP-017) |
-| 4 | Hippocampus → Prefrontal (recall) | driver | dense | — | **yes (recall)** | read-out gated ✅; feedback into PFC ⬜ |
+| 3 | Sensory → Hippocampus (store content) | driver | dense | 1 | **yes (store)** | gate ✅ (EXP-017/019); content source ⬜ rewire PFC→Sensory |
+| 4 | Hippocampus → Prefrontal (recall) | driver | dense | 1 | **yes (recall)** | read-out gated ✅; PFC memory afferent designed (W10 S2), wiring ⬜ |
 | 5 | Prefrontal → Motor (action-enable) | driver | structured | — | **yes (router)** | ✅ EXP-016 |
 | 6 | Motor → Environment | decode | winner read-out | 0 | no | ✅ (spike-count winner) |
 
 **Control:** `ThalamicRouter` → gates of pathways 3/4/5 via `apply_gate`. Selection (Stage A) →
-gating (Stage B). **Neuromod:** `NeuromodBus` broadcast to every region (§6).
+gating (Stage B). For pathway 3 the **store command** (when to store the Sensory snapshot) originates
+as a PFC store-utility → Router → store gate — content (Sensory→Hippo) and command (PFC→Router→gate)
+travel on separate paths, per the L10 content/control split. **Neuromod:** `NeuromodBus` broadcast to
+every region (§6).
 
 Composition rule (v2): a region takes input **spikes** and owns its afferent weights (a `Projection`
 or `Linear`); inter-region `Projection`s live *inside* the consumer. Standalone gated pathways use
@@ -190,6 +220,13 @@ All six bring-up steps done, each with a passing verification gate (120 tests to
 - **Dopamine (hook):** reward / learning-enable, broadcast one-to-all. `learning_enabled =
   dopamine ≥ learning_threshold`. No plasticity exists yet, so it is a signal + hook for future
   STDP / reward-modulated learning.
+- **Learning rule (designed L11, 2026-06-12 — R-STDP / three-factor):** the planned plasticity is
+  **reward-modulated STDP** — `Δw_ij = β·(R − b)·e_ij` (Izhikevich 2007; Frémaux & Gerstner 2016).
+  The dopamine scalar **is the third factor** `(R − b)` (reward − baseline/expected); `e_ij` is a
+  per-synapse **eligibility trace** (STDP-fed, slow decay `τ_e`) added to each *trainable* `Projection`,
+  which bridges the distal-reward credit-assignment gap. At reward: `Δw = β·dopamine·e`. First target =
+  the PFC utility readout (closest to reward); this is what trains selection past its fixed-favourite
+  limit (§2.3, §7). See week-10 note Session 3.
 
 ---
 
@@ -197,7 +234,8 @@ All six bring-up steps done, each with a passing verification gate (120 tests to
 
 - **No learning yet.** All learned regions (Sensory, PFC transform, Motor decompression) use random
   init, so action selection conducts and propagates information but is **not task-meaningful**.
-  Reward-modulated plasticity (dopamine-gated) is the headline next step.
+  Reward-modulated plasticity (dopamine-gated) is the headline next step — **rule designed L11 (R-STDP
+  three-factor, §6); implementation pending.**
 - **Closed loop incomplete:** hippocampal recall is not yet fed back into PFC; the Sensory relay gate
   (pathway 1) is not implemented.
 - **Counts deferred:** Motor decompression stack and a fuller Router are deferred until trainable.
