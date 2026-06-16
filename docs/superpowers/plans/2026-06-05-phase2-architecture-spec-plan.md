@@ -35,6 +35,7 @@ point through a closed-loop v2 that runs on grid-world.
 | Week-10 S2: PFC multi-source design + Motor confirmed | **DONE** | 2026-06-08 |
 | Week-10 S3 (L11): router gain refinement + R-STDP rule designed | **DONE** | 2026-06-12 |
 | Week-10 S4 (build day): PFC multi-source + router gain + closed loop (EXP-020) + R-STDP taste (EXP-021) | **DONE** | 2026-06-14 |
+| Week-11 S1: full assembly — `brain.py` + Gymnasium `GridWorldEnv` + smoke test | **DONE** | 2026-06-15 |
 
 ---
 
@@ -126,6 +127,13 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-15 (Week 11, Session 1 — full assembly build):** built the orchestrator
+  `src/neuromorphic/brain.py` (`Brain`: 5 regions + `NeuromodBus`, `step(obs)→action` window-batched
+  per EXP-020, `learn(reward)` → dopamine bus with plasticity deferred, `run_episode`) and the
+  Gymnasium `GridWorldEnv` (`src/neuromorphic/envs/gridworld.py`, Phase-0 5×5 fixed start/goal). Smoke
+  test `tests/integration/test_brain.py` (env API, step shapes, recall-shifts-utilities, reward→bus,
+  episode terminates). Session forks (all v1-pragmatic): wire reward hook + defer plasticity, match
+  Phase-0 env, smoke-test bar. Recorded in spec §3 (full-assembly note) + week-11 note (Session 1).
 - **2026-06-14 (Week 10, Session 4 — build day):** **implemented the Week-10 designed upgrades** (the
   designs from S1–S3 turned into code, all TDD, full suite green at **141 tests**). (1) **PFC
   multi-source** (spec §2.3) — second summed afferent `Projection(recall_dim=64→n_state)` for the

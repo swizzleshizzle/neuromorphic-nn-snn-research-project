@@ -190,6 +190,14 @@ Composition rule (v2): a region takes input **spikes** and owns its afferent wei
 or `Linear`); inter-region `Projection`s live *inside* the consumer. Standalone gated pathways use
 `apply_gate` on the spike stream.
 
+**Full assembly (Week-11 S1, 2026-06-15):** `src/neuromorphic/brain.py` (`Brain`) instantiates all
+five regions + `NeuromodBus` and runs pathways 2/3/4/5 per `step(obs) → action` — **window-batched**
+(each region consumes a full `[T,B,N]` window; the EXP-020 pattern). `learn(reward)` wires reward onto
+the dopamine bus (the R-STDP third factor; **plasticity deferred**). Driven by the Gymnasium
+`GridWorldEnv` (`src/neuromorphic/envs/gridworld.py`); smoke test `tests/integration/test_brain.py`.
+v1 simplifications: store/recall (p3/p4) use explicit `store`/`recall` flags, not yet router-issued
+commands; the router still gates p5 (PFC→Motor).
+
 ---
 
 ## 4. Build order — completed
