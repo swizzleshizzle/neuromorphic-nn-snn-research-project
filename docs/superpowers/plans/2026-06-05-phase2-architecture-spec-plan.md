@@ -34,6 +34,8 @@ point through a closed-loop v2 that runs on grid-world.
 | Week-10: sensory→hippocampus wiring decision | **DONE** | 2026-06-08 |
 | Week-10 S2: PFC multi-source design + Motor confirmed | **DONE** | 2026-06-08 |
 | Week-10 S3 (L11): router gain refinement + R-STDP rule designed | **DONE** | 2026-06-12 |
+| Week-10 S4 (build day): PFC multi-source + router gain + closed loop (EXP-020) + R-STDP taste (EXP-021) | **DONE** | 2026-06-14 |
+| Week-11 S1: full assembly — `brain.py` + Gymnasium `GridWorldEnv` + smoke test | **DONE** | 2026-06-15 |
 
 ---
 
@@ -125,6 +127,29 @@ point through a closed-loop v2 that runs on grid-world.
 
 ## Change log
 
+- **2026-06-15 (Week 11, Session 1 — full assembly build):** built the orchestrator
+  `src/neuromorphic/brain.py` (`Brain`: 5 regions + `NeuromodBus`, `step(obs)→action` window-batched
+  per EXP-020, `learn(reward)` → dopamine bus with plasticity deferred, `run_episode`) and the
+  Gymnasium `GridWorldEnv` (`src/neuromorphic/envs/gridworld.py`, Phase-0 5×5 fixed start/goal). Smoke
+  test `tests/integration/test_brain.py` (env API, step shapes, recall-shifts-utilities, reward→bus,
+  episode terminates). Session forks (all v1-pragmatic): wire reward hook + defer plasticity, match
+  Phase-0 env, smoke-test bar. Recorded in spec §3 (full-assembly note) + week-11 note (Session 1).
+- **2026-06-14 (Week 10, Session 4 — build day):** **implemented the Week-10 designed upgrades** (the
+  designs from S1–S3 turned into code, all TDD, full suite green at **141 tests**). (1) **PFC
+  multi-source** (spec §2.3) — second summed afferent `Projection(recall_dim=64→n_state)` for the
+  hippocampal recall added to the RLeaky state-hold; `forward(concept, recall=None)` reproduces the
+  EXP-015 single-source output byte-for-byte (golden regression), a non-zero recall shifts the utility
+  code, `mem_afferent` recorded. (2) **Router continuous gain** (spec §2.5) — new
+  `apply_gain(signal, g)` multiplicative primitive (`0` off · `<1` suppress · `1` pass · `>1` amplify);
+  binary `apply_gate` is the special case `g=1−gate_closed`, untouched (back-compat). (3) **Closed loop
+  EXP-020** — Sensory→PFC + router-gated Hippocampus recall→PFC, with the **Sensory snapshot** stored
+  under gating (pathway 3 content source); recall measurably shifts PFC utilities (L1=3), Motor still
+  resolves a single winner; 6 integration tests + rasters. (4) **STRETCH R-STDP taste EXP-021** —
+  three-factor `Δw=β·dopamine·e` on the PFC readout (frozen upstream, one-off): the rewarded
+  non-favourite action's weights grow, utility rises (1→31 spikes), the favourite is depressed, and
+  greedy selection flips 2→1 — selection moved past the EXP-015 fixed-favourite limit. Spec §2.3/§2.5/§3
+  (pathways 3,4)/§6/§7 status flags flipped to built. Obsidian week-10 note: Session 4 entry pending —
+  user to sync.
 - **2026-06-12 (Week 10, Session 3 — L11 study):** **router gain refinement + R-STDP learning rule
   designed** (study session, no code). Router: the gate is multiplicative (`g·(Wx)=(gW)x`); generalise
   `apply_gate` from binary to a continuous per-pathway gain `g∈[0,g_max]` so it can amplify, not just

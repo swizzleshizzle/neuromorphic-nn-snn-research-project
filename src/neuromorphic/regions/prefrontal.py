@@ -9,7 +9,17 @@ Per the agreed composition model, the region **owns its afferent** as a
 :class:`~neuromorphic.connections.projection.Projection`: it takes the sensory
 concept *spikes* (uniform ``BrainRegion`` contract) and the Projection turns them
 into the delayed afferent current that drives the state-hold layer (pathway 2,
-``Δ=1``). For the open loop there is no hippocampal recall input and no gating yet.
+``Δ=1``).
+
+**Multi-source integration (spec §2.3):** the region owns a *second* afferent
+``Projection(recall_dim → n_state)`` for the hippocampal recall (pathway 4). The
+two afferents are **summed** into the RLeaky state-hold —
+``state_drive = afferent_sensory(concept) + afferent_memory(recall)`` — rather than
+concatenated, so the streams stay independently router-gateable (memory reads zero
+when its gate is closed). ``forward(concept, recall=None)`` uses zeros for a missing
+recall, keeping the EXP-015 sensory-only open loop byte-for-byte compatible. The
+memory afferent's scale (``memory_gain``) starts ``≤ weight_gain`` so the sensory
+stream keeps driving (a tuning knob).
 """
 
 from __future__ import annotations
@@ -28,24 +38,30 @@ class Prefrontal(BrainRegion):
     """Recurrent planning region: concept code → action utilities.
 
     Args:
-        concept_dim: sensory concept input width.
+        concept_dim: sensory concept input width (pathway 2).
+        recall_dim: hippocampal recall input width (pathway 4, second afferent).
         n_state: recurrent state-hold population size (RLeaky).
         n_transform: feedforward transform population size (Leaky).
         n_actions: action-utility output width.
         beta, threshold, reset_mechanism: neuron params (week-7 locked config).
         num_steps: inference window ``T``.
         sparsity: afferent Projection density (pathway 2 is dense → 1.0).
-        delay: afferent transmission delay ``Δ`` (pathway 2 → 1).
+        delay: afferent transmission delay ``Δ`` (pathways 2 & 4 → 1).
         weight_gain: excitability knob scaling the ``1/sqrt(fan_in)`` weight inits.
             Kept moderate (≈2.0) so the untrained utility read-out stays in the
             *responsive* regime — too high and the favoured action saturates
             (fires every step) and washes out all upstream concept selectivity.
+        memory_gain: excitability knob for the memory afferent (scales its weight
+            init the way ``weight_gain`` scales the sensory afferent). Starts
+            ``≤ weight_gain`` so the sensory stream keeps driving (spec §2.3 tuning
+            note); the router-gated recall reads zero when its gate is closed.
         seed: RNG seed for reproducible weights (afferent, recurrent, transform).
     """
 
     def __init__(
         self,
         concept_dim: int = 64,
+        recall_dim: int = 64,
         n_state: int = 100,
         n_transform: int = 50,
         n_actions: int = 4,
@@ -56,11 +72,13 @@ class Prefrontal(BrainRegion):
         sparsity: float = 1.0,
         delay: int = 1,
         weight_gain: float = 2.0,
+        memory_gain: float = 1.0,
         seed: int | None = None,
     ):
         super().__init__(name="prefrontal", n_neurons=n_state + n_transform)
         self.num_steps = num_steps
         self.concept_dim = concept_dim
+        self.recall_dim = recall_dim
         self.n_state = n_state
 
         # Seed the global RNG so snnTorch's internal (RLeaky recurrent, Linear
@@ -92,6 +110,20 @@ class Prefrontal(BrainRegion):
 
         self._init_weights(weight_gain)
 
+        # Memory afferent (pathway 4): hippocampal recall spikes -> delayed
+        # state-hold current, summed with the sensory afferent. Built **after**
+        # the layers above (with its own seeded generator) so it cannot perturb
+        # the global-RNG draws that seed the recurrent/transform weights — the
+        # sensory-only path stays byte-for-byte identical to EXP-015.
+        self.afferent_memory = Projection(
+            n_source=recall_dim,
+            n_target=n_state,
+            sparsity=sparsity,
+            delay=delay,
+            weight_scale=memory_gain / math.sqrt(recall_dim),
+            seed=None if seed is None else seed + 1,
+        )
+
         self.spk_state: torch.Tensor | None = None
         self.mem_state: torch.Tensor | None = None
         self.mem_transform: torch.Tensor | None = None
@@ -113,8 +145,22 @@ class Prefrontal(BrainRegion):
         names = ("spk_state", "mem_state", "mem_transform", "mem_utility")
         return {n: getattr(self, n) for n in names if getattr(self, n) is not None}
 
-    def forward(self, input_spikes: torch.Tensor) -> torch.Tensor:
-        """``input_spikes`` concept code ``[T, B, concept_dim]`` → utilities ``[T, B, N_actions]``."""
+    def forward(
+        self,
+        input_spikes: torch.Tensor,
+        recall_spikes: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Integrate sensory concept + (optional) hippocampal recall → utilities.
+
+        Args:
+            input_spikes: sensory concept code ``[T, B, concept_dim]`` (pathway 2).
+            recall_spikes: hippocampal recall code ``[T, B, recall_dim]`` (pathway 4,
+                router-gated). ``None`` → zeros, reproducing the sensory-only open
+                loop (EXP-015) byte-for-byte.
+
+        Returns:
+            action utilities ``[T, B, N_actions]``.
+        """
         if input_spikes.ndim != 3:
             raise ValueError(
                 f"Prefrontal expects [T, B, concept_dim], got {tuple(input_spikes.shape)}"
@@ -124,12 +170,27 @@ class Prefrontal(BrainRegion):
                 f"expected concept_dim={self.concept_dim}, got {input_spikes.shape[-1]}"
             )
 
-        afferent_current = self.afferent(input_spikes)  # [T, B, n_state], delayed
+        if recall_spikes is None:
+            recall_spikes = torch.zeros(
+                input_spikes.shape[0], input_spikes.shape[1], self.recall_dim,
+                dtype=input_spikes.dtype, device=input_spikes.device,
+            )
+        elif recall_spikes.ndim != 3 or recall_spikes.shape[-1] != self.recall_dim:
+            raise ValueError(
+                f"expected recall_spikes [T, B, recall_dim={self.recall_dim}], "
+                f"got {tuple(recall_spikes.shape)}"
+            )
+
+        # Two summed afferents drive the state-hold (concept + gated recall).
+        sensory_current = self.afferent(input_spikes)        # [T, B, n_state], delayed
+        memory_current = self.afferent_memory(recall_spikes)  # [T, B, n_state], delayed
+        state_drive = sensory_current + memory_current
         self.reset()
         utilities = []
         for t in range(input_spikes.shape[0]):
+            self._record("mem_afferent", memory_current[t])
             self.spk_state, self.mem_state = self.lif_state(
-                afferent_current[t], self.spk_state, self.mem_state
+                state_drive[t], self.spk_state, self.mem_state
             )
             self._record("state", self.spk_state)
 

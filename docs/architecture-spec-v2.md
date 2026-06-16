@@ -7,7 +7,8 @@
 **Design spec:** `docs/superpowers/specs/2026-06-06-phase2-region-framework-design.md`
 **Tracking plan:** `docs/superpowers/plans/2026-06-05-phase2-architecture-spec-plan.md`
 **Code:** `src/neuromorphic/regions/`, `src/neuromorphic/connections/`, `src/neuromorphic/neuromod.py`
-**Bring-up evidence:** EXP-013 … EXP-018 (`experiments/013…018_week9_*`)
+**Bring-up evidence:** EXP-013 … EXP-018 (`experiments/013…018_week9_*`); Week-10 EXP-019 (pattern
+completion), EXP-020 (closed loop), EXP-021 (R-STDP taste)
 
 ---
 
@@ -131,8 +132,10 @@ emit `[T,B,N]` straight into the viz toolkit.
   router can gate memory independently; the memory afferent receives the **router-gated** recall and
   reads zero when the gate is closed. `forward` becomes `forward(concept, recall=None)` — `recall=None`
   → zeros, keeping the sensory-only open loop (EXP-015) backward-compatible. Memory-afferent scale
-  starts ≤ sensory so the sensory stream keeps driving (a tuning knob). Sketched this session;
-  implementation deferred to the next build pass.
+  (`memory_gain`, default 1.0) starts ≤ `weight_gain` so the sensory stream keeps driving (a tuning
+  knob). **Built 2026-06-14 (EXP-020):** second afferent `Projection(recall_dim=64→n_state)` summed
+  into the state-hold; `recall=None` reproduces the EXP-015 output byte-for-byte (golden regression),
+  a non-zero recall shifts the utility code, `mem_afferent` recorded for viz.
 
 ### 2.4 Motor Cortex — `MotorCortex(n_actions=4, input_gain=2.0, inhibition=3.0, ach_gain=1.0, bus=None)`
 
@@ -157,11 +160,12 @@ emit `[T,B,N]` straight into the viz toolkit.
   `apply_gate`; convert with `open_mask = 1 − gate_closed`.
 - **Finding (EXP-016):** selects the strong channel, Motor follows the selection, and below-floor
   utilities **veto** the action (0 channels open, Motor silent). Gate raster shows clean disinhibition.
-- **Gain refinement (designed L11, 2026-06-12):** the gate is **multiplicative** — biologically thalamic
-  gain modulation, and `g·(Wx) = (gW)x`, so gating the signal ≡ scaling the projection weights. Current
-  `apply_gate` is **binary** (open/closed); generalise `gate_closed` → a per-pathway **gain** `g ∈
-  [0, g_max]` (`0` off · `<1` suppress · `>1` amplify) so the router can *amplify* as well as *veto*.
-  L10 tonic/burst maps onto this (burst = transient high gain). Small change; deferred to build.
+- **Gain refinement (designed L11, 2026-06-12; built 2026-06-14):** the gate is **multiplicative** —
+  biologically thalamic gain modulation, and `g·(Wx) = (gW)x`, so gating the signal ≡ scaling the
+  projection weights. The binary `apply_gate` (open/closed) is now joined by **`apply_gain(signal, g)`**
+  — a per-pathway **gain** `g ∈ [0, g_max]` (`0` off · `<1` suppress · `1` pass · `>1` amplify) so the
+  router can *amplify* as well as *veto*; the binary gate is the special case `g = 1 − gate_closed`
+  (back-compat preserved). L10 tonic/burst maps onto this (burst = transient high gain).
 
 ---
 
@@ -171,8 +175,8 @@ emit `[T,B,N]` straight into the viz toolkit.
 |---|---|---|---|---:|---|---|
 | 1 | Environment → Sensory | encode | Poisson encoder | 0 | yes (relay) | encoder ✅; relay gate ⬜ deferred |
 | 2 | Sensory → Prefrontal | driver | dense (PFC-owned `Projection`) | 1 | no | ✅ EXP-015 |
-| 3 | Sensory → Hippocampus (store content) | driver | dense | 1 | **yes (store)** | gate ✅ (EXP-017/019); content source ⬜ rewire PFC→Sensory |
-| 4 | Hippocampus → Prefrontal (recall) | driver | dense | 1 | **yes (recall)** | read-out gated ✅; PFC memory afferent designed (W10 S2), wiring ⬜ |
+| 3 | Sensory → Hippocampus (store content) | driver | dense | 1 | **yes (store)** | gate ✅ (EXP-017/019); content source ✅ (EXP-020 — Sensory snapshot) |
+| 4 | Hippocampus → Prefrontal (recall) | driver | dense | 1 | **yes (recall)** | read-out gated ✅; PFC memory afferent wired ✅ (EXP-020) |
 | 5 | Prefrontal → Motor (action-enable) | driver | structured | — | **yes (router)** | ✅ EXP-016 |
 | 6 | Motor → Environment | decode | winner read-out | 0 | no | ✅ (spike-count winner) |
 
@@ -185,6 +189,14 @@ every region (§6).
 Composition rule (v2): a region takes input **spikes** and owns its afferent weights (a `Projection`
 or `Linear`); inter-region `Projection`s live *inside* the consumer. Standalone gated pathways use
 `apply_gate` on the spike stream.
+
+**Full assembly (Week-11 S1, 2026-06-15):** `src/neuromorphic/brain.py` (`Brain`) instantiates all
+five regions + `NeuromodBus` and runs pathways 2/3/4/5 per `step(obs) → action` — **window-batched**
+(each region consumes a full `[T,B,N]` window; the EXP-020 pattern). `learn(reward)` wires reward onto
+the dopamine bus (the R-STDP third factor; **plasticity deferred**). Driven by the Gymnasium
+`GridWorldEnv` (`src/neuromorphic/envs/gridworld.py`); smoke test `tests/integration/test_brain.py`.
+v1 simplifications: store/recall (p3/p4) use explicit `store`/`recall` flags, not yet router-issued
+commands; the router still gates p5 (PFC→Motor).
 
 ---
 
@@ -227,17 +239,26 @@ All six bring-up steps done, each with a passing verification gate (120 tests to
   which bridges the distal-reward credit-assignment gap. At reward: `Δw = β·dopamine·e`. First target =
   the PFC utility readout (closest to reward); this is what trains selection past its fixed-favourite
   limit (§2.3, §7). See week-10 note Session 3.
+- **First taste built 2026-06-14 (EXP-021):** the three-factor rule on the PFC utility readout alone
+  (everything upstream frozen; a one-off, *not* yet baked into the shared `Projection`). A
+  normalised, STDP-fed eligibility trace + dopamine `(R−b)` from the `NeuromodBus`, ε-greedy
+  exploration on a toy reward: the rewarded (non-favourite) action's readout weights grow, its utility
+  rises, the old favourite is depressed, and greedy selection flips to the target — the first evidence
+  the network can move selection in the reward direction. Stable under eligibility normalisation +
+  weight clipping. Next build: an eligibility-bearing trainable `Projection`.
 
 ---
 
 ## 7. Known limits / open for the next phase
 
-- **No learning yet.** All learned regions (Sensory, PFC transform, Motor decompression) use random
-  init, so action selection conducts and propagates information but is **not task-meaningful**.
-  Reward-modulated plasticity (dopamine-gated) is the headline next step — **rule designed L11 (R-STDP
-  three-factor, §6); implementation pending.**
-- **Closed loop incomplete:** hippocampal recall is not yet fed back into PFC; the Sensory relay gate
-  (pathway 1) is not implemented.
+- **Learning: first taste only.** All learned regions (Sensory, PFC transform, Motor decompression)
+  still use random init, so steady-state selection is **not yet task-meaningful**. The R-STDP
+  three-factor rule (§6) now has a **working one-off on the PFC readout** (EXP-021 — moves selection
+  past the fixed favourite), but it is not yet baked into the shared `Projection` or run on the full
+  closed loop. Generalising plasticity to a trainable `Projection` is the headline next step.
+- **Closed loop now runs (EXP-020):** hippocampal recall is fed back into PFC's second afferent and
+  measurably shifts the utility code (pathway 4 wired; pathway 3 content source = the Sensory snapshot).
+  Still open: the Sensory relay gate (pathway 1) is not implemented, and the loop is untrained.
 - **Counts deferred:** Motor decompression stack and a fuller Router are deferred until trainable.
 - **Single-item memory:** the attractor holds one pattern; multi-item addressable memory
   (bind-and-superpose) remains a future option (v1 §5.1 alternative).
