@@ -26,7 +26,8 @@ def record_episode(
     """
     sink.open(build_header(brain, seed=seed, action_labels=action_labels))
 
-    obs, _ = env.reset()
+    # seed reseeds the env; the brain's Poisson stochasticity comes from `generator`.
+    obs, _ = env.reset(seed=seed)
     if store_first:
         brain.remember(obs, generator=generator)
 

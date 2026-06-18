@@ -34,8 +34,7 @@ def _router_block(out: dict) -> dict:
     }
 
 
-def _pathways(region_rate: dict, out: dict, store: bool, recall: bool) -> dict:
-    pfc_motor_open = (1 - out["gate_closed"]).float().mean(dim=0)[0].tolist()  # [A]
+def _pathways(region_rate: dict, pfc_motor_open: list, store: bool, recall: bool) -> dict:
     return {
         "sens_hippo": {"intensity": region_rate["sensory"], "gate_open": 1.0 if store else 0.0},
         "sens_pfc": {"intensity": region_rate["sensory"]},
@@ -76,14 +75,17 @@ def build_frame(
     fields = {r: _field_tensor(out, r) for r in REGION_OUTPUT_KEY}
     regions = {r: _region_summary(f) for r, f in fields.items()}
     region_rate = {r: regions[r]["rate"] for r in regions}
+    router = _router_block(out)
     frame = {
         "episode": episode,
         "step": step,
         "t": t,
         "task": task,
         "regions": regions,
-        "pathways": _pathways(region_rate, out, store, recall),
-        "router": _router_block(out),
+        "pathways": _pathways(region_rate, router["gate_open"], store, recall),
+        "router": router,
+        # field = each region's RAW output train. Note router's raw train is the
+        # gate_closed mask (1=blocked); router.gate_open above is its inversion.
         "field": {r: {"spikes": f.int().tolist()} for r, f in fields.items()},
     }
     if grid_n is not None and "obs_spikes" in out:
