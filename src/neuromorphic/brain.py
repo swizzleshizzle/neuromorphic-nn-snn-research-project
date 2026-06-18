@@ -142,7 +142,8 @@ class Brain:
         Returns:
             dict with ``action`` (int for a single agent, else ``[B]`` tensor),
             ``utilities``/``recall``/``gate``/``action_spikes`` ``[T, B, N]`` tensors,
-            and ``recordings`` (per-region ``{key: [T,B,N]}``) when ``record=True``.
+            ``obs_spikes`` (the encoder input ``[T, B, 2*grid_n**2]``), and
+            ``recordings`` (per-region ``{key: [T,B,N]}``) when ``record=True``.
         """
         obs_t = self._to_obs_tensor(obs)
         B = obs_t.shape[0]
@@ -178,6 +179,7 @@ class Brain:
             "utilities": utilities,
             "gate_closed": gate_closed,
             "action_spikes": action_spikes,
+            "obs_spikes": obs_spikes,
         }
         if record:
             out["recordings"] = {
