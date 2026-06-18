@@ -1,0 +1,78 @@
+"""Schema constants and the trace header for the dashboard data contract."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+
+SCHEMA_VERSION = "1.0"
+
+# region id -> the per-step recording key whose [T, B, N] tensor is the region's
+# OUTPUT spike train (what the hero renders). Distinct from region.n_neurons.
+REGION_OUTPUT_KEY = {
+    "sensory": "concept",
+    "hippocampus": "population",
+    "prefrontal": "utility",
+    "router": "gate",
+    "motor": "action",
+}
+
+
+def render_for_n(n: int) -> str:
+    """Hero representation hint as a function of output neuron count."""
+    if n <= 2_000:
+        return "dots"
+    if n <= 100_000:
+        return "cloud"
+    return "density"
+
+
+PATHWAYS = [
+    {"id": "sens_hippo", "src": "sensory", "dst": "hippocampus", "gated": True, "label": "store/recall"},
+    {"id": "sens_pfc", "src": "sensory", "dst": "prefrontal", "gated": False},
+    {"id": "hippo_pfc", "src": "hippocampus", "dst": "prefrontal", "gated": True},
+    {"id": "pfc_motor", "src": "prefrontal", "dst": "motor", "gated": True, "label": "router-gated"},
+]
+
+
+def region_specs(brain):
+    """(id, label, output n_neurons, role) for each region, in signal-flow order.
+
+    n_neurons is the region's OUTPUT width (what the hero renders), derived from
+    brain config so it always matches the `field` tensor — not region.n_neurons.
+    """
+    return [
+        ("sensory", "Sensory Cortex", brain.content, "input"),
+        ("hippocampus", "Hippocampus", brain.hippo.n_neurons, "memory"),
+        ("prefrontal", "Prefrontal", brain.n_actions, "planning"),
+        ("router", "Thalamic Router", brain.n_actions, "control"),
+        ("motor", "Motor Cortex", brain.n_actions, "output"),
+    ]
+
+
+def _config_hash(brain, seed: int) -> str:
+    payload = {
+        "content": brain.content,
+        "n_actions": brain.n_actions,
+        "n_hippo": brain.hippo.n_neurons,
+        "T": brain.T,
+        "grid_n": brain.grid_n,
+        "seed": seed,
+    }
+    return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:8]
+
+
+def build_header(brain, *, seed: int, action_labels, task_type: str = "gridworld", grid_n: int | None = None) -> dict:
+    """Build the once-per-run trace header declaring brain topology + run context."""
+    grid_n = brain.grid_n if grid_n is None else grid_n
+    regions = [
+        {"id": rid, "label": label, "n_neurons": n, "role": role, "render": render_for_n(n)}
+        for rid, label, n, role in region_specs(brain)
+    ]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "brain": {"id": "five-region", "config_hash": _config_hash(brain, seed), "seed": seed, "T": brain.T},
+        "task": {"type": task_type, "grid_n": grid_n, "action_labels": list(action_labels)},
+        "regions": regions,
+        "pathways": [dict(p) for p in PATHWAYS],
+    }
