@@ -286,3 +286,31 @@ What this spec deliberately leaves open, for Claude Design to define:
 Constraints to honor: data-driven from the header topology (no hardcoded regions); WebGL hero;
 React + D3/Recharts panels; legible at high information density; works in focus mode and full
 dashboard mode.
+
+---
+
+## 9. Session-2 reconciliation (2026-06-17, post design review)
+
+Claude Design delivered `docs/handoffs/claude_design/` (a layout/visual spec + two interactive
+prototypes: 3D-Cloud and Flow-Map heroes). Reviewing it against this contract surfaced four seams;
+the decisions are recorded here as the source of truth.
+
+1. **Membrane deferred — v1 is flash-only.** The design uses `detail.membrane` for the hero's
+   sub-threshold steady glow *and* Panel 05. No region records membrane today (it needs a
+   `_record("membrane", …)` hook in all five region `forward` loops). **Decision:** keep membrane
+   out of v1 — the hero renders spike *flashes* only and Panel 05 renders *spike trains* from the
+   always-on `field`. Revisit when the region hook lands.
+
+2. **Truthful sensory grid — `encoding.sensory_input` added.** `field["sensory"]` is the sensory
+   `concept` (64-dim **latent**); 64=8×8 is a coincidence, not the world. **Decision:** the frame
+   also carries `encoding.sensory_input` = the real `encode_gridworld` input (`2·grid_n²` spikes =
+   agent plane ⊕ goal plane; cell `(x,y)` at flat index `y*grid_n + x`). The hero's sensory-as-grid
+   and receptive-field highlight read this, so they reflect the actual spatial signal. (Requires
+   `Brain.step` to return `obs_spikes` — covered in the data-contract plan, Task 3.)
+
+3. **Pathway id is `pfc_motor`.** The prototype's *synthetic* generator labels the PFC→Motor edge
+   `pfc_router`; the contract id is **`pfc_motor`**. The React build uses `pfc_motor`.
+
+4. **`gate_open` is an open-fraction, not a boolean.** The contract emits `gate_open` ∈ `[0,1]` per
+   action. The design's OPEN/CLOSED pill and dashed-closed hero edges apply a threshold
+   (`> 0.5 → OPEN`). No contract change.

@@ -14,8 +14,9 @@
 
 ## Scope notes (read before starting)
 
-- **In scope:** schema constants, header builder, frame builder (task / regions / pathways / router / `field`), `TraceSink` + `FileSink`, `record_episode` runner, and one experiment script that produces a real trace file for the design team to load.
-- **Out of scope (deferred, documented):** the `detail.membrane` block. No region currently records membrane voltage — adding it means a `_record("membrane", ...)` hook inside all five region `forward` loops (separate change). Until then the hero/Panel 5 use per-neuron **spikes** from the always-on `field` block, which this plan delivers. `WebSocketSink`/`RedisStreamSink` are also deferred — the `TraceSink` ABC is built so they drop in later.
+- **In scope:** schema constants, header builder, frame builder (task / regions / pathways / router / `field` / `encoding`), `TraceSink` + `FileSink`, `record_episode` runner, and one experiment script that produces a real trace file for the design team to load.
+- **Confirmed deferred — membrane (session-2 decision, 2026-06-17):** the `detail.membrane` block stays out of v1. No region records membrane voltage today — adding it means a `_record("membrane", ...)` hook inside all five region `forward` loops (separate change). Per the design reconciliation, **v1 is flash-only**: the hero renders spike flashes (no sub-threshold steady glow) and Panel 05 renders spike trains from the always-on `field` block. Membrane revisited later. `WebSocketSink`/`RedisStreamSink` are also deferred — the `TraceSink` ABC is built so they drop in later.
+- **Added — truthful sensory input (session-2 decision, 2026-06-17):** the frame carries an `encoding.sensory_input` block = the real `encode_gridworld` input (`2·grid_n²` spikes = agent plane ⊕ goal plane), so the hero's sensory-as-grid + receptive-field highlight reflect the actual spatial signal, not a latent approximation. Plane layout: first `grid_n²` = agent one-hot, second `grid_n²` = goal one-hot; cell `(x, y)` at flat index `y*grid_n + x`. `Brain.step` does not return this today, so Task 3 adds it to the step output (one line).
 - **Key fact that drives the code:** `region.n_neurons` is the region's *internal* size (e.g. sensory = hidden+concept, router = 2×n_actions). The hero renders each region's *output* spike train, whose width differs. The header therefore reports the **output width** (from `Brain` config), and `field`/`regions` read the per-region **output recording key**:
 
   | region id | output recording key | output width (header `n_neurons`) |
@@ -293,9 +294,10 @@ git commit -m "feat: build_header — data-driven brain topology for the dashboa
 
 ---
 
-## Task 3: Frame builder
+## Task 3: Expose encoder input + frame builder
 
 **Files:**
+- Modify: `src/neuromorphic/brain.py` (add `obs_spikes` to the `step()` return dict)
 - Create: `src/neuromorphic/monitor/frame.py`
 - Test: `tests/monitor/test_frame.py`
 
@@ -374,18 +376,73 @@ def test_pathway_gates_follow_flags():
     assert "gate_open" not in frame["pathways"]["sens_pfc"]      # ungated edge
 
 
-def test_frame_is_json_serializable():
+def test_step_returns_encoder_input():
+    brain, out = _recorded_step()
+    assert "obs_spikes" in out
+    assert out["obs_spikes"].shape == (brain.T, 1, 2 * brain.grid_n * brain.grid_n)
+
+
+def test_frame_encoding_block_is_truthful_grid():
+    brain, out = _recorded_step()
+    frame = build_frame(
+        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True, grid_n=brain.grid_n
+    )
+    enc = frame["encoding"]["sensory_input"]
+    assert enc["grid_n"] == brain.grid_n
+    assert enc["planes"] == ["agent", "goal"]
+    assert len(enc["spikes"]) == brain.T
+    assert len(enc["spikes"][0]) == 2 * brain.grid_n * brain.grid_n
+
+
+def test_encoding_omitted_without_grid_n():
     _, out = _recorded_step()
     frame = build_frame(out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True)
+    assert "encoding" not in frame
+
+
+def test_frame_is_json_serializable():
+    brain, out = _recorded_step()
+    frame = build_frame(
+        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True, grid_n=brain.grid_n
+    )
     json.dumps(frame)  # must not raise
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/monitor/test_frame.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'neuromorphic.monitor.frame'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'neuromorphic.monitor.frame'` (and, once that resolves, `KeyError: 'obs_spikes'`)
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3a: Expose the encoder input from `Brain.step`**
+
+In `src/neuromorphic/brain.py`, the `step()` method builds its return dict as:
+
+```python
+        out = {
+            "action": action,
+            "concept": concept,
+            "recall": recall_code,
+            "utilities": utilities,
+            "gate_closed": gate_closed,
+            "action_spikes": action_spikes,
+        }
+```
+
+Add `obs_spikes` (already computed earlier in `step` as `obs_spikes = encode_gridworld(...)`):
+
+```python
+        out = {
+            "action": action,
+            "concept": concept,
+            "recall": recall_code,
+            "utilities": utilities,
+            "gate_closed": gate_closed,
+            "action_spikes": action_spikes,
+            "obs_spikes": obs_spikes,
+        }
+```
+
+- [ ] **Step 3b: Write the frame builder**
 
 Create `src/neuromorphic/monitor/frame.py`:
 
@@ -436,12 +493,39 @@ def _pathways(region_rate: dict, out: dict, store: bool, recall: bool) -> dict:
     }
 
 
-def build_frame(out: dict, *, episode: int, step: int, t: float, task: dict, store: bool, recall: bool) -> dict:
-    """Assemble one Frame. ``out`` must come from ``Brain.step(record=True)``."""
+def _encoding_block(out: dict, grid_n: int) -> dict:
+    """Truthful sensory input: the encode_gridworld planes [T, 2*grid_n**2]."""
+    obs_spk = out["obs_spikes"][:, 0, :]  # [T, n_obs]
+    return {
+        "sensory_input": {
+            "spikes": obs_spk.int().tolist(),
+            "grid_n": grid_n,
+            "planes": ["agent", "goal"],   # first grid_n**2 = agent, second = goal
+            "index": "y*grid_n + x",
+        }
+    }
+
+
+def build_frame(
+    out: dict,
+    *,
+    episode: int,
+    step: int,
+    t: float,
+    task: dict,
+    store: bool,
+    recall: bool,
+    grid_n: int | None = None,
+) -> dict:
+    """Assemble one Frame. ``out`` must come from ``Brain.step(record=True)``.
+
+    ``grid_n`` enables the truthful ``encoding.sensory_input`` block (needs
+    ``out["obs_spikes"]``); omit it to skip the block.
+    """
     fields = {r: _field_tensor(out, r) for r in REGION_OUTPUT_KEY}
     regions = {r: _region_summary(f) for r, f in fields.items()}
     region_rate = {r: regions[r]["rate"] for r in regions}
-    return {
+    frame = {
         "episode": episode,
         "step": step,
         "t": t,
@@ -451,18 +535,21 @@ def build_frame(out: dict, *, episode: int, step: int, t: float, task: dict, sto
         "router": _router_block(out),
         "field": {r: {"spikes": f.int().tolist()} for r, f in fields.items()},
     }
+    if grid_n is not None and "obs_spikes" in out:
+        frame["encoding"] = _encoding_block(out, grid_n)
+    return frame
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/monitor/test_frame.py -v`
-Expected: PASS (6 tests)
+Expected: PASS (9 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/neuromorphic/monitor/frame.py tests/monitor/test_frame.py
-git commit -m "feat: build_frame — per-step regions/pathways/router/field blocks"
+git add src/neuromorphic/brain.py src/neuromorphic/monitor/frame.py tests/monitor/test_frame.py
+git commit -m "feat: build_frame + truthful sensory encoding; expose obs_spikes from Brain.step"
 ```
 
 ---
@@ -621,9 +708,10 @@ def test_record_episode_writes_a_replayable_trace(tmp_path):
     assert [r["id"] for r in header["regions"]][0] == "sensory"
 
     frame = json.loads(lines[1])
-    assert set(frame) >= {"task", "regions", "pathways", "router", "field"}
+    assert set(frame) >= {"task", "regions", "pathways", "router", "field", "encoding"}
     assert frame["task"]["action_label"] in ("up", "right", "down", "left")
     assert len(frame["field"]["hippocampus"]["spikes"][0]) == 150
+    assert frame["encoding"]["sensory_input"]["grid_n"] == env.size
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -691,7 +779,8 @@ def record_episode(
             "truncated": bool(truncated),
         }
         frame = build_frame(
-            out, episode=0, step=steps, t=float(steps), task=task, store=False, recall=recall
+            out, episode=0, step=steps, t=float(steps), task=task,
+            store=False, recall=recall, grid_n=brain.grid_n,
         )
         sink.write(frame)
 
@@ -831,7 +920,8 @@ git commit -m "exp 022: generate week-11 dashboard trace artifact"
 
 ## Self-review notes (already applied)
 
-- **Spec coverage:** Frame `task`/`regions`/`pathways`/`router`/`field` blocks (spec §3.4) → Tasks 3/5. Header topology (§3.3) → Task 2. `TraceSink` + `FileSink` (§3.2) → Task 4. JSONL serialization (§3.1) → Task 4. Scaling `render` hint (§6) → Task 1. Real artifact for the design hand-off (§7 step 1) → Task 6.
-- **Deferred with rationale (not gaps):** `detail.membrane` (needs region-level membrane hooks — no region records membrane today; hero/Panel 5 use `field` spikes meanwhile); `WebSocketSink`/`RedisStreamSink` (ABC built, implementations on demand per §7 steps 5–6).
+- **Spec coverage:** Frame `task`/`regions`/`pathways`/`router`/`field`/`encoding` blocks (spec §3.4 + session-2 sensory-input addition) → Tasks 3/5. Header topology (§3.3) → Task 2. `TraceSink` + `FileSink` (§3.2) → Task 4. JSONL serialization (§3.1) → Task 4. Scaling `render` hint (§6) → Task 1. Real artifact for the design hand-off (§7 step 1) → Task 6.
+- **Design reconciliation (session-2, 2026-06-17):** `encoding.sensory_input` added so the hero's sensory-as-grid is truthful (design §10.4). Membrane confirmed deferred — v1 flash-only hero + spike-train Panel 05 (design §5.1/§6.5 membrane features wait for the region hook). The React build must use pathway id `pfc_motor` (the prototype's synthetic generator says `pfc_router`) and treat `gate_open` as an open-*fraction* (`>0.5 → OPEN` for the pill).
+- **Deferred with rationale (not gaps):** `detail.membrane` (needs region-level membrane hooks — no region records membrane today); `WebSocketSink`/`RedisStreamSink` (ABC built, implementations on demand per §7 steps 5–6).
 - **Type consistency:** `REGION_OUTPUT_KEY` keys, header region ids, `field`/`regions` keys, and `out["recordings"]` keys all use the same five ids (`sensory`/`hippocampus`/`prefrontal`/`router`/`motor`). `gate_open = 1 - gate_closed` applied once, consistently, in `_router_block` and `_pathways`.
 ```

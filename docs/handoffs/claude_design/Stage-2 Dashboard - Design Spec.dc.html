@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14171e; --ink2:#39414f; --muted:#6c7484; --line:#e4e7ec; --bg:#ffffff;
+  --code-bg:#0b0e14; --code-ink:#d8deea;
+  --c-sensory:#1fa8d8; --c-hippocampus:#8a5cf6; --c-prefrontal:#c99700; --c-router:#e23e72; --c-motor:#15a06a;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:#fff;color:var(--ink);font:15px/1.62 'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+.doc{box-sizing:border-box;max-width:8.5in;margin:0 auto;background:inherit;padding:54px clamp(24px,5vw,0.78in) 96px;}
+.doc-frame{width:100%;border-collapse:collapse;} .doc-frame td{padding:0;}
+.running-hdr,.running-ftr,.hdr-space,.ftr-space{display:none;}
+h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;text-wrap:balance;color:#0b0d12;line-height:1.16;}
+h1{font-size:31px;font-weight:700;letter-spacing:-.015em;margin:8px 0 4px;}
+h2{font-size:19px;font-weight:600;margin:46px 0 13px;padding-top:16px;border-top:2px solid #0b0d12;}
+h3{font-size:14.5px;font-weight:600;margin:26px 0 7px;color:#161a22;}
+h4{font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 6px;}
+p,li{text-wrap:pretty;} p{margin:0 0 11px;} ul{margin:2px 0 13px;padding-left:19px;} li{margin:3px 0;}
+.cap,small{font-size:12px;color:var(--muted);}
+code{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:#f3f5f8;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:#384150;}
+.eyebrow{font:600 11px/1 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--c-router);}
+.lead{font-size:16px;color:var(--ink2);margin:12px 0 2px;line-height:1.55;}
+.meta{display:flex;flex-wrap:wrap;gap:7px 28px;margin:16px 0 4px;font-size:12.5px;color:var(--muted);}
+.meta b{color:var(--ink);font-weight:600;}
+table.spec{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:13px;}
+table.spec th{text-align:left;font:600 10.5px/1.3 'Space Grotesk';text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1.5px solid var(--ink);padding:8px 12px 8px 0;}
+table.spec td{border-bottom:1px solid var(--line);padding:8px 12px 8px 0;vertical-align:top;}
+table.spec td:last-child,table.spec th:last-child{padding-right:0;}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#2b303a;}
+.sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;margin-right:8px;box-shadow:0 0 0 1px rgba(0,0,0,.1);}
+.card{border:1px solid var(--line);border-radius:10px;padding:15px 18px;margin:13px 0;background:#fcfcfd;}
+.callout{border-left:3px solid var(--c-router);background:#fdf3f6;border-radius:0 8px 8px 0;padding:12px 16px;margin:15px 0;font-size:13.5px;}
+.note{border-left:3px solid var(--c-sensory);background:#eff9fe;border-radius:0 8px 8px 0;padding:12px 16px;margin:15px 0;font-size:13.5px;}
+.callout b,.note b{font-weight:600;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:6px 0;}
+pre{background:var(--code-bg);color:var(--code-ink);border-radius:9px;padding:14px 16px;overflow:auto;font:12px/1.55 'IBM Plex Mono',monospace;margin:10px 0 15px;}
+pre .c{color:#7f8aa3;}
+.chip{display:inline-flex;align-items:center;gap:7px;font:600 12px 'Space Grotesk';padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;margin:0 6px 6px 0;}
+.kv{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#475063;}
+hr{border:none;border-top:1px solid var(--line);margin:22px 0;}
+@page { size: letter; margin: 0; }
+@media print {
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin:0; padding:0; }
+  .doc { max-width:none !important; margin:0 !important; padding:0 0.7in !important; }
+  #dc-root, .sc-host { height:auto !important; }
+  .hdr-space, .ftr-space { display:table-cell; height:0.7in !important; }
+  .running-hdr,.running-ftr{ display:flex !important; justify-content:space-between; align-items:baseline; position:fixed !important; left:0; right:0; margin:0 !important; font:600 10px 'IBM Plex Mono',monospace; letter-spacing:.08em; text-transform:uppercase; color:#9aa1b0; }
+  .running-hdr{ top:0; padding:.32in .7in 0 !important; }
+  .running-ftr{ bottom:0; padding:0 .7in .32in !important; }
+  h1,h2,h3,h4{break-after:avoid;}
+  .card,.callout,.note,pre,figure,table,tr{break-inside:avoid;}
+  p,li{orphans:3;widows:3;}
+  .screen-only{display:none !important;}
+}
+</style>
+</helmet>
+
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+<div class="running-hdr"><span>NEURO·SCOPE — Stage-2 Spec</span><span>Phase 2 · Multi-region brain</span></div>
+<div class="running-ftr"><span>Design handoff → build</span><span>v1.0 · 2026-06-17</span></div>
+
+<div class="eyebrow">Design Specification · Handoff to Build</div>
+<h1>NEURO·SCOPE — Stage-2 Dashboard</h1>
+<p class="lead">Layout geometry, visual conventions, and hero treatment for the Stage-2 brain-monitoring dashboard. This is the §8 handoff deliverable: it defines everything the L17 architecture spec deliberately left open, with exact tokens and dimensions lifted from the working prototype.</p>
+
+<div class="meta">
+  <span><b>Phase</b> 2 — Multi-region brain</span>
+  <span><b>Status</b> Design locked · ready to build</span>
+  <span><b>Reads against</b> Stage-2 data contract (trace header + frames)</span>
+</div>
+
+<div class="note"><b>Prototypes this spec describes.</b> Two reference DCs accompany this document — <code>Stage-2 Brain Dashboard.dc.html</code> (3D-cloud hero, default) and <code>Stage-2 Brain Dashboard v1 (flow map).dc.html</code> (flat flow-map hero). They are interactive mockups running synthetic frames; this spec is the source of truth for values. Where the prototype uses Canvas 2D, production should follow the engine guidance in §5.4.</p></div>
+
+<h2>1 · What is delivered</h2>
+<p>One dashboard shell with interchangeable treatments along three axes. Everything is driven by the trace <b>header topology</b> — region count, neuron counts, pathways, task — never hardcoded to today's five regions.</p>
+
+<table class="spec">
+<thead><tr><th style="width:22%">Axis</th><th style="width:39%">Options</th><th>Default & intent</th></tr></thead>
+<tbody>
+<tr><td><b>Hero treatment</b></td><td><b>3D Cloud</b> — orbiting volumetric neuron field · <b>Flow Map</b> — flat left→right signal-flow diagram</td><td>Cloud is the presentable centerpiece (capstone video, Focus); Flow Map is the high-legibility debugging view. Ship both behind a toggle (see §10.1).</td></tr>
+<tr><td><b>View mode</b></td><td><b>Dashboard</b> — hero + 5 docked panels · <b>Focus</b> — hero full-bleed, panels collapse to side rails</td><td>Dashboard. Focus is one click away; rails return as pull-tabs.</td></tr>
+<tr><td><b>Theme</b></td><td><b>Observatory</b> — near-black, heavy bloom · <b>Clinical</b> — dark slate, flat, precise</td><td>Observatory. Clinical is the restrained backup for dense reading / projection.</td></tr>
+</tbody>
+</table>
+
+<p><b>Surface inventory:</b> a 56px top bar, the hero stage, a 62px bottom timeline scrubber, and five instrument panels — <span class="kv">01</span> Region Activity, <span class="kv">02</span> Communication Flow, <span class="kv">03</span> Task State, <span class="kv">04</span> Thalamic Router, <span class="kv">05</span> Membrane Traces.</p>
+
+<h2>2 · Foundations</h2>
+
+<h3>2.1 Region palette — complementary neon</h3>
+<p>Each region owns one neon hue, used everywhere that region appears (hero neurons, gauge accents, flow nodes, edge color). Spread around the wheel so five clusters stay separable on near-black, harmonious together. <b>The glow value of a firing neuron is its region hue at full brightness</b> — there is no separate "spike color."</p>
+
+<table class="spec">
+<thead><tr><th style="width:28%">Region</th><th style="width:18%">Role</th><th style="width:22%">Hero hue (on dark)</th><th>Ink hue (on white)</th></tr></thead>
+<tbody>
+<tr><td><span class="sw" style="background:#3fd2ff"></span><b>Sensory Cortex</b></td><td>input</td><td><code>#3fd2ff</code> cyan</td><td><code>#1fa8d8</code></td></tr>
+<tr><td><span class="sw" style="background:#ad8bff"></span><b>Hippocampus</b></td><td>memory</td><td><code>#ad8bff</code> violet</td><td><code>#8a5cf6</code></td></tr>
+<tr><td><span class="sw" style="background:#ffd24a"></span><b>Prefrontal</b></td><td>planning</td><td><code>#ffd24a</code> amber</td><td><code>#c99700</code></td></tr>
+<tr><td><span class="sw" style="background:#ff5a8a"></span><b>Thalamic Router</b></td><td>control</td><td><code>#ff5a8a</code> magenta</td><td><code>#e23e72</code></td></tr>
+<tr><td><span class="sw" style="background:#46f0a0"></span><b>Motor Cortex</b></td><td>output</td><td><code>#46f0a0</code> mint</td><td><code>#15a06a</code></td></tr>
+</tbody>
+</table>
+<p class="cap">When the header declares more regions than five, extend by stepping hue ~50–70° around the wheel at the same saturation/lightness; never reuse a hue within one brain.</p>
+
+<h3>2.2 Theme tokens</h3>
+<p>Themes are a single set of CSS custom properties on the root; every surface reads <code>var(--token)</code> so a theme swap is one property write and the region palette is theme-independent. Apply on the root element only — children use literal <code>var()</code> references.</p>
+
+<table class="spec">
+<thead><tr><th style="width:20%">Token</th><th style="width:40%">Observatory</th><th>Clinical</th></tr></thead>
+<tbody>
+<tr><td class="mono">--bg</td><td class="mono">#05060a</td><td class="mono">#0c0f16</td></tr>
+<tr><td class="mono">--bg2 (rail)</td><td class="mono">#080a12</td><td class="mono">#10141d</td></tr>
+<tr><td class="mono">--bar</td><td class="mono">rgba(8,10,16,.86)</td><td class="mono">#111620</td></tr>
+<tr><td class="mono">--panel</td><td class="mono">rgba(13,16,24,.66)</td><td class="mono">#141a25</td></tr>
+<tr><td class="mono">--panel2</td><td class="mono">rgba(22,26,37,.55)</td><td class="mono">#11161f</td></tr>
+<tr><td class="mono">--edge</td><td class="mono">rgba(255,255,255,.075)</td><td class="mono">rgba(255,255,255,.11)</td></tr>
+<tr><td class="mono">--edge2</td><td class="mono">rgba(255,255,255,.045)</td><td class="mono">rgba(255,255,255,.06)</td></tr>
+<tr><td class="mono">--text</td><td class="mono">#e9edf6</td><td class="mono">#e3e8f1</td></tr>
+<tr><td class="mono">--text-dim</td><td class="mono">#9aa3b6</td><td class="mono">#8b94a6</td></tr>
+<tr><td class="mono">--text-faint</td><td class="mono">#5b6378</td><td class="mono">#646d80</td></tr>
+<tr><td class="mono">--blur (panel)</td><td class="mono">blur(9px)</td><td class="mono">none</td></tr>
+</tbody>
+</table>
+<p><b>Observatory</b> leans on additive bloom and a low-alpha motion-blur trail on the hero canvas; <b>Clinical</b> drops glass blur, raises gridline/edge contrast, and uses a heavier trail (flatter, more readable). Same layout, same data — different physics.</p>
+
+<h3>2.3 Type & spacing</h3>
+<table class="spec">
+<thead><tr><th style="width:26%">Role</th><th style="width:30%">Family</th><th>Treatment</th></tr></thead>
+<tbody>
+<tr><td>Wordmark / panel titles / region labels</td><td><b>Space Grotesk</b> 600–700</td><td>Titles 12px; wordmark 14px. Region labels uppercase.</td></tr>
+<tr><td>All numerics, units, codes, tick labels</td><td><b>IBM Plex Mono</b> 500</td><td>Panel sub-labels 8.5px uppercase, tracking .12em. Readouts 9–11px.</td></tr>
+<tr><td>(This document's body)</td><td>IBM Plex Sans</td><td>Product UI itself carries no long-form body text.</td></tr>
+</tbody>
+</table>
+<p><b>Panel anatomy:</b> radius <code>11px</code>, <code>1px solid var(--edge)</code>, background <code>var(--panel)</code> + <code>backdrop-filter: var(--blur)</code>, header padding ~12–13px with a <code>1px var(--edge2)</code> divider, a Space-Grotesk title over a mono <code>PANEL 0N · SUBTITLE</code> kicker. Scale floors: hero neuron labels ≥ 8.5px; never smaller.</p>
+
+<h2>3 · Layout geometry</h2>
+
+<h3>3.1 Shell</h3>
+<p>Vertical stack: <b>top bar (56px, fixed)</b> → <b>main region (flex 1)</b> → the scrubber lives inside the center column. The main region is a CSS grid in Dashboard, a single flex stage in Focus.</p>
+<pre><span class="c">/* Dashboard */</span>
+grid-template-columns: 316px  minmax(0,1fr)  336px;   <span class="c">/* L rail · stage · R rail */</span>
+<span class="c">/* Focus */</span>
+display:flex;  stage flex:1;  rails → position:absolute overlays</pre>
+
+<table class="spec">
+<thead><tr><th style="width:24%">Element</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><b>Top bar</b> · 56px</td><td>Wordmark + status dot · vertical rule · run topology readout (<span class="kv">BRAIN · CONFIG · SEED · WINDOW T</span>) · flex spacer · live run readout (<span class="kv">EPISODE · STEP · t</span>) · segmented toggles: Observatory/Clinical, Dashboard/Focus, 3D&nbsp;Cloud/Flow&nbsp;Map.</td></tr>
+<tr><td><b>Left rail</b> · 316px</td><td>Panel 01 Region Activity, Panel 04 Thalamic Router.</td></tr>
+<tr><td><b>Center stage</b></td><td>Full-bleed hero canvas; floating overlays (flow caption top-left, encoding key bottom-left); the scrubber pinned below.</td></tr>
+<tr><td><b>Right rail</b> · 336px</td><td>Panel 02 Communication Flow, Panel 03 Task State, Panel 05 Membrane Traces.</td></tr>
+<tr><td><b>Scrubber</b> · 62px</td><td>Play/pause · <span class="kv">t/32</span> window counter · range slider (0–31) with ticks + magenta thumb · raster/spike readout · speed.</td></tr>
+</tbody>
+</table>
+
+<h3>3.2 Focus mode</h3>
+<p>The hero expands to the full stage; both rails become <code>position:absolute</code> overlays translated off-screen (<code>translateX(±101%)</code>, transition <code>.34s cubic-bezier(.4,0,.2,1)</code>) and a 24×64px <b>pull-tab</b> appears at each edge to slide a rail back as a floating overlay. The canvas backing store must re-fit to the new stage size on every mode change.</p>
+<div class="callout"><b>Build note — canvas sizing.</b> Drive the backing store from the canvas's own displayed size (<code>getBoundingClientRect</code>) × devicePixelRatio, and re-fit on mode change via a short timed callback after the layout settles (the rail transition is 340ms) — not only a ResizeObserver. In the prototype runtime, rect reads inside the rAF loop were stale across the grid→flex restructure; a timer-driven re-fit after the toggle is the reliable path. Always keep backing ≥ displayed size so the field is never upscaled/blurred.</p></div>
+
+<h2>4 · Encoding conventions</h2>
+<p>The semantic map — every visual channel and what it means. Hold these constant across hero and panels so the eye learns one language.</p>
+<table class="spec">
+<thead><tr><th style="width:24%">Datum (from frame)</th><th style="width:30%">Channel</th><th>Encoding</th></tr></thead>
+<tbody>
+<tr><td>Region identity</td><td>Hue</td><td>The region's neon (§2.1), everywhere.</td></tr>
+<tr><td>Spike event · <code>field[r].spikes[t,i]</code></td><td>Flash</td><td>Brief brightness spike + radius bump + white core, decaying within the timestep.</td></tr>
+<tr><td>Membrane V · <code>detail[r].membrane</code></td><td>Halo / steady glow</td><td>Sub-threshold glow scales with V; in the panel, plotted as a trace (§6.5).</td></tr>
+<tr><td>Spike rate · <code>regions[r].rate</code></td><td>Bar length + sparkline</td><td>Gauge fill, normalized to the region's own window max.</td></tr>
+<tr><td>Pathway intensity · <code>pathways[p].intensity</code></td><td>Edge opacity/width + travelling pulses</td><td>Dots travel src→dst along the edge; brightness ∝ intensity.</td></tr>
+<tr><td>Gate open · <code>router.gate_open</code></td><td>Color + state pill</td><td><span class="sw" style="background:#46f0a0"></span><b>OPEN</b> mint · <span class="sw" style="background:#ff5a8a"></span><b>CLOSED</b> magenta. Closed pathways render as a faint dashed line in the hero.</td></tr>
+<tr><td>Reward sign · <code>task.reward / return</code></td><td>Color</td><td>≥0 → mint <code>#46f0a0</code>; &lt;0 → warm <code>#ffb37a</code> (reward) / <code>#ff8aa6</code> (return).</td></tr>
+<tr><td>Region health (derived)</td><td>Status dot</td><td>window max rate &lt;0.03 → <b>dead</b> (magenta) · &gt;0.92 → <b>runaway</b> (amber) · else <b>nominal</b> (mint).</td></tr>
+</tbody>
+</table>
+
+<h2>5 · The hero — Neuron Field</h2>
+<p>The centerpiece. The whole brain is small enough (226 neurons in the reference brain) to render <b>every neuron with its real spikes</b>. The hero fuses Panel 1 (activity) and Panel 2 (flow): you watch a sensory pattern propagate → hippocampal recall → prefrontal planning → router gating → motor output, looping across the inference T-window.</p>
+
+<h3>5.1 Shared behavior (both treatments)</h3>
+<ul>
+<li><b>T-window loop.</b> Animate a playhead across the inference window (reference <code>T = 32</code>), looping. Playback ≈ 7 steps/s × <code>propagationSpeed</code>; the scrubber scrubs the window and pauses on drag.</li>
+<li><b>Additive bloom.</b> Draw neurons and edges with <code>globalCompositeOperation:'lighter'</code> over a translucent background fill that leaves a motion-blur trail (Observatory ~0.26 alpha, Clinical ~0.42). A faint instrument grid sits under everything.</li>
+<li><b>Per-neuron render.</b> brightness = base + glow(membrane V) + flash(spike); radius bumps and a white core appear on spike; <code>shadowBlur</code> scales the bloom (× <code>glowStrength</code>).</li>
+<li><b>Edges.</b> One per declared pathway, colored by source region, carrying 2–3 travelling pulse dots whose brightness tracks live intensity. Router-gated-closed pathways stay dark/dashed.</li>
+<li><b>Labels.</b> Region name (uppercase) + <span class="kv">N · rate</span> under each cluster; motor neurons labelled with their action (<span class="kv">up / down / left / right</span>), the gated-closed one marked <code>✕</code>, the selected action marked <code>◂</code>.</li>
+</ul>
+
+<h3>5.2 Flow Map treatment</h3>
+<p>Flat, schematic, maximally legible — clusters laid left→right in signal-flow order across the stage width.</p>
+<table class="spec">
+<thead><tr><th style="width:30%">Cluster</th><th>Arrangement</th></tr></thead>
+<tbody>
+<tr><td><b>Sensory</b> (64)</td><td>An <b>8×8 grid</b> — the gridworld plane itself (see §10.4). The agent's receptive-field cells are boxed and brightened, tying the hero to Panel 3.</td></tr>
+<tr><td><b>Hippocampus</b> (150)</td><td>Phyllotaxis disc (golden-angle 2.39996 rad), radius ≈ <code>0.165·min(W,H)</code> — a dense dot field.</td></tr>
+<tr><td><b>Prefrontal / Router / Motor</b> (4 each)</td><td>Vertical columns of 4 larger dots; spaced ≈ <code>0.085·min(W,H)</code>.</td></tr>
+</tbody>
+</table>
+<p class="cap">Cluster x-centers (fraction of width): sensory .115 · hippocampus .33 · prefrontal .57 · router .715 · motor .85. Edges are cubic-bézier arcs between cluster centroids.</p>
+
+<h3>5.3 3D Cloud treatment</h3>
+<p>A volumetric, slowly auto-orbiting neuron cloud that reads as a brain while preserving flow order along one axis. Region centers are spread through 3D space (depth-sorted, depth-fogged), so rotation reveals structure.</p>
+<pre><span class="c">// model space, flow axis = X; region centers (x,y,z)</span>
+sensory     (-0.82, -0.12, -0.34)   <span class="c">8×8 grid card, faces along X</span>
+hippocampus (-0.08,  0.05,  0.10)   <span class="c">ellipsoidal cloud (Fibonacci sphere + jitter)</span>
+prefrontal  ( 0.52,  0.30, -0.12)   <span class="c">small tetrahedron</span>
+router      ( 0.70, -0.04,  0.30)   <span class="c">diamond</span>
+motor       ( 0.96, -0.26, -0.18)   <span class="c">cross: up/down/left/right</span>
+
+orbit: rotateY at ~0.22 rad/s · fixed tilt rotateX -0.20 · perspective camZ 4.2
+depth sort far→near · fog alpha 0.38→1.0 by depth
+auto-fit scale to stage, centered on the cloud's centroid (orbits in place)</pre>
+<p>The sensory grid card carries the same agent receptive-field highlight (here a pulsing ring) to keep the Panel-3 tie. Auto-fit means the cloud is compact in the narrow Dashboard column and immersive in Focus.</p>
+
+<h3>5.4 Engine guidance (production)</h3>
+<p>The prototype renders on <b>Canvas 2D</b> — correct and performant at the ~226-neuron "dots" tier. Honor the architecture spec's representation ladder so future, larger brains don't force a rewrite:</p>
+<table class="spec">
+<thead><tr><th style="width:22%">N (per header)</th><th style="width:20%"><code>render</code></th><th>Engine</th></tr></thead>
+<tbody>
+<tr><td>≤ ~2K</td><td>dots</td><td>Per-neuron, glow+flash. Canvas 2D is fine; <b>WebGL point sprites</b> (pixi/regl/three) recommended day-one to avoid the scaling wall and to make the 3D cloud trivially GPU-rotatable.</td></tr>
+<tr><td>~2K–100K</td><td>cloud</td><td>WebGL point cloud; pan/zoom to inspect.</td></tr>
+<tr><td>&gt; ~100K</td><td>density</td><td>Sink emits an aggregated population field; drill-down to a sampled subset.</td></tr>
+</tbody>
+</table>
+<p>Panels use D3 for bespoke visuals (flow network, gridworld, router gates) and Recharts for standard time-series (membrane, rate curves), per the architecture spec.</p>
+
+<h2>6 · Panels</h2>
+<p>All panels read the header for structure and frames for state; none hardcode region names. Each is a <code>var(--panel)</code> card with the standard header.</p>
+
+<h3>6.1 Panel 01 — Region Activity</h3>
+<p>Reads <code>regions[r].rate / active_frac / rate_t</code>. One row per region: accent dot, label, live rate, a normalized bar, a <code>rate_t</code> sparkline with a moving playhead, and a meta line (role · active frac · total spikes · <b>status dot</b>). Purpose: spot dead/runaway regions at a glance.</p>
+
+<h3>6.2 Panel 02 — Communication Flow</h3>
+<p>Reads <code>pathways[p].intensity / gate_open</code> + header <code>pathways</code>. A compact 5-node schematic (echoing the hero topology) whose edge stroke width/opacity pulse with live intensity, plus a list of pathways with a GATED tag and live value. The schematic, not the hero, is where edge identity is read precisely.</p>
+
+<h3>6.3 Panel 03 — Task State</h3>
+<p>Reads <code>task</code> + header <code>task</code>. The <code>grid_n × grid_n</code> gridworld (reference 5×5): agent (filled, sensory hue), goal (ring, motor hue), last action (arrow), and a readout of agent/goal coords, action, reward, return (sign-colored). Header note <span class="kv">→ sensory</span> reinforces the receptive-field link to the hero.</p>
+
+<h3>6.4 Panel 04 — Thalamic Router</h3>
+<p>Reads <code>router.gate_open(_t)</code> + <code>router.utilities</code>. One row per action: utility bar (pre-gate) beside an OPEN/CLOSED gate pill — the core insight is <b>utility vs. what actually passes</b>. The selected action is highlighted. In the reference frame, <code>down</code> has high-ish utility but is gated CLOSED while <code>left</code> passes and is taken.</p>
+
+<h3>6.5 Panel 05 — Membrane Traces</h3>
+<p>Reads <code>detail[r].membrane / spikes / neuron_ids</code> (opt-in tier). Stacked V(t) line charts for the selected region's neurons (reference: prefrontal n0–3) over the T-window, with spike ticks and a moving playhead synced to the scrubber. Header marks it <span class="kv">detail · opt-in</span>.</p>
+
+<h2>7 · Interactions</h2>
+<table class="spec">
+<thead><tr><th style="width:26%">Control</th><th>Behavior</th></tr></thead>
+<tbody>
+<tr><td>Scrubber</td><td>Range over the T-window; drag scrubs and pauses; playhead also drives panel playheads (gauges, membrane).</td></tr>
+<tr><td>Play / pause</td><td>Toggles the window loop. Speed shown; governed by <code>propagationSpeed</code>.</td></tr>
+<tr><td>Observatory / Clinical</td><td>Swaps theme tokens on the root; hero bloom/trail physics adjust.</td></tr>
+<tr><td>Dashboard / Focus</td><td>Docks panels vs. full-bleed hero with collapsible rails + pull-tabs.</td></tr>
+<tr><td>3D Cloud / Flow Map</td><td>Swaps hero treatment; same data, same scrubber.</td></tr>
+<tr><td>Auto-orbit (Cloud)</td><td>Ambient slow rotation; independent of playback.</td></tr>
+</tbody>
+</table>
+
+<h2>8 · Data-driven architecture</h2>
+<p>The dashboard renders whatever a trace <b>declares</b>. The header's <code>regions[]</code> (id, label, n_neurons, role, render) and <code>pathways[]</code> generate clusters, gauges, flow nodes, edges, and labels; frames supply state. Adding regions or growing neuron counts requires no UI change — only a header that declares them and the §5.4 ladder picking the representation.</p>
+<div class="note"><b>Mock → real swap.</b> The prototype synthesizes frames (per-region Gaussian activation envelopes peaking in flow order — sensory t≈5, hippocampus 11, prefrontal 17, router 20, motor 24 — to produce a visible healthy-step cascade). Production replaces the generator with a JSONL frame loader (file replay first, WebSocket later); the render path is unchanged because both feed the identical frame object.</p></div>
+
+<h2>9 · Tweakable parameters</h2>
+<table class="spec">
+<thead><tr><th style="width:26%">Prop</th><th style="width:20%">Type · default</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td class="mono">theme</td><td>enum · observatory</td><td>observatory / clinical token set.</td></tr>
+<tr><td class="mono">layout</td><td>enum · cloud</td><td>cloud / flow hero treatment.</td></tr>
+<tr><td class="mono">glowStrength</td><td>float · 1.0 (0.3–2)</td><td>Bloom multiplier on neurons & pulses.</td></tr>
+<tr><td class="mono">showTrails</td><td>bool · true</td><td>Motion-blur persistence on the hero.</td></tr>
+<tr><td class="mono">propagationSpeed</td><td>float · 1.0 (0.25–2.5)</td><td>Window playback rate.</td></tr>
+<tr><td class="mono">showEncodingKey</td><td>bool · true</td><td>Hero encoding legend overlay.</td></tr>
+</tbody>
+</table>
+
+<h2>10 · Open decisions & recommendations</h2>
+<h3>10.1 Primary hero</h3>
+<p><b>Recommendation:</b> ship both. Default the <b>Flow Map</b> in Dashboard mode (propagation legibility for debugging) and the <b>3D Cloud</b> in Focus mode and for the capstone video (the "honest view and cool view are the same view" payoff). The toggle stays available in both. <i>Confirm before build.</i></p>
+<h3>10.2 Interaction depth on the cloud</h3>
+<p>Next-step candidates, not yet built: <b>drag-to-rotate</b> (pause auto-orbit on grab) and <b>click-a-neuron-to-inspect</b> (pin it into Panel 05). Recommended for the WebGL build where picking is cheap.</p>
+<h3>10.3 Engine</h3>
+<p>Build the hero on WebGL from day one (§5.4) even at 226 neurons — it removes the scaling wall and makes the 3D cloud's rotation/picking native.</p>
+<h3>10.4 Sensory-as-grid mapping</h3>
+<p>64 sensory neurons ≠ 25 gridworld cells. The prototype lays sensory as an 8×8 plane and maps the agent cell to a 2×2 receptive patch (highlighted, tied to Panel 3). Confirm the real sensory→grid encoding so the highlight reflects the true receptive field rather than a visual approximation.</p>
+
+<h2>11 · Build-order alignment</h2>
+<p>This spec slots into the architecture spec's build order: the shell, panels, and both hero treatments are specified here for steps 2–4 (dashboard shell → boring panels → hero). Recommended sequence: shell + tokens → panels 01/03/04 → panel 02/05 → Flow-Map hero → 3D-Cloud hero → wire WebSocket frames. De-risk the data wiring on the panels before the hero, exactly as the architecture spec advises.</p>
+
+<hr>
+<p class="cap">NEURO·SCOPE Stage-2 design specification · companion to the L17 architecture spec · prototypes: <code>Stage-2 Brain Dashboard.dc.html</code>, <code>Stage-2 Brain Dashboard v1 (flow map).dc.html</code>.</p>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</x-dc>
+</body>
+</html>
