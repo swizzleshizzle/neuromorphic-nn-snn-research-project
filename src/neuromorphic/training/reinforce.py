@@ -8,8 +8,25 @@ The memory path is bypassed (``recall=False``) — credit flows sensory → PFC 
 
 from __future__ import annotations
 
+import itertools
+
 import torch
 from torch.distributions import Categorical
+
+
+def policy_parameters(brain):
+    """Learnable params on the differentiable policy path: sensory → PFC → motor.
+
+    ``Brain`` is a plain orchestrator (not an ``nn.Module``), so gather the trainable
+    parameters of the regions credit actually flows through. The hippocampus (memory,
+    bypassed via ``recall=False``) and the structural lateral-inhibition buffers are
+    deliberately excluded — see ADR-0001.
+    """
+    return itertools.chain(
+        brain.sensory.parameters(),
+        brain.pfc.parameters(),
+        brain.motor.parameters(),
+    )
 
 
 def discounted_returns(rewards: list[float], gamma: float) -> list[float]:
@@ -40,3 +57,55 @@ def action_distribution(
     out = brain.step(obs, store=False, recall=False, record=False, generator=generator)
     logits = policy_logits(out)
     return Categorical(logits=logits), logits
+
+
+def train_episode(
+    brain,
+    env,
+    optimizer,
+    *,
+    gamma: float = 0.99,
+    baseline: float = 0.0,
+    generator: torch.Generator | None = None,
+    max_steps: int | None = None,
+) -> dict:
+    """Run one episode, then apply one REINFORCE update. Memory bypassed (recall=False).
+
+    Returns stats: ``steps``, ``total_reward`` (undiscounted), ``mean_return``
+    (mean discounted return-to-go, for baseline tracking), ``loss``, ``reached_goal``.
+    """
+    obs, _ = env.reset()
+    log_probs: list[torch.Tensor] = []
+    rewards: list[float] = []
+    reached_goal = False
+    limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
+
+    steps = 0
+    while steps < limit:
+        dist, _ = action_distribution(brain, obs, generator=generator)
+        action = dist.sample()
+        log_probs.append(dist.log_prob(action))
+        obs, reward, terminated, truncated, _ = env.step(int(action))
+        rewards.append(float(reward))
+        steps += 1
+        if terminated:
+            reached_goal = True
+            break
+        if truncated:
+            break
+
+    returns = torch.tensor(discounted_returns(rewards, gamma), dtype=torch.float32)
+    advantages = returns - baseline
+    loss = -(torch.stack(log_probs) * advantages).sum()
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    return {
+        "steps": steps,
+        "total_reward": float(sum(rewards)),
+        "mean_return": float(returns.mean()),
+        "loss": float(loss.detach()),
+        "reached_goal": reached_goal,
+    }
