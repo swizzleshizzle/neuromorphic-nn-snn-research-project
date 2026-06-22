@@ -26,3 +26,17 @@ def discounted_returns(rewards: list[float], gamma: float) -> list[float]:
 def ema(old: float, new: float, beta: float) -> float:
     """Exponential moving average: ``(1 - beta) * old + beta * new``."""
     return (1.0 - beta) * old + beta * new
+
+
+def policy_logits(out: dict) -> torch.Tensor:
+    """Differentiable action logits = motor spike-counts over the window (single agent)."""
+    return out["action_spikes"].sum(dim=0)[0]  # [T,B,A] -> [A]
+
+
+def action_distribution(
+    brain, obs, *, generator: torch.Generator | None = None
+) -> tuple[Categorical, torch.Tensor]:
+    """One forward pass → a categorical policy over actions (memory bypassed)."""
+    out = brain.step(obs, store=False, recall=False, record=False, generator=generator)
+    logits = policy_logits(out)
+    return Categorical(logits=logits), logits
