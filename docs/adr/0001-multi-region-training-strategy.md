@@ -1,10 +1,47 @@
 # ADR-0001 — Multi-Region Training Strategy
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-06-22, see Amendment 1)
 - **Date:** 2026-06-18
 - **Phase:** 2 (multi-region brain), Step 2.3 — "how does the whole brain learn?"
 - **Deciders:** project author
 - **Supersedes / superseded by:** none
+
+---
+
+## Amendment 1 (2026-06-22, Week-12 debug) — the policy is a learnable head, not the raw motor output
+
+The first training run (EXP-023) learned then collapsed. Systematic debugging found the
+original premise — *"motor spike-counts ARE the action logits, read via `motor.winner`
+argmax"* — is broken two ways (evidence in `experiments/023_week11_brain_training/debug_collapse.py`):
+
+1. **Saturation freeze.** Summed motor spike-counts over the window reach ~28, so
+   `softmax` saturates to an *exact* one-hot → `log π(a) = 0` → a **zero-gradient
+   absorbing state**. The policy freezes permanently in one update (gnorm 35M → 0.00,
+   entropy → 0) on the structural-favourite action, which bangs a wall for −60.
+2. **Degenerate readout.** The untrained motor/PFC output is a fixed "structural
+   favourite" — only **one** action neuron fires, barely state-dependent (PFC utility
+   pairwise distances 0.08–0.56 across very different observations, vs the sensory
+   concept's 3.4–4.3). It cannot express a real four-action, state-conditioned policy.
+
+The regions themselves are healthy (rates stable, all five fire) — the failure is purely
+in *how action selection reads the brain*.
+
+**Amended decision:** the policy is a small **trainable `nn.Linear` head reading the
+sensory concept** (a rich, state-dependent code) → action logits. The brain is a **frozen
+feature extractor** in v1 (runs under `no_grad`); only the head trains. This gives every
+action a gradient handle and a learnable scale (no spike-count saturation). Memory stays
+bypassed (`recall=False`). Result: untrained −60 / 0% goal → **trained +3 / 100% goal,
+8-step optimal paths**.
+
+**Consequences vs. the original decision:**
+- The policy gradient path is now **sensory → head**; PFC, router, and motor leave the
+  *policy* path for v1 (they still run and are still visualized — they are just not where
+  the learnable decision lives, because their readout is degenerate at init).
+- "Train the whole differentiable path (sensory→PFC→motor)" is **superseded** for v1 by
+  "train a head on the frozen sensory features." Unfreezing the encoder, and giving
+  PFC/motor a non-degenerate readout so they can re-enter the policy path, are follow-ups
+  (candidates: motor re-init to break the structural favourite, region pre-training, an
+  entropy bonus). The R-STDP hybrid path (below) is unchanged.
 
 ---
 
