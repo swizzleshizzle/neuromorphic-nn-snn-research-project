@@ -2,7 +2,17 @@ import math
 
 import torch
 
-from neuromorphic.training.reinforce import discounted_returns, ema
+from neuromorphic.brain import Brain
+from neuromorphic.envs import GridWorldEnv
+from neuromorphic.training.reinforce import (
+    action_distribution,
+    discounted_returns,
+    ema,
+    greedy_action,
+    make_policy_head,
+    policy_parameters,
+    train_episode,
+)
 
 
 def test_discounted_returns_to_go():
@@ -27,78 +37,63 @@ def test_ema_blends():
     assert math.isclose(ema(10.0, 10.0, 0.5), 10.0, rel_tol=1e-6)
 
 
-from neuromorphic.brain import Brain
-from neuromorphic.training.reinforce import action_distribution, policy_logits
-
-
-def test_policy_logits_shape_and_grad():
+def test_policy_head_shapes():
     brain = Brain(grid_n=5, seed=0)
-    out = brain.step([0, 0, 4, 4], recall=False, generator=torch.Generator().manual_seed(0))
-    logits = policy_logits(out)
-    assert logits.shape == (4,)
-    assert logits.requires_grad
+    head = make_policy_head(brain)
+    assert head.in_features == brain.content
+    assert head.out_features == brain.n_actions
 
 
 def test_action_distribution_is_a_valid_policy():
     brain = Brain(grid_n=5, seed=0)
-    dist, logits = action_distribution(brain, [0, 0, 4, 4], generator=torch.Generator().manual_seed(0))
+    head = make_policy_head(brain)
+    dist, logits = action_distribution(
+        brain, head, [0, 0, 4, 4], generator=torch.Generator().manual_seed(0)
+    )
     assert logits.shape == (4,)
-    probs = dist.probs
-    assert torch.allclose(probs.sum(), torch.tensor(1.0), atol=1e-5)
-    assert (probs >= 0).all()
+    assert logits.requires_grad
+    assert torch.allclose(dist.probs.sum(), torch.tensor(1.0), atol=1e-5)
+    assert (dist.probs >= 0).all()
 
 
-def test_log_prob_gradient_reaches_policy_but_not_memory():
+def test_policy_logits_are_state_dependent():
+    """Root-cause #2 fix: different observations must produce different logits.
+
+    The old motor/PFC readout was a degenerate structural favourite — near-identical
+    across states. The head on the rich sensory concept must distinguish states.
+    """
     brain = Brain(grid_n=5, seed=0)
-    dist, _ = action_distribution(brain, [0, 0, 4, 4], generator=torch.Generator().manual_seed(0))
-    action = dist.sample()
-    dist.log_prob(action).backward()
-    # policy path received gradient
-    assert brain.sensory.fc1.weight.grad is not None
-    assert brain.motor.fc_in.weight.grad is not None
-    # memory path bypassed (recall=False) → no gradient
-    assert brain.hippo.fc_in.weight.grad is None
-    assert brain.hippo.fc_out.weight.grad is None
+    head = make_policy_head(brain)
+    g = torch.Generator().manual_seed(0)
+    _, la = action_distribution(brain, head, [0, 0, 4, 4], generator=g)
+    _, lb = action_distribution(brain, head, [4, 4, 0, 0], generator=g)
+    assert not torch.allclose(la, lb, atol=1e-3)
 
 
-from neuromorphic.envs import GridWorldEnv
-from neuromorphic.training.reinforce import policy_parameters, train_episode
-
-
-def test_policy_parameters_exclude_memory():
+def test_greedy_action_is_valid():
     brain = Brain(grid_n=5, seed=0)
-    ids = {id(p) for p in policy_parameters(brain)}
-    assert id(brain.sensory.fc1.weight) in ids
-    assert id(brain.motor.fc_in.weight) in ids
-    assert id(brain.hippo.fc_in.weight) not in ids
+    head = make_policy_head(brain)
+    a = greedy_action(brain, head, [0, 0, 4, 4], generator=torch.Generator().manual_seed(0))
+    assert isinstance(a, int)
+    assert 0 <= a < 4
 
 
-def test_train_episode_returns_stats_and_updates_policy():
+def test_train_episode_updates_head_but_not_the_frozen_brain():
     brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
     env = GridWorldEnv()
-    opt = torch.optim.Adam(policy_parameters(brain), lr=1e-2)
-    before = brain.sensory.fc1.weight.detach().clone()
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    head_before = head.weight.detach().clone()
+    sensory_before = brain.sensory.fc1.weight.detach().clone()
 
     stats = train_episode(
-        brain, env, opt, gamma=0.99, baseline=0.0,
+        brain, head, env, opt, gamma=0.99, baseline=0.0,
         generator=torch.Generator().manual_seed(0), max_steps=10,
     )
 
     assert set(stats) == {"steps", "total_reward", "mean_return", "loss", "reached_goal"}
     assert stats["steps"] >= 1
     assert isinstance(stats["reached_goal"], bool)
-    # an optimizer step actually moved the policy weights
-    after = brain.sensory.fc1.weight.detach()
-    assert not torch.equal(before, after)
-
-
-def test_train_episode_leaves_memory_weights_untouched():
-    brain = Brain(grid_n=5, seed=0)
-    env = GridWorldEnv()
-    opt = torch.optim.Adam(policy_parameters(brain), lr=1e-2)
-    hippo_before = brain.hippo.fc_in.weight.detach().clone()
-
-    train_episode(brain, env, opt, generator=torch.Generator().manual_seed(0), max_steps=10)
-
-    # recall=False → no grad → Adam never updates the memory afferent
-    assert torch.equal(hippo_before, brain.hippo.fc_in.weight.detach())
+    # the head learned; the brain stayed frozen (v1)
+    assert not torch.equal(head_before, head.weight.detach())
+    assert torch.equal(sensory_before, brain.sensory.fc1.weight.detach())

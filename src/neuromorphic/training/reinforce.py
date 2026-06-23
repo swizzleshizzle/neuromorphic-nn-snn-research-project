@@ -1,32 +1,20 @@
-"""Surrogate-gradient REINFORCE training for the five-region Brain (ADR-0001).
+"""Surrogate-gradient REINFORCE training for the five-region Brain (ADR-0001, amended).
 
-Motor spike-counts over the inference window are surrogate-differentiable, so they
-form a categorical policy: sample an action, weight its log-probability by the
-(baseline-subtracted) discounted return, and backprop through the spiking layers.
-The memory path is bypassed (``recall=False``) — credit flows sensory → PFC → motor.
+The action policy is a small **learnable linear head** reading the **sensory concept**
+(a rich, state-dependent code) → action logits. Week-12 debugging showed the original
+"motor spike-counts ARE the logits" readout fails two ways: (1) summed spike-counts
+saturate the softmax to an exact one-hot → a zero-gradient absorbing state that freezes
+learning, and (2) the motor/PFC output is a degenerate "structural favourite" (one live
+neuron, barely state-dependent), so it can't express a real four-action policy. A Linear
+head on the concept gives every action a gradient handle and a learnable scale. The brain
+is a fixed feature extractor in v1; memory stays bypassed (``recall=False``). See ADR-0001.
 """
 
 from __future__ import annotations
 
-import itertools
-
 import torch
+import torch.nn as nn
 from torch.distributions import Categorical
-
-
-def policy_parameters(brain):
-    """Learnable params on the differentiable policy path: sensory → PFC → motor.
-
-    ``Brain`` is a plain orchestrator (not an ``nn.Module``), so gather the trainable
-    parameters of the regions credit actually flows through. The hippocampus (memory,
-    bypassed via ``recall=False``) and the structural lateral-inhibition buffers are
-    deliberately excluded — see ADR-0001.
-    """
-    return itertools.chain(
-        brain.sensory.parameters(),
-        brain.pfc.parameters(),
-        brain.motor.parameters(),
-    )
 
 
 def discounted_returns(rewards: list[float], gamma: float) -> list[float]:
@@ -45,22 +33,46 @@ def ema(old: float, new: float, beta: float) -> float:
     return (1.0 - beta) * old + beta * new
 
 
-def policy_logits(out: dict) -> torch.Tensor:
-    """Differentiable action logits = motor spike-counts over the window (single agent)."""
-    return out["action_spikes"].sum(dim=0)[0]  # [T,B,A] -> [A]
+def make_policy_head(brain) -> nn.Linear:
+    """A trainable actor head: sensory concept (``brain.content`` dims) → action logits."""
+    return nn.Linear(brain.content, brain.n_actions)
+
+
+def _concept_rate(out: dict) -> torch.Tensor:
+    """Mean firing rate of the sensory concept over the window, single agent. → [concept]."""
+    return out["concept"].mean(dim=0)[0]
 
 
 def action_distribution(
-    brain, obs, *, generator: torch.Generator | None = None
+    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
 ) -> tuple[Categorical, torch.Tensor]:
-    """One forward pass → a categorical policy over actions (memory bypassed)."""
-    out = brain.step(obs, store=False, recall=False, record=False, generator=generator)
-    logits = policy_logits(out)
+    """One forward pass → a categorical policy from the head on the sensory concept.
+
+    The brain runs under ``no_grad`` — it is a frozen feature extractor in v1, so only
+    the head carries gradient (also avoids backprop through the spiking unroll).
+    """
+    with torch.no_grad():
+        out = brain.step(obs, store=False, recall=False, record=False, generator=generator)
+    logits = head(_concept_rate(out))
     return Categorical(logits=logits), logits
+
+
+def greedy_action(
+    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
+) -> int:
+    """The argmax-logit action (deterministic eval policy)."""
+    _, logits = action_distribution(brain, head, obs, generator=generator)
+    return int(logits.argmax())
+
+
+def policy_parameters(head: nn.Linear):
+    """Trainable parameters of the policy. v1: the head only — the brain is frozen."""
+    return head.parameters()
 
 
 def train_episode(
     brain,
+    head: nn.Linear,
     env,
     optimizer,
     *,
@@ -69,7 +81,7 @@ def train_episode(
     generator: torch.Generator | None = None,
     max_steps: int | None = None,
 ) -> dict:
-    """Run one episode, then apply one REINFORCE update. Memory bypassed (recall=False).
+    """Run one episode, then apply one REINFORCE update to the head. Memory bypassed.
 
     Returns stats: ``steps``, ``total_reward`` (undiscounted), ``mean_return``
     (mean discounted return-to-go, for baseline tracking), ``loss``, ``reached_goal``.
@@ -82,7 +94,7 @@ def train_episode(
 
     steps = 0
     while steps < limit:
-        dist, _ = action_distribution(brain, obs, generator=generator)
+        dist, _ = action_distribution(brain, head, obs, generator=generator)
         action = dist.sample()
         log_probs.append(dist.log_prob(action))
         obs, reward, terminated, truncated, _ = env.step(int(action))

@@ -22,7 +22,13 @@ import torch  # noqa: E402
 from neuromorphic.brain import Brain  # noqa: E402
 from neuromorphic.envs import GridWorldEnv  # noqa: E402
 from neuromorphic.monitor import FileSink, record_episode  # noqa: E402
-from neuromorphic.training.reinforce import ema, policy_parameters, train_episode  # noqa: E402
+from neuromorphic.training.reinforce import (  # noqa: E402
+    ema,
+    greedy_action,
+    make_policy_head,
+    policy_parameters,
+    train_episode,
+)
 
 # Tiny tensors (4-neuron regions) — multi-threading is pure overhead here. One thread
 # is markedly faster than letting torch thrash every core.
@@ -35,17 +41,25 @@ CURVE = Path("outputs/week11_training_curve.png")
 TRACE = Path("outputs/week11_trained_trace.jsonl")
 
 
-def eval_avg_reward(
-    brain: Brain, env: GridWorldEnv, n: int, gen: torch.Generator, max_steps: int
-) -> tuple[float, float]:
-    """Average total reward and goal-reached fraction over n greedy episodes (no learning)."""
+def eval_avg_reward(brain, head, env, n, gen, max_steps) -> tuple[float, float]:
+    """Average reward and goal-reached fraction over n greedy episodes (head policy, no learning)."""
     total = 0.0
     goals = 0
     for _ in range(n):
-        with torch.no_grad():
-            summary = brain.run_episode(env, max_steps=max_steps, store_first=False, generator=gen)
-        total += summary["total_reward"]
-        goals += 1 if summary["reached_goal"] else 0
+        obs, _ = env.reset()
+        steps, reached = 0, False
+        while steps < max_steps:
+            with torch.no_grad():
+                a = greedy_action(brain, head, obs, generator=gen)
+            obs, r, term, trunc, _ = env.step(a)
+            total += r
+            steps += 1
+            if term:
+                reached = True
+                break
+            if trunc:
+                break
+        goals += 1 if reached else 0
     return total / n, goals / n
 
 
@@ -72,18 +86,19 @@ def main() -> None:
     torch.manual_seed(args.seed)
     env = GridWorldEnv()
     brain = Brain(grid_n=env.size, seed=args.seed)
+    head = make_policy_head(brain)
     gen = torch.Generator().manual_seed(args.seed)
 
     print(f"EXP-023 · {args.episodes} episodes · max_steps {args.max_steps} · lr {args.lr}", flush=True)
-    pre_reward, pre_goals = eval_avg_reward(brain, env, args.eval_episodes, gen, args.max_steps)
+    pre_reward, pre_goals = eval_avg_reward(brain, head, env, args.eval_episodes, gen, args.max_steps)
     print(f"untrained: avg reward {pre_reward:.1f} · reached goal {pre_goals:.0%}", flush=True)
 
-    opt = torch.optim.Adam(policy_parameters(brain), lr=args.lr)
+    opt = torch.optim.Adam(policy_parameters(head), lr=args.lr)
     baseline = 0.0
     rewards: list[float] = []
     for ep in range(args.episodes):
         stats = train_episode(
-            brain, env, opt, gamma=GAMMA, baseline=baseline,
+            brain, head, env, opt, gamma=GAMMA, baseline=baseline,
             generator=gen, max_steps=args.max_steps,
         )
         baseline = ema(baseline, stats["mean_return"], BASELINE_BETA)
@@ -93,7 +108,7 @@ def main() -> None:
         print(f"  ep {ep + 1:4d} · reward {stats['total_reward']:6.1f} · "
               f"avg20 {recent:6.1f} · steps {stats['steps']:3d} · {goal}", flush=True)
 
-    post_reward, post_goals = eval_avg_reward(brain, env, args.eval_episodes, gen, args.max_steps)
+    post_reward, post_goals = eval_avg_reward(brain, head, env, args.eval_episodes, gen, args.max_steps)
     print(f"trained:   avg reward {post_reward:.1f} · reached goal {post_goals:.0%}", flush=True)
     print(f"delta:     {post_reward - pre_reward:+.1f} reward", flush=True)
 
