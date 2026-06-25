@@ -1,9 +1,9 @@
 # Neuromorphic NN / SNN Research Project
 
-> A 12-month self-directed research project building a regionalized spiking neural network from first principles. **Learning in public** — every weekly note, design decision, and experimental result lives in this repo.
+> A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
 **Status:** Phase 2 (Multi-region brain) — Week 12
-**Capstone target:** *I Attempted to Build a Brain in 12 Months* (December 2026)
+**Capstone target:** *I Attempted to Build a Brain in 12 Months*
 
 ---
 
