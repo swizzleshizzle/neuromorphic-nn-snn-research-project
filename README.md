@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. **Learning in public** — every weekly note, design decision, and experimental result lives in this repo.
 
-**Status:** Phase 0 (Foundations) — Week 3
+**Status:** Phase 2 (Multi-region brain) — Week 12
 **Capstone target:** *I Attempted to Build a Brain in 12 Months* (December 2026)
 
 ---
@@ -26,12 +26,15 @@ This repo is also the working surface of a self-directed curriculum. The author 
 ## Project structure
 
 ```
-src/neuromorphic/        # Reusable Python package — models, training, tracking, utils
+src/neuromorphic/        # Reusable Python package — models, regions, training, monitor
+src/dashboard/           # Batch matplotlib dashboard (multi_region_viz.py)
+dashboard/               # NEURO·SCOPE live web app (Vite + React + TS + react-three-fiber)
 experiments/             # One numbered subfolder per experiment (config + entry point)
 notebooks/               # Exploratory Jupyter work
 scripts/                 # One-off utility scripts
 tests/                   # Pytest tests (added as code stabilizes)
-docs/                    # Project docs (capstone phase)
+docs/                    # Specs, plans, ADRs, and design handoffs
+outputs/                 # Experiment traces + generated figures — gitignored
 data/                    # Datasets — gitignored, downloaded on first run
 checkpoints/             # Model state_dicts — gitignored
 runs/                    # TensorBoard logs — gitignored
@@ -105,6 +108,38 @@ CLI overrides work for any field:
 ```powershell
 python experiments/001_smoke_test/run.py --config experiments/001_smoke_test/config.yaml --lr 0.001 --epochs 10
 ```
+
+---
+
+## Visualization — NEURO·SCOPE
+
+The brain is monitored through **NEURO·SCOPE**, a data-driven dashboard platform that renders whatever a saved trace *declares* (region topology, pathways, spikes) — never hardcoded to today's five regions. Traces are versioned JSONL written by the `neuromorphic.monitor` package; the platform architecture and phase roadmap live in `docs/superpowers/specs/2026-06-18-neuroscope-platform-design.md`.
+
+Two front-ends read the same trace contract:
+
+### Batch dashboard (matplotlib, static figure)
+
+One multi-panel PNG from a saved trace — 5 spike rasters, an inter-region communication heatmap, the grid-world state, and a reward curve. From the repo root with the venv active:
+
+```powershell
+python -m dashboard.multi_region_viz outputs/week11_dashboard_trace.jsonl
+# options: --step N (default last frame) · --out PATH · --show
+```
+
+(`dashboard` here resolves to `src/dashboard/`, importable via `pip install -e .`.)
+
+### Live web dashboard (NEURO·SCOPE — Vite + React + react-three-fiber)
+
+A real-time replay with a WebGL neuron-field hero and reactive panels, under `dashboard/` (a separate JS toolchain — Node ≥ 20). First run:
+
+```powershell
+cd dashboard
+npm install
+npm run sync:trace   # copies the gitignored trace into public/ (required before dev/build)
+npm run dev          # serves on http://localhost:5173 — press ▶ to animate
+```
+
+Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **Phase 0** (foundation, minimal hero, two panels) is built and merged; **Phase 1** ("parity" — all five panels, full hero treatments, themes) is specced and planned in `docs/superpowers/{specs,plans}/`.
 
 ---
 
