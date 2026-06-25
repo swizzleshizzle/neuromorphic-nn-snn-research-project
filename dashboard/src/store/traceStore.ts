@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Frame, TraceHeader } from "../contract";
+import { advancePlayback } from "../playback/advance";
 
 interface TraceStore {
   header?: TraceHeader;
@@ -14,6 +15,7 @@ interface TraceStore {
   setWinTi: (ti: number) => void;
   play: () => void;
   pause: () => void;
+  tickWindow: () => void;
   reset: () => void;
 }
 
@@ -38,6 +40,9 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
 
   play: () => set({ playing: true }),
   pause: () => set({ playing: false }),
+
+  tickWindow: () =>
+    set((s) => advancePlayback({ winTi: s.winTi, envStep: s.envStep, T: s.T, frameCount: s.frames.length })),
 
   reset: () => set({ header: undefined, frames: [], T: 1, envStep: 0, winTi: 0, playing: false }),
 }));
