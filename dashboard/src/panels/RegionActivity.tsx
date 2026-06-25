@@ -1,4 +1,20 @@
 import { useTraceStore } from "../store/traceStore";
+import { regionHue } from "../theme/regionHue";
+import { Panel } from "./Panel";
+
+/** Build SVG polyline points for a sparkline scaled to a w×h box. */
+function sparkPoints(series: number[], w: number, h: number): string {
+  if (series.length === 0) return "";
+  const max = Math.max(...series, 1e-6);
+  const n = series.length;
+  return series
+    .map((v, i) => {
+      const x = n > 1 ? (i / (n - 1)) * w : 0;
+      const y = h - (v / max) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+}
 
 export function RegionActivity() {
   const header = useTraceStore((s) => s.header);
@@ -6,22 +22,37 @@ export function RegionActivity() {
   if (!header) return null;
 
   return (
-    <section style={{ padding: 13, font: "12px sans-serif", color: "#e9edf6" }}>
-      <h3 style={{ font: "600 8.5px monospace", letterSpacing: ".12em", color: "#5b6378", textTransform: "uppercase" }}>
-        Panel 01 · Region Activity
-      </h3>
+    <Panel kicker="PANEL 01 · ACTIVITY" title="Region Activity">
       {header.regions.map((r) => {
-        const rate = frame?.regions[r.id]?.rate ?? 0;
+        const rs = frame?.regions[r.id];
+        const rate = rs?.rate ?? 0;
+        const hue = regionHue(r.id);
         return (
-          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
-            <span style={{ flex: 1 }}>{r.label}</span>
-            <div style={{ width: 80, height: 6, background: "rgba(255,255,255,.06)", borderRadius: 3 }}>
-              <div style={{ width: `${Math.min(100, rate * 100)}%`, height: "100%", background: "#3fd2ff", borderRadius: 3 }} />
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0" }}>
+            <span
+              style={{ width: 7, height: 7, borderRadius: "50%", background: hue, boxShadow: `0 0 6px ${hue}`, flex: "none" }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", font: "12px sans-serif" }}>
+                <span>{r.label}</span>
+                <span style={{ font: "11px monospace", color: "var(--text-dim)" }}>{rate.toFixed(2)}</span>
+              </div>
+              <svg
+                width="100%"
+                height="16"
+                viewBox="0 0 100 16"
+                preserveAspectRatio="none"
+                style={{ marginTop: 3, display: "block" }}
+              >
+                <polyline points={sparkPoints(rs?.rate_t ?? [], 100, 16)} fill="none" stroke={hue} strokeWidth="1.2" />
+              </svg>
+              <div style={{ font: "9px monospace", color: "var(--text-faint)", marginTop: 2 }}>
+                active {((rs?.active_frac ?? 0) * 100).toFixed(0)}% · {rs?.spikes ?? 0} spikes
+              </div>
             </div>
-            <span style={{ font: "11px monospace", width: 34, textAlign: "right" }}>{rate.toFixed(2)}</span>
           </div>
         );
       })}
-    </section>
+    </Panel>
   );
 }
