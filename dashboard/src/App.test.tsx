@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { useTraceStore } from "./store/traceStore";
 
+// The R3F/WebGL hero can't mount in jsdom (no ResizeObserver/WebGL context).
+// App.test covers trace-load + shell rendering; the hero is verified by the
+// Playwright smoke (Task 10), so stub it out here to isolate this test.
+vi.mock("./hero/Hero", () => ({ Hero: () => null }));
+
 const header = {
   schema_version: "1.0",
   brain: { id: "five-region", config_hash: "ab12cd34", seed: 0, T: 32 },
