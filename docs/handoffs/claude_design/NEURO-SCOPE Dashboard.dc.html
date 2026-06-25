@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;background:#05060a;overflow:hidden;}
+@keyframes scblink{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes scspin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+input[type=range].scrub{-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;background:var(--edge);outline:none;cursor:pointer}
+input[type=range].scrub::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:13px;height:13px;border-radius:50%;background:var(--c-router);box-shadow:0 0 10px var(--c-router),0 0 0 3px rgba(255,90,138,.18);cursor:grab}
+input[type=range].scrub::-moz-range-thumb{width:13px;height:13px;border:none;border-radius:50%;background:var(--c-router);box-shadow:0 0 10px var(--c-router)}
+</style>
+</helmet>
+
+<div style="{{ rootStyle }}">
+
+  <sc-if value="{{ notLoaded }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:var(--bg);color:var(--text)">
+      <div style="width:34px;height:34px;border-radius:50%;border:2px solid var(--edge);border-top-color:var(--c-router);animation:scspin .9s linear infinite"></div>
+      <div style="font:600 13px/1 'Space Grotesk';letter-spacing:.04em">NEURO·SCOPE</div>
+      <div style="font:500 10px/1.5 'IBM Plex Mono';color:var(--text-faint)">{{ loadMsg }}</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;display:flex;flex-direction:column">
+
+    <header style="display:flex;align-items:center;gap:16px;height:56px;padding:0 18px;border-bottom:1px solid var(--edge);background:var(--bar);flex:none;position:relative;z-index:30;backdrop-filter:var(--blur)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:9px;height:9px;border-radius:50%;background:var(--c-router);box-shadow:0 0 11px var(--c-router);animation:scblink 2.4s ease-in-out infinite"></span>
+        <div>
+          <div style="font:700 14px/1 'Space Grotesk',sans-serif;letter-spacing:.04em;color:var(--text)">NEURO·SCOPE</div>
+          <div style="font:500 9px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.14em;text-transform:uppercase">brain monitor — stage 2</div>
+        </div>
+      </div>
+      <div style="width:1px;height:30px;background:var(--edge)"></div>
+      <div style="display:flex;gap:20px;font:500 10px/1.5 'IBM Plex Mono',monospace">
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">BRAIN</div><div style="color:var(--text);margin-top:3px">{{ brainId }}</div></div>
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">CONFIG</div><div style="color:var(--text-dim);margin-top:3px">{{ configHash }}</div></div>
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">REGIONS</div><div style="color:var(--text-dim);margin-top:3px">{{ regionCount }}</div></div>
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">WINDOW</div><div style="color:var(--text-dim);margin-top:3px">T = {{ T }}</div></div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:18px;font:500 10px/1.5 'IBM Plex Mono',monospace;text-align:right">
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">EPISODE</div><div style="color:var(--text);margin-top:3px">{{ episode }}</div></div>
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">STEP</div><div style="color:var(--text);margin-top:3px">{{ step }}</div></div>
+        <div><div style="color:var(--text-faint);letter-spacing:.08em">RETURN</div><div style="color:{{ returnColor }};margin-top:3px">{{ ret }}</div></div>
+        <div style="align-self:center;font:600 8px/1 'IBM Plex Mono';letter-spacing:.1em;padding:4px 7px;border-radius:5px;background:{{ statusBg }};color:{{ statusFg }}">{{ epStatus }}</div>
+      </div>
+      <div style="display:flex;align-items:center;background:var(--panel2);border:1px solid var(--edge);border-radius:8px;padding:3px">
+        <button onClick="{{ setObs }}" style="{{ obsBtn }}">Observatory</button>
+        <button onClick="{{ setClin }}" style="{{ clinBtn }}">Clinical</button>
+      </div>
+      <div style="display:flex;align-items:center;background:var(--panel2);border:1px solid var(--edge);border-radius:8px;padding:3px">
+        <button onClick="{{ setDash }}" style="{{ dashBtn }}">Dashboard</button>
+        <button onClick="{{ setFocus }}" style="{{ focusBtn }}">Focus</button>
+      </div>
+      <div style="display:flex;align-items:center;background:var(--panel2);border:1px solid var(--edge);border-radius:8px;padding:3px">
+        <button onClick="{{ setCloud }}" style="{{ cloudBtn }}">3D Cloud</button>
+        <button onClick="{{ setFlow }}" style="{{ flowBtn }}">Flow Map</button>
+      </div>
+    </header>
+
+    <div style="{{ containerStyle }}">
+
+      <!-- LEFT RAIL -->
+      <aside style="{{ leftRailStyle }}" data-screen-label="left-rail">
+        <div style="padding:14px 14px 6px;display:flex;flex-direction:column;gap:14px">
+
+          <section data-screen-label="panel-region-activity" style="background:var(--panel);border:1px solid var(--edge);border-radius:11px;backdrop-filter:var(--blur)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 13px 10px;border-bottom:1px solid var(--edge2)">
+              <div><div style="font:600 12px/1 'Space Grotesk',sans-serif;color:var(--text)">Region Activity</div><div style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.12em">PANEL 01 · SPIKE RATE</div></div>
+              <span style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint)">{{ totalN }} N</span>
+            </div>
+            <div style="padding:7px 13px 11px;display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ gauges }}" as="g" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--edge2)">
+                  <span style="width:7px;height:7px;border-radius:50%;flex:none;background:{{ g.color }};box-shadow:0 0 7px {{ g.color }}"></span>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline">
+                      <span style="font:500 10.5px/1 'Space Grotesk',sans-serif;color:var(--text)">{{ g.label }}</span>
+                      <span style="font:500 9px/1 'IBM Plex Mono',monospace;color:{{ g.color }}">{{ g.rate }}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:7px;margin-top:6px">
+                      <div style="flex:1;height:3px;border-radius:2px;background:var(--edge);overflow:hidden">
+                        <div style="height:100%;border-radius:2px;width:{{ g.barPct }};background:{{ g.color }}"></div>
+                      </div>
+                      <svg width="56" height="16" style="flex:none;overflow:visible">
+                        <polyline points="{{ g.spark }}" fill="none" stroke="{{ g.color }}" stroke-width="1.2" stroke-opacity="0.7"></polyline>
+                        <circle cx="{{ g.playheadX }}" cy="{{ g.playheadY }}" r="1.8" fill="#fff"></circle>
+                      </svg>
+                    </div>
+                    <div style="display:flex;gap:11px;margin-top:5px;font:500 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint)">
+                      <span>{{ g.role }}</span><span>act {{ g.activeFrac }}</span><span>{{ g.spikes }} sp</span><span style="color:{{ g.statusColor }}">●{{ g.status }}</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section data-screen-label="panel-router" style="background:var(--panel);border:1px solid var(--edge);border-radius:11px;backdrop-filter:var(--blur)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 13px 10px;border-bottom:1px solid var(--edge2)">
+              <div><div style="font:600 12px/1 'Space Grotesk',sans-serif;color:var(--text)">Thalamic Router</div><div style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.12em">PANEL 04 · GATING</div></div>
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--c-router);box-shadow:0 0 7px var(--c-router)"></span>
+            </div>
+            <div style="padding:9px 13px 6px;display:flex;justify-content:space-between;font:500 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint);letter-spacing:.06em">
+              <span>ACTION</span><span>UTILITY&nbsp;·&nbsp;GATE</span>
+            </div>
+            <div style="padding:0 13px 12px;display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ routerActions }}" as="a" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;background:{{ a.rowBg }};border:1px solid {{ a.rowEdge }}">
+                  <span style="font:600 10px/1 'Space Grotesk',sans-serif;color:{{ a.labelColor }};width:40px;text-transform:capitalize">{{ a.label }}</span>
+                  <div style="flex:1;height:6px;border-radius:3px;background:var(--edge);overflow:hidden">
+                    <div style="height:100%;border-radius:3px;width:{{ a.utilPct }};background:{{ a.utilColor }};opacity:{{ a.utilOpacity }}"></div>
+                  </div>
+                  <span style="font:500 9px/1 'IBM Plex Mono',monospace;color:var(--text-dim);width:26px;text-align:right">{{ a.utility }}</span>
+                  <span style="font:600 7.5px/1 'IBM Plex Mono',monospace;letter-spacing:.06em;padding:3px 5px;border-radius:4px;background:{{ a.gateBg }};color:{{ a.gateColor }};width:62px;text-align:center">{{ a.gateText }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="padding:0 13px 13px;font:500 8.5px/1.5 'IBM Plex Mono',monospace;color:var(--text-faint)">selected <span style="color:var(--c-motor)">▸ {{ actionLabel }}</span> · gate_open is a fraction; OPEN &gt; 0.5</div>
+          </section>
+          <div style="height:6px"></div>
+        </div>
+      </aside>
+
+      <!-- CENTER STAGE -->
+      <section style="position:relative;min-width:0;flex:1;display:flex;flex-direction:column;background:var(--bg)" data-screen-label="hero-stage">
+        <div ref="{{ stageRef }}" style="position:relative;flex:1;min-height:0;overflow:hidden">
+          <canvas ref="{{ canvasRef }}" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas>
+
+          <div style="position:absolute;top:14px;left:18px;display:flex;align-items:center;gap:9px;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--text-faint);letter-spacing:.1em;pointer-events:none">
+            <span style="color:var(--text-dim)">NEURON FIELD</span>
+            <span>{{ heroCaption }}</span>
+          </div>
+
+          <!-- sensory-input grid (reads encoding.sensory_input) -->
+          <div style="position:absolute;top:44px;left:18px;padding:10px 11px;border-radius:10px;background:var(--panel);border:1px solid var(--edge);backdrop-filter:var(--blur);pointer-events:none">
+            <div style="font:600 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint);letter-spacing:.12em;margin-bottom:7px">SENSORY INPUT · {{ gridN }}×{{ gridN }}</div>
+            <div style="display:grid;grid-template-columns:repeat({{ gridN }},10px);gap:2px">
+              <sc-for list="{{ sensoryCells }}" as="c" hint-placeholder-count="25">
+                <div style="width:10px;height:10px;border-radius:2px;background:{{ c.bg }};box-shadow:{{ c.glow }}"></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:7px;font:500 7.5px/1 'IBM Plex Mono';color:var(--text-faint)"><span style="color:var(--c-sensory)">■ agent</span><span style="color:var(--c-motor)">□ goal</span></div>
+          </div>
+
+          <sc-if value="{{ showKey }}" hint-placeholder-val="{{ true }}">
+            <div style="position:absolute;left:18px;bottom:16px;display:flex;flex-direction:column;gap:7px;padding:11px 13px;border-radius:10px;background:var(--panel);border:1px solid var(--edge);backdrop-filter:var(--blur);pointer-events:none">
+              <div style="font:600 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint);letter-spacing:.14em">ENCODING</div>
+              <div style="display:flex;align-items:center;gap:8px;font:500 9.5px/1 'Space Grotesk',sans-serif;color:var(--text-dim)"><span style="width:8px;height:8px;border-radius:50%;background:var(--c-sensory);box-shadow:0 0 6px var(--c-sensory)"></span>hue = region</div>
+              <div style="display:flex;align-items:center;gap:8px;font:500 9.5px/1 'Space Grotesk',sans-serif;color:var(--text-dim)"><span style="width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 8px #fff"></span>flash = spike (field)</div>
+              <div style="display:flex;align-items:center;gap:8px;font:500 9.5px/1 'Space Grotesk',sans-serif;color:var(--text-dim)"><span style="width:11px;height:3px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--c-motor))"></span>pulse = pathway flow</div>
+              <div style="display:flex;align-items:center;gap:8px;font:500 9.5px/1 'Space Grotesk',sans-serif;color:var(--text-dim)"><span style="width:11px;height:0;border-top:1.5px dashed var(--c-router)"></span>dashed = gated closed</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isFocus }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleLeft }}" style="position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:25;width:24px;height:64px;border:1px solid var(--edge);border-left:none;border-radius:0 9px 9px 0;background:var(--panel);backdrop-filter:var(--blur);color:var(--text-dim);cursor:pointer;font:600 11px/1 'IBM Plex Mono',monospace">{{ leftTab }}</button>
+          </sc-if>
+          <sc-if value="{{ isFocus }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ toggleRight }}" style="position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:25;width:24px;height:64px;border:1px solid var(--edge);border-right:none;border-radius:9px 0 0 9px;background:var(--panel);backdrop-filter:var(--blur);color:var(--text-dim);cursor:pointer;font:600 11px/1 'IBM Plex Mono',monospace">{{ rightTab }}</button>
+          </sc-if>
+        </div>
+
+        <!-- SCRUBBER (episode steps) -->
+        <div style="flex:none;height:62px;border-top:1px solid var(--edge);background:var(--bar);backdrop-filter:var(--blur);display:flex;align-items:center;gap:16px;padding:0 18px;z-index:20">
+          <button onClick="{{ togglePlay }}" style="width:34px;height:34px;flex:none;border-radius:9px;border:1px solid var(--edge);background:var(--c-router);color:#0a0a0c;cursor:pointer;display:flex;align-items:center;justify-content:center;font:600 13px/1 'Space Grotesk';box-shadow:0 0 14px rgba(255,90,138,.4)">{{ playIcon }}</button>
+          <div style="display:flex;flex-direction:column;align-items:center;font:500 9px/1.3 'IBM Plex Mono',monospace;color:var(--text-faint);width:66px">
+            <span style="color:var(--text);font-size:11px">{{ stepLabel }}</span>
+            <span style="letter-spacing:.08em">EPISODE STEP</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <input type="range" class="scrub" min="0" max="{{ maxStep }}" step="1" value="{{ envStep }}" onInput="{{ onScrub }}" style="width:100%">
+            <div style="display:flex;justify-content:space-between;font:500 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint)"><span>episode start</span><span>inference window {{ winLabel }} · {{ winSpikes }} spikes</span><span>truncated</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font:500 8px/1 'IBM Plex Mono';color:var(--text-faint)">SPEED</span>
+            <span style="font:500 10px/1 'IBM Plex Mono';color:var(--text-dim)">{{ speedLabel }}×</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT RAIL -->
+      <aside style="{{ rightRailStyle }}" data-screen-label="right-rail">
+        <div style="padding:14px 14px 6px;display:flex;flex-direction:column;gap:14px">
+
+          <section data-screen-label="panel-flow" style="background:var(--panel);border:1px solid var(--edge);border-radius:11px;backdrop-filter:var(--blur)">
+            <div style="padding:12px 13px 10px;border-bottom:1px solid var(--edge2)">
+              <div style="font:600 12px/1 'Space Grotesk',sans-serif;color:var(--text)">Communication Flow</div>
+              <div style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.12em">PANEL 02 · PATHWAY INTENSITY</div>
+            </div>
+            <div style="padding:8px 8px 2px">
+              <svg viewBox="0 0 300 130" style="width:100%;display:block">
+                <sc-for list="{{ flowLines }}" as="e" hint-placeholder-count="4">
+                  <line x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" stroke="{{ e.color }}" stroke-width="{{ e.w }}" stroke-opacity="{{ e.o }}" stroke-linecap="round" stroke-dasharray="{{ e.dash }}"></line>
+                </sc-for>
+                <sc-for list="{{ flowNodes }}" as="n" hint-placeholder-count="5">
+                  <circle cx="{{ n.cx }}" cy="{{ n.cy }}" r="{{ n.r }}" fill="{{ n.color }}" fill-opacity="0.92"></circle>
+                  <text x="{{ n.cx }}" y="{{ n.ty }}" fill="var(--text-dim)" font-family="IBM Plex Mono" font-size="7.5" text-anchor="middle">{{ n.label }}</text>
+                </sc-for>
+              </svg>
+            </div>
+            <div style="padding:2px 13px 12px;display:flex;flex-direction:column;gap:5px">
+              <sc-for list="{{ flowEdges }}" as="e" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:8px;font:500 9px/1 'IBM Plex Mono',monospace">
+                  <span style="flex:1;color:var(--text-dim)">{{ e.label }}</span>
+                  <span style="font-size:7.5px;padding:2px 5px;border-radius:3px;background:{{ e.tagBg }};color:{{ e.tagColor }}">{{ e.tag }}</span>
+                  <span style="color:{{ e.color }};width:32px;text-align:right">{{ e.intensity }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+
+          <section data-screen-label="panel-task" style="background:var(--panel);border:1px solid var(--edge);border-radius:11px;backdrop-filter:var(--blur)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 13px 10px;border-bottom:1px solid var(--edge2)">
+              <div><div style="font:600 12px/1 'Space Grotesk',sans-serif;color:var(--text)">Task State</div><div style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.12em">PANEL 03 · GRIDWORLD {{ gridN }}×{{ gridN }}</div></div>
+              <span style="font:500 9px/1 'IBM Plex Mono',monospace;color:var(--c-sensory)">→ sensory</span>
+            </div>
+            <div style="padding:13px;display:flex;gap:14px;align-items:center">
+              <div style="display:grid;grid-template-columns:repeat({{ gridN }},1fr);gap:3px;width:128px;height:128px;flex:none">
+                <sc-for list="{{ taskCells }}" as="c" hint-placeholder-count="25">
+                  <div style="position:relative;border-radius:3px;background:{{ c.bg }};border:1px solid var(--edge2);display:flex;align-items:center;justify-content:center">
+                    <sc-if value="{{ c.isGoal }}" hint-placeholder-val="{{ false }}"><span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--c-motor);box-shadow:0 0 8px var(--c-motor)"></span></sc-if>
+                    <sc-if value="{{ c.isAgent }}" hint-placeholder-val="{{ false }}"><span style="width:12px;height:12px;border-radius:50%;background:var(--c-sensory);box-shadow:0 0 10px var(--c-sensory)"></span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px;font:500 9.5px/1 'IBM Plex Mono',monospace">
+                <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">agent</span><span style="color:var(--c-sensory)">{{ agentTxt }}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">goal</span><span style="color:var(--c-motor)">{{ goalTxt }}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">action</span><span style="color:var(--text)">{{ actionArrow }} {{ actionLabel }}</span></div>
+                <div style="height:1px;background:var(--edge2);margin:1px 0"></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">reward</span><span style="color:{{ rewardColor }}">{{ reward }}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:var(--text-faint)">return</span><span style="color:{{ returnColor }}">{{ ret }}</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section data-screen-label="panel-raster" style="background:var(--panel);border:1px solid var(--edge);border-radius:11px;backdrop-filter:var(--blur)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 13px 10px;border-bottom:1px solid var(--edge2)">
+              <div><div style="font:600 12px/1 'Space Grotesk',sans-serif;color:var(--text)">Spike Raster</div><div style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--text-faint);margin-top:5px;letter-spacing:.12em">PANEL 05 · {{ rasterLabel }}</div></div>
+              <span style="font:500 8px/1 'IBM Plex Mono',monospace;color:var(--text-faint)">field · flash-only</span>
+            </div>
+            <div style="padding:11px 13px 13px;display:flex;flex-direction:column;gap:6px">
+              <sc-for list="{{ rasterRows }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font:500 8px/1 'IBM Plex Mono';color:var(--text-faint);width:34px">n{{ r.id }}</span>
+                  <svg viewBox="0 0 232 14" preserveAspectRatio="none" style="flex:1;height:14px;background:var(--panel2);border-radius:4px">
+                    <sc-for list="{{ r.ticks }}" as="x" hint-placeholder-count="6">
+                      <rect x="{{ x }}" y="2" width="3.2" height="10" rx="1" fill="var(--c-prefrontal)"></rect>
+                    </sc-for>
+                    <line x1="{{ r.playheadX }}" x2="{{ r.playheadX }}" y1="0" y2="14" stroke="#fff" stroke-width="1" stroke-opacity="0.6"></line>
+                  </svg>
+                </div>
+              </sc-for>
+              <div style="display:flex;justify-content:space-between;font:500 8px/1 'IBM Plex Mono';color:var(--text-faint);margin-top:2px"><span>t₀</span><span>inference window · T={{ T }}</span><span>t{{ Tm1 }}</span></div>
+            </div>
+          </section>
+          <div style="height:6px"></div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;observatory&quot;,&quot;clinical&quot;],&quot;default&quot;:&quot;observatory&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;cloud&quot;,&quot;flow&quot;],&quot;default&quot;:&quot;cloud&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;glowStrength&quot;:{&quot;editor&quot;:&quot;float&quot;,&quot;default&quot;:1,&quot;min&quot;:0.3,&quot;max&quot;:2,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;},&quot;showTrails&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;propagationSpeed&quot;:{&quot;editor&quot;:&quot;float&quot;,&quot;default&quot;:1,&quot;min&quot;:0.25,&quot;max&quot;:2.5,&quot;step&quot;:0.25,&quot;tsType&quot;:&quot;number&quot;},&quot;showEncodingKey&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.PALETTE = { sensory:'#3fd2ff', hippocampus:'#ad8bff', prefrontal:'#ffd24a', router:'#ff5a8a', motor:'#46f0a0' };
+    this.colors = {};
+    this.T = 32;
+    this.canvasRef = React.createRef();
+    this.stageRef  = React.createRef();
+    this._winT = 0; this._lastWi = -1; this._rot = 0; this._frameAcc = 0;
+    this._neurons = []; this._clusters = {}; this._clusters3 = {}; this._edges = []; this._edges3 = [];
+    this._size = {W:900,H:600}; this._S=200; this._cx=450; this._cy=300; this._ctx=null;
+    this._tick = this._tick.bind(this);
+    this.state = {
+      loaded:false, error:null, header:null, frames:[],
+      envStep:0, winTi:0, playing:true,
+      theme: props.theme || 'observatory', layout: props.layout || 'cloud',
+      mode:'dashboard', leftOpen:true, rightOpen:true
+    };
+  }
+
+  componentDidMount(){ this._load(); this._last=performance.now(); this._raf=requestAnimationFrame(this._tick); }
+  componentWillUnmount(){ cancelAnimationFrame(this._raf); if(this._ro)this._ro.disconnect(); }
+
+  async _load(){
+    try{
+      const res = await fetch('week11_dashboard_trace.jsonl');
+      if(!res.ok) throw new Error('trace HTTP '+res.status);
+      const txt = await res.text();
+      const lines = txt.split('\n').filter(l=>l.trim());
+      const header = JSON.parse(lines[0]);
+      const frames = lines.slice(1).map(l=>JSON.parse(l));
+      this.T = (header.brain && header.brain.T) || 32;
+      header.regions.forEach((r,i)=>{ this.colors[r.id] = this.PALETTE[r.id] || ('hsl('+((i*67)%360)+' 88% 66%)'); });
+      // pick a small region for the raster (planning preferred)
+      this._rasterRegion = (header.regions.find(r=>r.role==='planning') || header.regions.find(r=>r.n_neurons<=8) || header.regions[0]).id;
+      this.setState({ loaded:true, header, frames, envStep:0 });
+    }catch(e){ this.setState({ error:String((e&&e.message)||e) }); }
+  }
+
+  _rng(seed){ let a=seed>>>0; return ()=>{ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+  _bez(e,p){ const u=1-p; const a=u*u*u,b=3*u*u*p,c=3*u*p*p,d=p*p*p; return {x:a*e.x1+b*e.c1x+c*e.c2x+d*e.x2, y:a*e.y1+b*e.c1y+c*e.c2y+d*e.y2}; }
+  _lerp(arr,ti,ti1,f){ if(!arr) return 0; return arr[ti]+((arr[ti1]||arr[ti])-arr[ti])*f; }
+  _project(x,y,z){ const th=this._rot,ct=Math.cos(th),st=Math.sin(th); const xr=x*ct+z*st; const zr=-x*st+z*ct; const phi=-0.20,cp=Math.cos(phi),sp=Math.sin(phi); const yr=y*cp-zr*sp; const zr2=y*sp+zr*cp; const persp=4.2/(4.2-zr2); return {x:this._cx+xr*this._S*persp, y:this._cy-yr*this._S*persp, depth:zr2, s:persp}; }
+
+  _ensureCanvas(){
+    if(!this.state.loaded) return false;
+    const cv=this.canvasRef.current; if(!cv) return false;
+    if(!this._ctx){ this._ctx=cv.getContext('2d'); this._resize(); this._ro=new ResizeObserver(()=>{ requestAnimationFrame(()=>this._resize()); }); this._ro.observe(cv.parentElement||cv); }
+    return true;
+  }
+  _resize(){ const cv=this.canvasRef.current; if(!cv||!this._ctx) return; const r=cv.getBoundingClientRect(); if(r.width<1||r.height<1) return; const dpr=Math.min(2,window.devicePixelRatio||1); cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr)); this._ctx.setTransform(dpr,0,0,dpr,0,0); this._size={W:r.width,H:r.height}; this._layout(r.width,r.height); }
+  _scheduleResize(){ var self=this; [40,200,400,640].forEach(function(ms){ setTimeout(function(){ if(self._ctx) self._resize(); },ms); }); }
+
+  _layout(W,H){
+    const Hd=this.state.header; if(!Hd) return;
+    const regions=Hd.regions, n=regions.length, cy=H*0.5, md=Math.min(W,H);
+    const neurons=[];
+    const shapeOf=(cnt)=> cnt<=8 ? 'col' : (Number.isInteger(Math.sqrt(cnt)) ? 'grid' : 'disc');
+    regions.forEach((reg,ri)=>{
+      const cx=W*(0.12+0.76*(n>1?ri/(n-1):0.5)); const cnt=reg.n_neurons; const sh=shapeOf(cnt);
+      if(sh==='grid'){ const g=Math.sqrt(cnt); const cell=md*0.030, gw=g*cell, x0=cx-gw/2+cell/2, y0=cy-gw/2+cell/2; for(let i=0;i<cnt;i++){const r=Math.floor(i/g),c=i%g; neurons.push({region:reg.id,idx:i,x:x0+c*cell,y:y0+r*cell,r:cell*0.27});} }
+      else if(sh==='disc'){ const R=md*0.16; for(let i=0;i<cnt;i++){const a=i*2.39996323,rr=Math.sqrt((i+0.5)/cnt)*R; neurons.push({region:reg.id,idx:i,x:cx+rr*Math.cos(a),y:cy+rr*Math.sin(a),r:md*0.0058});} }
+      else { const gap=md*0.08, top=cy-gap*(cnt-1)/2; for(let i=0;i<cnt;i++) neurons.push({region:reg.id,idx:i,x:cx,y:top+i*gap,r:md*0.013}); }
+    });
+    const lr=this._rng(99);
+    regions.forEach((reg,ri)=>{
+      const cxX=-1.0+2.0*(n>1?ri/(n-1):0.5); const cyY=(ri%2?0.24:-0.18); const czZ=(((ri*0.41)%1)-0.5)*0.7;
+      const pts=neurons.filter(p=>p.region===reg.id); const cnt=pts.length; const sh=shapeOf(cnt);
+      pts.forEach((p,i)=>{
+        if(sh==='grid'){ const g=Math.sqrt(cnt); const r=Math.floor(i/g),c=i%g; p.X=cxX+(lr()-0.5)*0.05; p.Y=cyY+(r/(g-1)-0.5)*0.72; p.Z=czZ+(c/(g-1)-0.5)*0.72; p.r3=2.3; }
+        else if(sh==='disc'){ const y0=1-(i/(cnt-1))*2; const rad=Math.sqrt(Math.max(0,1-y0*y0)); const th=i*2.39996323; const jr=0.45+0.55*lr(); p.X=cxX+rad*Math.cos(th)*0.44*jr; p.Y=cyY+y0*0.5*jr; p.Z=czZ+rad*Math.sin(th)*0.5*jr; p.r3=1.9; }
+        else { const ang=(i/cnt)*Math.PI*2; p.X=cxX+Math.cos(ang)*0.13; p.Y=cyY+Math.sin(ang)*0.13; p.Z=czZ+(i%2?0.09:-0.09); p.r3=5.0; }
+      });
+    });
+    const C={},C3={};
+    regions.forEach(reg=>{ const pts=neurons.filter(p=>p.region===reg.id); const ys=pts.map(p=>p.y);
+      C[reg.id]={cx:pts.reduce((s,p)=>s+p.x,0)/pts.length, cy:(Math.min.apply(null,ys)+Math.max.apply(null,ys))/2, bottom:Math.max.apply(null,ys), pts};
+      C3[reg.id]={X:pts.reduce((s,p)=>s+p.X,0)/pts.length, Y:pts.reduce((s,p)=>s+p.Y,0)/pts.length, Z:pts.reduce((s,p)=>s+p.Z,0)/pts.length}; });
+    let mcx=0,mcy=0,mcz=0; neurons.forEach(p=>{mcx+=p.X;mcy+=p.Y;mcz+=p.Z;}); mcx/=neurons.length;mcy/=neurons.length;mcz/=neurons.length;
+    neurons.forEach(p=>{p.X-=mcx;p.Y-=mcy;p.Z-=mcz;});
+    regions.forEach(reg=>{C3[reg.id].X-=mcx;C3[reg.id].Y-=mcy;C3[reg.id].Z-=mcz;});
+    let rXZ=0.5,rY=0.3; neurons.forEach(p=>{rXZ=Math.max(rXZ,Math.hypot(p.X,p.Z));rY=Math.max(rY,Math.abs(p.Y));});
+    const perspF=4.2/(4.2-rXZ); this._S=Math.min((W*0.52)/(rXZ*perspF),(H*0.46)/(rY*perspF)); this._cx=W/2; this._cy=H*0.47;
+    this._neurons=neurons; this._clusters=C; this._clusters3=C3;
+    const mk2=(p)=>{ const a=C[p.src],b=C[p.dst]; if(!a||!b)return null; const x1=a.cx,y1=a.cy,x2=b.cx,y2=b.cy,dx=x2-x1; return {key:p.id,src:p.src,dst:p.dst,gated:p.gated,x1,y1,x2,y2,c1x:x1+dx*0.4,c1y:Math.min(y1,y2)-md*0.07,c2x:x1+dx*0.6,c2y:Math.min(y1,y2)-md*0.07,color:this.colors[p.src]}; };
+    this._edges=Hd.pathways.map(mk2).filter(Boolean); this._edges.forEach((e,i)=>e.off=(i*0.21)%1);
+    const mk3=(p)=>{ const a=C3[p.src],b=C3[p.dst]; if(!a||!b)return null; return {key:p.id,src:p.src,dst:p.dst,gated:p.gated,ax:a.X,ay:a.Y,az:a.Z,bx:b.X,by:b.Y,bz:b.Z,color:this.colors[p.src]}; };
+    this._edges3=Hd.pathways.map(mk3).filter(Boolean); this._edges3.forEach((e,i)=>e.off=(i*0.17)%1);
+  }
+
+  _edgeState(pw,gated){ if(!pw) return {inten:0,open:!gated,quiescent:!!gated}; const inten=pw.intensity||0; if(pw.gate_open===undefined) return {inten,open:true,quiescent:false}; const g=pw.gate_open; const frac=Array.isArray(g)?Math.max.apply(null,g):g; const open=frac>0.5; return {inten,open,quiescent:!open}; }
+
+  _tick(now){
+    const dt=Math.min(0.05,(now-this._last)/1000); this._last=now;
+    const speed=(this.props.propagationSpeed??1);
+    this._rot += dt*0.22;
+    if(this.state.loaded){
+      this._winT += dt*11*speed;
+      const wi=((Math.floor(this._winT)%this.T)+this.T)%this.T;
+      if(wi!==this._lastWi){ this._lastWi=wi; this.setState({winTi:wi}); }
+      if(this.state.playing){ this._frameAcc+=dt; const spf=1/(3*speed); if(this._frameAcc>=spf){ this._frameAcc=0; const len=this.state.frames.length; if(len) this.setState(s=>({envStep:(s.envStep+1)%len})); } }
+    }
+    if(this._ensureCanvas()){ const cv=this.canvasRef.current; const r=cv.getBoundingClientRect(); const dpr=Math.min(2,window.devicePixelRatio||1); if(r.width>0 && (Math.abs(cv.width-Math.round(r.width*dpr))>1 || Math.abs(cv.height-Math.round(r.height*dpr))>1)) this._resize(); this._draw(); }
+    this._raf=requestAnimationFrame(this._tick);
+  }
+
+  _frame(){ return this.state.frames[this.state.envStep]; }
+
+  _draw(){
+    const ctx=this._ctx; if(!ctx) return; const {W,H}=this._size; const T=this.T;
+    const tf=this._winT; const ti=((Math.floor(tf)%T)+T)%T; const ti1=(ti+1)%T; const frac=tf-Math.floor(tf);
+    const obs=this.state.theme==='observatory'; const glow=(this.props.glowStrength??1), trails=(this.props.showTrails??true);
+    const cloud=this.state.layout==='cloud'; const fr=this._frame();
+    ctx.globalCompositeOperation='source-over';
+    const ta=trails?(obs?0.26:0.42):1; ctx.fillStyle=obs?`rgba(5,6,10,${ta})`:`rgba(12,15,22,${ta})`; ctx.fillRect(0,0,W,H);
+    const gA=cloud?(obs?0.028:0.04):(obs?0.045:0.06); ctx.strokeStyle=obs?`rgba(120,140,200,${gA})`:`rgba(140,160,210,${gA})`; ctx.lineWidth=1;
+    for(let x=46;x<W;x+=46){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=46;y<H;y+=46){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    if(!fr) return;
+    if(cloud) this._drawCloud(ctx,fr,ti,ti1,frac,obs,glow); else this._drawFlow(ctx,fr,ti,ti1,frac,obs,glow,tf);
+  }
+
+  _neuronGlow(fr,n,ti){ const arr=fr.field&&fr.field[n.region]&&fr.field[n.region].spikes; if(!arr) return {sp:0,act:0.06}; const sp=arr[ti]?arr[ti][n.idx]:0; const spPrev=arr[(ti-1+this.T)%this.T]?arr[(ti-1+this.T)%this.T][n.idx]:0; const act=0.06+(sp?0.5:0)+(spPrev?0.18:0); return {sp,act}; }
+
+  _drawFlow(ctx,fr,ti,ti1,frac,obs,glow,tf){
+    // edges
+    for(const e of this._edges){
+      const st=this._edgeState(fr.pathways&&fr.pathways[e.key], e.gated);
+      if(st.quiescent){ ctx.setLineDash([3,4]); ctx.globalCompositeOperation='source-over'; ctx.strokeStyle=e.color; ctx.globalAlpha=0.16; ctx.lineWidth=1; ctx.shadowBlur=0; ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.bezierCurveTo(e.c1x,e.c1y,e.c2x,e.c2y,e.x2,e.y2);ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1; continue; }
+      const inten=st.inten; ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle=e.color; ctx.lineWidth=0.6+inten*2.4*glow; ctx.globalAlpha=0.05+inten*0.30; ctx.shadowBlur=(obs?9:3)*glow; ctx.shadowColor=e.color;
+      ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.bezierCurveTo(e.c1x,e.c1y,e.c2x,e.c2y,e.x2,e.y2);ctx.stroke();
+      for(let k=0;k<3;k++){ let p=((tf*0.05)+k/3+e.off)%1; if(p<0)p+=1; const pt=this._bez(e,p); const sz=(1.5+inten*3)*glow; ctx.globalAlpha=Math.min(1,0.2+inten*0.9); ctx.fillStyle=e.color; ctx.shadowBlur=(obs?13:5)*glow; ctx.beginPath();ctx.arc(pt.x,pt.y,sz,0,7);ctx.fill(); }
+    }
+    ctx.globalAlpha=1; ctx.globalCompositeOperation='lighter';
+    for(const nn of this._neurons){ const {sp,act}=this._neuronGlow(fr,nn,ti); const flash=sp?(1-frac):0; const col=this.colors[nn.region]; const aG=Math.min(1,act+flash*0.95); const rad=nn.r*(1+flash*1.4); ctx.shadowColor=col; ctx.shadowBlur=(obs?(sp?18:7):(sp?7:2))*glow; ctx.globalAlpha=aG; ctx.fillStyle=col; ctx.beginPath();ctx.arc(nn.x,nn.y,rad,0,7);ctx.fill(); if(flash>0.25){ ctx.shadowBlur=0; ctx.globalAlpha=flash; ctx.fillStyle='#fff'; ctx.beginPath();ctx.arc(nn.x,nn.y,Math.max(1,rad*0.42),0,7);ctx.fill(); } }
+    ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.globalCompositeOperation='source-over';
+    this._labels2(ctx,fr,ti,obs);
+  }
+
+  _labels2(ctx,fr,ti,obs){
+    const dim=obs?'#9aa3b6':'#8b94a6', faint=obs?'#5b6378':'#646d80';
+    const regions=this.state.header.regions; ctx.textAlign='center';
+    regions.forEach((reg,i)=>{ const c=this._clusters[reg.id]; if(!c)return; const dy=c.bottom+18+((i%2)?13:0);
+      ctx.font="600 10px 'Space Grotesk',sans-serif"; ctx.fillStyle=this.colors[reg.id]; ctx.globalAlpha=0.92; ctx.fillText(reg.label.toUpperCase().split(' ')[0], c.cx, dy);
+      ctx.globalAlpha=1; ctx.font="500 8px 'IBM Plex Mono',monospace"; ctx.fillStyle=faint; const rate=(fr.regions[reg.id]&&fr.regions[reg.id].rate||0).toFixed(2); ctx.fillText(reg.n_neurons+'N · '+rate, c.cx, dy+11); });
+    // motor action labels
+    const motor=regions.find(r=>r.role==='output'); if(motor && fr.router){ const pts=this._clusters[motor.id].pts.slice().sort((a,b)=>a.idx-b.idx); const labels=this.state.header.task.action_labels||[]; ctx.textAlign='left'; ctx.font="500 8px 'IBM Plex Mono',monospace"; for(let a=0;a<pts.length;a++){ const open=(fr.router.gate_open[a]||0)>0.5; const sel=a===fr.task.action; ctx.fillStyle=open?(sel?this.colors[motor.id]:dim):'rgba(255,90,138,0.6)'; ctx.fillText((labels[a]||a)+(open?(sel?' ◂':''):' ✕'), pts[a].x+pts[a].r+7, pts[a].y+3); } }
+    ctx.globalAlpha=1;
+  }
+
+  _drawCloud(ctx,fr,ti,ti1,frac,obs,glow){
+    const fog=(d)=>{ const t=(d+1.4)/2.8; return 0.38+0.62*Math.max(0,Math.min(1,t)); };
+    ctx.globalCompositeOperation='lighter';
+    for(const e of this._edges3){ const st=this._edgeState(fr.pathways&&fr.pathways[e.key],e.gated); const A=this._project(e.ax,e.ay,e.az),B=this._project(e.bx,e.by,e.bz);
+      if(st.quiescent){ ctx.globalCompositeOperation='source-over'; ctx.setLineDash([3,4]); ctx.globalAlpha=0.16; ctx.shadowBlur=0; ctx.strokeStyle=e.color; ctx.lineWidth=1; ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1; ctx.globalCompositeOperation='lighter'; continue; }
+      const inten=st.inten; ctx.strokeStyle=e.color; ctx.lineWidth=0.5+inten*2.2*glow; ctx.globalAlpha=0.04+inten*0.26; ctx.shadowBlur=(obs?8:3)*glow; ctx.shadowColor=e.color; ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke();
+      for(let k=0;k<3;k++){ let p=((this._winT*0.05)+k/3+e.off)%1; if(p<0)p+=1; const P=this._project(e.ax+(e.bx-e.ax)*p,e.ay+(e.by-e.ay)*p,e.az+(e.bz-e.az)*p); const sz=(1.4+inten*3)*glow*P.s; ctx.globalAlpha=Math.min(1,(0.2+inten*0.9))*fog(P.depth); ctx.fillStyle=e.color; ctx.shadowBlur=(obs?12:5)*glow; ctx.beginPath();ctx.arc(P.x,P.y,sz,0,7);ctx.fill(); }
+    }
+    ctx.globalAlpha=1;
+    const proj=this._neurons.map(nn=>({n:nn,P:this._project(nn.X,nn.Y,nn.Z)})); proj.sort((a,b)=>a.P.depth-b.P.depth);
+    for(const o of proj){ const nn=o.n,P=o.P; const {sp,act}=this._neuronGlow(fr,nn,ti); const flash=sp?(1-frac):0; const col=this.colors[nn.region]; const f=fog(P.depth); const aG=Math.min(1,(act+flash*0.95)*f); const rad=Math.max(0.6,(nn.r3||2)*P.s*(1+flash*1.3)); ctx.shadowColor=col; ctx.shadowBlur=(obs?(sp?16:6):(sp?6:2))*glow*P.s; ctx.globalAlpha=aG; ctx.fillStyle=col; ctx.beginPath();ctx.arc(P.x,P.y,rad,0,7);ctx.fill(); if(flash>0.25){ ctx.shadowBlur=0; ctx.globalAlpha=flash*f; ctx.fillStyle='#fff'; ctx.beginPath();ctx.arc(P.x,P.y,Math.max(0.8,rad*0.42),0,7);ctx.fill(); } }
+    ctx.globalAlpha=1; ctx.shadowBlur=0; ctx.globalCompositeOperation='source-over';
+    const dim=obs?'#9aa3b6':'#8b94a6', faint=obs?'#5b6378':'#646d80'; const regions=this.state.header.regions; ctx.textAlign='center';
+    regions.forEach((reg,i)=>{ const c3=this._clusters3[reg.id]; if(!c3)return; const P=this._project(c3.X,c3.Y,c3.Z); const f=fog(P.depth); const off=0.32*this._S*P.s+14+((i%2)?14:0); ctx.globalAlpha=0.45+0.55*f; ctx.font="600 10px 'Space Grotesk',sans-serif"; ctx.fillStyle=this.colors[reg.id]; ctx.fillText(reg.label.toUpperCase().split(' ')[0], P.x, P.y+off); ctx.font="500 8px 'IBM Plex Mono',monospace"; ctx.fillStyle=faint; ctx.fillText(reg.n_neurons+'N · '+(fr.regions[reg.id]&&fr.regions[reg.id].rate||0).toFixed(2), P.x, P.y+off+11); });
+    ctx.globalAlpha=1;
+    const motor=regions.find(r=>r.role==='output'); if(motor && fr.router){ const pts=this._neurons.filter(p=>p.region===motor.id).slice().sort((a,b)=>a.idx-b.idx); const labels=this.state.header.task.action_labels||[]; ctx.textAlign='left'; ctx.font="500 8px 'IBM Plex Mono',monospace"; for(let a=0;a<pts.length;a++){ const P=this._project(pts[a].X,pts[a].Y,pts[a].Z); const open=(fr.router.gate_open[a]||0)>0.5; const sel=a===fr.task.action; ctx.globalAlpha=0.4+0.6*fog(P.depth); ctx.fillStyle=open?(sel?this.colors[motor.id]:dim):'rgba(255,90,138,0.7)'; ctx.fillText((labels[a]||a)+(open?(sel?' ◂':''):' ✕'), P.x+8, P.y+3); } }
+    ctx.globalAlpha=1;
+  }
+
+  _setTheme(t){ this.setState({theme:t}); }
+  _setMode(m){ if(m==='focus') this.setState({mode:'focus',leftOpen:false,rightOpen:false}); else this.setState({mode:'dashboard',leftOpen:true,rightOpen:true}); this._scheduleResize(); }
+
+  renderVals(){
+    const S=this.state, T=this.T, obs=S.theme==='observatory', isFocus=S.mode==='focus', cloud=S.layout==='cloud';
+    const themes={
+      observatory:{ '--bg':'#05060a','--bg2':'#080a12','--bar':'rgba(8,10,16,0.86)','--panel':'rgba(13,16,24,0.66)','--panel2':'rgba(22,26,37,0.55)','--edge':'rgba(255,255,255,0.075)','--edge2':'rgba(255,255,255,0.045)','--text':'#e9edf6','--text-dim':'#9aa3b6','--text-faint':'#5b6378','--blur':'blur(9px)' },
+      clinical:{ '--bg':'#0c0f16','--bg2':'#10141d','--bar':'#111620','--panel':'#141a25','--panel2':'#11161f','--edge':'rgba(255,255,255,0.11)','--edge2':'rgba(255,255,255,0.06)','--text':'#e3e8f1','--text-dim':'#8b94a6','--text-faint':'#646d80','--blur':'none' }
+    };
+    const regionVars={};
+    (S.header? S.header.regions:[]).forEach(r=>{ regionVars['--c-'+r.id]=this.colors[r.id]; });
+    const rootStyle={ ...themes[S.theme], '--c-sensory':this.colors.sensory||'#3fd2ff','--c-router':this.colors.router||'#ff5a8a','--c-motor':this.colors.motor||'#46f0a0','--c-prefrontal':this.colors.prefrontal||'#ffd24a', ...regionVars,
+      position:'absolute',inset:0,background:'var(--bg)',color:'var(--text)',font:"400 13px/1.4 'Space Grotesk',sans-serif",display:'flex',flexDirection:'column',overflow:'hidden' };
+
+    const base={ loaded:S.loaded, notLoaded:!S.loaded, error:S.error,
+      loadMsg: S.error ? ('load failed — '+S.error) : 'loading trace…', rootStyle };
+    if(!S.loaded){ return { ...base, gauges:[], routerActions:[], flowEdges:[], flowLines:[], flowNodes:[], taskCells:[], rasterRows:[], sensoryCells:[] }; }
+
+    const fr=S.frames[S.envStep]; const ti=S.winTi;
+    const containerStyle = isFocus ? {flex:1,minHeight:0,position:'relative',display:'flex'} : {flex:1,minHeight:0,display:'grid',gridTemplateColumns:'316px minmax(0,1fr) 336px',position:'relative'};
+    const railBase={display:'flex',flexDirection:'column',minHeight:0,overflow:'auto'};
+    const leftRailStyle=isFocus?{...railBase,position:'absolute',left:0,top:0,bottom:0,width:'316px',zIndex:24,borderRight:'1px solid var(--edge)',background:'var(--bar)',backdropFilter:'blur(14px)',transform:S.leftOpen?'translateX(0)':'translateX(-101%)',transition:'transform .34s cubic-bezier(.4,0,.2,1)'}:{...railBase,borderRight:'1px solid var(--edge)',background:'var(--bg2)'};
+    const rightRailStyle=isFocus?{...railBase,position:'absolute',right:0,top:0,bottom:0,width:'336px',zIndex:24,borderLeft:'1px solid var(--edge)',background:'var(--bar)',backdropFilter:'blur(14px)',transform:S.rightOpen?'translateX(0)':'translateX(101%)',transition:'transform .34s cubic-bezier(.4,0,.2,1)'}:{...railBase,borderLeft:'1px solid var(--edge)',background:'var(--bg2)'};
+    const seg=(a)=>({padding:'6px 11px',borderRadius:'6px',border:'none',cursor:'pointer',font:"600 10px/1 'Space Grotesk',sans-serif",letterSpacing:'.02em',background:a?'var(--c-router)':'transparent',color:a?'#0a0a0c':'var(--text-dim)',transition:'all .15s'});
+
+    const H=S.header, regions=H.regions;
+    const totalN=regions.reduce((s,r)=>s+r.n_neurons,0);
+
+    const gauges=regions.map(r=>{ const rs=fr.regions[r.id]||{}; const series=rs.rate_t||[]; const mx=Math.max(0.0001,...series); const now=(series[ti]!==undefined?series[ti]:(rs.rate||0)); const pts=series.map((v,i)=>`${(i/(T-1)*56).toFixed(1)},${(15-v/mx*13).toFixed(1)}`).join(' '); const dead=mx<0.03, run=mx>0.92; return { color:this.colors[r.id], label:r.label.split(' ')[0], role:r.role, rate:(rs.rate||0).toFixed(2), barPct:Math.round((rs.rate||0)/Math.max(0.0001,mx)*100)+'%', spark:pts, playheadX:(ti/(T-1)*56).toFixed(1), playheadY:(15-now/mx*13).toFixed(1), activeFrac:(rs.active_frac||0).toFixed(2), spikes:rs.spikes||0, status:dead?'dead':run?'runaway':'nominal', statusColor:dead?'#ff5a8a':run?'#ffd24a':'#46f0a0' }; });
+
+    const labels=H.task.action_labels||[];
+    const routerActions=labels.map((lab,i)=>{ const u=(fr.router.utilities&&fr.router.utilities[i])||0; const gf=(fr.router.gate_open&&fr.router.gate_open[i])||0; const open=gf>0.5; const sel=i===fr.task.action; return { label:lab, utility:u.toFixed(2), utilPct:Math.round(u*100)+'%', utilColor:open?this.colors.motor:'var(--c-router)', utilOpacity:open?1:0.4, gateText:(open?'OPEN ':'CLOSED ')+gf.toFixed(2), gateBg:open?'rgba(70,240,160,0.14)':'rgba(255,90,138,0.16)', gateColor:open?'#46f0a0':'#ff5a8a', rowBg:sel?'rgba(70,240,160,0.07)':'transparent', rowEdge:sel?'rgba(70,240,160,0.3)':'transparent', labelColor:sel?'var(--c-motor)':'var(--text)' }; });
+
+    // flow schematic
+    const n=regions.length; const nodePos={};
+    const flowNodes=regions.map((r,i)=>{ const cx=24+i*(252/Math.max(1,n-1)); const cy=62+((i%2)?-22:22); nodePos[r.id]={cx,cy}; const rate=(fr.regions[r.id]&&fr.regions[r.id].rate)||0; return {id:r.id,cx:cx.toFixed(1),cy:cy.toFixed(1),ty:(cy+(i%2?-12:18)).toFixed(1),r:(5+rate*8).toFixed(1),color:this.colors[r.id],label:r.label.split(' ')[0].toLowerCase()}; });
+    const flowLines=H.pathways.map(p=>{ const a=nodePos[p.src],b=nodePos[p.dst]; const pw=fr.pathways&&fr.pathways[p.id]; const st=this._edgeState(pw,p.gated); const inten=st.inten; return {x1:a.cx.toFixed(1),y1:a.cy.toFixed(1),x2:b.cx.toFixed(1),y2:b.cy.toFixed(1),color:this.colors[p.src],w:(1+inten*4).toFixed(1),o:st.quiescent?'0.18':(0.14+inten*0.8).toFixed(2),dash:st.quiescent?'3 3':'0'}; });
+    const flowEdges=H.pathways.map(p=>{ const pw=fr.pathways&&fr.pathways[p.id]; const st=this._edgeState(pw,p.gated); const isStore=/store/i.test(p.label||''); const tag=!p.gated?'OPEN':(st.open?'OPEN':(isStore?'STORE':'CLOSED')); const tagColor=!p.gated?'#9aa3b6':(st.open?'#46f0a0':(isStore?'#ad8bff':'#ff5a8a')); const tagBg=!p.gated?'rgba(255,255,255,0.06)':(st.open?'rgba(70,240,160,0.14)':(isStore?'rgba(173,139,255,0.14)':'rgba(255,90,138,0.16)')); return { label:(p.label?p.label+' · ':'')+p.src.slice(0,4)+'→'+p.dst.slice(0,4), color:this.colors[p.src], intensity:((pw&&pw.intensity)||0).toFixed(2), tag, tagBg, tagColor }; });
+
+    // task grid
+    const gridN=H.task.grid_n; const ag=fr.task.agent, gl=fr.task.goal; const taskCells=[];
+    for(let y=0;y<gridN;y++) for(let x=0;x<gridN;x++){ const isAgent=(x===ag[0]&&y===ag[1]); const isGoal=(x===gl[0]&&y===gl[1]); taskCells.push({isAgent,isGoal,bg:isAgent?'rgba(63,210,255,0.10)':isGoal?'rgba(70,240,160,0.08)':'var(--panel2)'}); }
+    const arrowMap={up:'▲',down:'▼',left:'◀',right:'▶'}; const actionArrow=arrowMap[fr.task.action_label]||'•';
+
+    // sensory-input grid (encoding.sensory_input — rule 4)
+    let sensoryCells=[];
+    const si=fr.encoding&&fr.encoding.sensory_input;
+    if(si){ const g=si.grid_n, cells=g*g; const aSum=new Array(cells).fill(0), gSum=new Array(cells).fill(0); const sp=si.spikes||[]; for(let t=0;t<sp.length;t++){ const row=sp[t]; for(let c=0;c<cells;c++){ aSum[c]+=row[c]||0; gSum[c]+=row[cells+c]||0; } } let aMax=0,aCell=-1,gMax=0,gCell=-1; for(let c=0;c<cells;c++){ if(aSum[c]>aMax){aMax=aSum[c];aCell=c;} if(gSum[c]>gMax){gMax=gSum[c];gCell=c;} } for(let c=0;c<cells;c++){ const isA=c===aCell&&aMax>0, isG=c===gCell&&gMax>0; sensoryCells.push({ bg:isA?'var(--c-sensory)':isG?'transparent':'var(--edge)', glow:isA?'0 0 8px var(--c-sensory)':isG?'inset 0 0 0 1.5px var(--c-motor)':'none' }); } }
+
+    // raster (field spikes, flash-only)
+    const rr=this._rasterRegion; const rArr=fr.field&&fr.field[rr]&&fr.field[rr].spikes; const rN=(S.header.regions.find(r=>r.id===rr)||{}).n_neurons||4; const rasterRows=[];
+    if(rArr){ const ncols=rArr.length; for(let k=0;k<rN;k++){ const ticks=[]; for(let t=0;t<ncols;t++){ if(rArr[t] && rArr[t][k]) ticks.push((t/(T-1)*232-1.6).toFixed(1)); } rasterRows.push({id:k, ticks, playheadX:(ti/(T-1)*232).toFixed(1)}); } }
+
+    let winSpikes=0; regions.forEach(r=>{ const a=fr.field&&fr.field[r.id]&&fr.field[r.id].spikes; if(a&&a[ti]) winSpikes+=a[ti].reduce((x,y)=>x+y,0); });
+    const term=fr.task.terminated, trunc=fr.task.truncated;
+
+    return { ...base,
+      containerStyle, leftRailStyle, rightRailStyle, stageRef:this.stageRef, canvasRef:this.canvasRef,
+      brainId:H.brain.id, configHash:H.brain.config_hash, regionCount:regions.length, T, Tm1:T-1, totalN,
+      episode:fr.episode, step:fr.step, ret:(fr.task.return).toFixed(0), returnColor:fr.task.return>=0?'#46f0a0':'#ff8aa6',
+      epStatus: term?'TERMINATED':(trunc?'TRUNCATED':'RUNNING'), statusBg: term?'rgba(70,240,160,0.14)':(trunc?'rgba(255,210,74,0.14)':'rgba(255,255,255,0.06)'), statusFg: term?'#46f0a0':(trunc?'#ffd24a':'#9aa3b6'),
+      gauges, routerActions, flowEdges, flowLines, flowNodes, taskCells, rasterRows, sensoryCells, gridN,
+      rasterLabel:(rr||'').toUpperCase()+' · field spikes',
+      agentTxt:'['+ag.join(',')+']', goalTxt:'['+gl.join(',')+']', actionArrow, actionLabel:fr.task.action_label,
+      reward:(fr.task.reward).toFixed(2), rewardColor:fr.task.reward>=0?'#46f0a0':'#ffb37a',
+      isFocus, cloud, showKey:(this.props.showEncodingKey??true),
+      heroCaption: cloud?'distributed neuron cloud · field spikes · auto-orbit':regions.map(r=>r.label.split(' ')[0].toLowerCase()).join(' → '),
+      leftTab:S.leftOpen?'‹':'›', rightTab:S.rightOpen?'›':'‹',
+      obsBtn:seg(obs), clinBtn:seg(!obs), dashBtn:seg(!isFocus), focusBtn:seg(isFocus), cloudBtn:seg(cloud), flowBtn:seg(!cloud),
+      playIcon:S.playing?'❚❚':'▶', speedLabel:(this.props.propagationSpeed??1).toFixed(2),
+      stepLabel:(S.envStep+1)+'/'+S.frames.length, maxStep:S.frames.length-1, envStep:S.envStep,
+      winLabel:(ti+1)+'/'+T, winSpikes,
+      setObs:()=>this._setTheme('observatory'), setClin:()=>this._setTheme('clinical'),
+      setDash:()=>this._setMode('dashboard'), setFocus:()=>this._setMode('focus'),
+      setCloud:()=>this.setState({layout:'cloud'}), setFlow:()=>this.setState({layout:'flow'}),
+      toggleLeft:()=>this.setState(s=>({leftOpen:!s.leftOpen})), toggleRight:()=>this.setState(s=>({rightOpen:!s.rightOpen})),
+      togglePlay:()=>this.setState(s=>({playing:!s.playing})),
+      onScrub:(e)=>{ const v=+e.target.value; this.setState({envStep:v,playing:false}); }
+    };
+  }
+}
+</script>
+</body>
+</html>
