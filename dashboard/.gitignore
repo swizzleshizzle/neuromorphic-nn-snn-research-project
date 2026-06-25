@@ -4,3 +4,4 @@ dist
 public/*.jsonl
 playwright-report
 test-results
+*.tsbuildinfo
