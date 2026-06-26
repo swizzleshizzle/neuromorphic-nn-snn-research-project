@@ -16,6 +16,14 @@ test("boots on the real trace and renders the data-driven shell", async ({ page 
   // The hero canvas mounted
   await expect(page.locator("canvas")).toBeVisible();
 
+  // Hero Cloud/Flow toggle is present and switches
+  const toggle = page.locator("[data-hero-toggle]");
+  await expect(toggle).toBeVisible();
+  await expect(toggle.getByRole("button", { name: "Flow Map" })).toBeVisible();
+  await toggle.getByRole("button", { name: "Flow Map" }).click();
+  // sensory-input overlay renders from encoding.sensory_input
+  await expect(page.locator("[data-sensory-grid]")).toBeVisible();
+
   // Phase 1a panels render from the real trace
   await expect(page.getByText(/PANEL 04/)).toBeVisible();
   await expect(page.getByText("Communication Flow")).toBeVisible();
