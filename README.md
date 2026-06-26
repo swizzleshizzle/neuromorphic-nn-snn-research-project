@@ -2,18 +2,18 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 2 (Multi-region brain) — Week 12
+**Status:** Phase 2 (Multi-region brain), Week 12
 **Capstone target:** *I Attempted to Build a Brain in 12 Months*
 
 ---
 
 ## What this is
 
-A software-only neuromorphic AI research project. The goal is a regionalized spiking neural network — five distinct functional regions modeled loosely on the mammalian brain (sensory cortex, hippocampal memory, prefrontal planning, motor cortex, thalamic router) that learn to solve a 2x2 Rubik's Cube through experience rather than supervised training.
+A software-only neuromorphic AI research project. The goal is a regionalized spiking neural network (five distinct functional regions modeled loosely on the mammalian brain: sensory cortex, hippocampal memory, prefrontal planning, motor cortex, thalamic router) that learn to solve a 2x2 Rubik's Cube through experience rather than supervised training.
 
 The wider context: most modern AI consumes megawatts. The brain runs general intelligence on ~20 watts. This project tests, at small scale, whether brain-inspired architecture can capture some fraction of that efficiency.
 
-This repo is also the working surface of a self-directed curriculum. The author has a SCADA / industrial automation background (.NET, Ignition, signal processing) but no formal ML or neuroscience training. Every concept gets learned in the open — including the mistakes.
+This repo is also the working surface of a self-directed curriculum. The author has a SCADA / industrial automation background (.NET, Ignition, signal processing) but no formal ML or neuroscience training. Every concept gets learned in the open, including the mistakes.
 
 ## What this isn't
 
@@ -26,7 +26,7 @@ This repo is also the working surface of a self-directed curriculum. The author 
 ## Project structure
 
 ```
-src/neuromorphic/        # Reusable Python package — models, regions, training, monitor
+src/neuromorphic/        # Reusable Python package: models, regions, training, monitor
 src/dashboard/           # Batch matplotlib dashboard (multi_region_viz.py)
 dashboard/               # NEURO·SCOPE live web app (Vite + React + TS + react-three-fiber)
 experiments/             # One numbered subfolder per experiment (config + entry point)
@@ -34,11 +34,11 @@ notebooks/               # Exploratory Jupyter work
 scripts/                 # One-off utility scripts
 tests/                   # Pytest tests (added as code stabilizes)
 docs/                    # Specs, plans, ADRs, and design handoffs
-outputs/                 # Experiment traces + generated figures — gitignored
-data/                    # Datasets — gitignored, downloaded on first run
-checkpoints/             # Model state_dicts — gitignored
-runs/                    # TensorBoard logs — gitignored
-wandb/                   # W&B local cache — gitignored
+outputs/                 # Experiment traces + generated figures (committed)
+data/                    # Datasets (gitignored), downloaded on first run
+checkpoints/             # Model state_dicts (gitignored)
+runs/                    # TensorBoard logs (gitignored)
+wandb/                   # W&B local cache (gitignored)
 ```
 
 ---
@@ -62,7 +62,7 @@ python -m venv .venv
 ### 2. Install PyTorch (with CUDA if you have a compatible GPU)
 
 ```powershell
-# CUDA 12.1 — check https://pytorch.org/get-started/locally/ for your specific config
+# CUDA 12.1: check https://pytorch.org/get-started/locally/ for your specific config
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
 # Or CPU-only:
@@ -76,7 +76,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The `pip install -e .` installs the `neuromorphic` package in editable mode — code changes take effect immediately without reinstalling.
+The `pip install -e .` installs the `neuromorphic` package in editable mode, so code changes take effect immediately without reinstalling.
 
 ### 4. Run the smoke test
 
@@ -92,16 +92,16 @@ If this prints `Smoke test passed.` and saves a checkpoint to `checkpoints/001_s
 
 Two trackers are wired in and used together by default:
 
-- **Weights & Biases** — cloud-hosted, best comparison UI. Sign up at [wandb.ai](https://wandb.ai), then run `wandb login` once.
-- **TensorBoard** — local, no account, lives in `runs/`. Launch with `tensorboard --logdir runs/`.
+- **Weights & Biases**: cloud-hosted, best comparison UI. Sign up at [wandb.ai](https://wandb.ai), then run `wandb login` once.
+- **TensorBoard**: local, no account, lives in `runs/`. Launch with `tensorboard --logdir runs/`.
 
-Switch trackers per-experiment by editing `tracker:` in the config YAML — `wandb`, `tensorboard`, `both`, or `none`.
+Switch trackers per-experiment by editing `tracker:` in the config YAML (`wandb`, `tensorboard`, `both`, or `none`).
 
 ---
 
 ## Configuration system
 
-Every experiment is described by a single YAML file in its `experiments/NNN_*/` folder. The schema is the `ExperimentConfig` dataclass in `src/neuromorphic/config.py`. Unknown fields fail loudly at load time — this prevents typos like `lerning_rate: 0.01` from silently using the default.
+Every experiment is described by a single YAML file in its `experiments/NNN_*/` folder. The schema is the `ExperimentConfig` dataclass in `src/neuromorphic/config.py`. Unknown fields fail loudly at load time, which prevents typos like `lerning_rate: 0.01` from silently using the default.
 
 CLI overrides work for any field:
 
@@ -111,15 +111,15 @@ python experiments/001_smoke_test/run.py --config experiments/001_smoke_test/con
 
 ---
 
-## Visualization — NEURO·SCOPE
+## Visualization: NEURO·SCOPE
 
-The brain is monitored through **NEURO·SCOPE**, a data-driven dashboard platform that renders whatever a saved trace *declares* (region topology, pathways, spikes) — never hardcoded to today's five regions. Traces are versioned JSONL written by the `neuromorphic.monitor` package; the platform architecture and phase roadmap live in `docs/superpowers/specs/2026-06-18-neuroscope-platform-design.md`.
+The brain is monitored through **NEURO·SCOPE**, a data-driven dashboard platform that renders whatever a saved trace *declares* (region topology, pathways, spikes), never hardcoded to today's five regions. Traces are versioned JSONL written by the `neuromorphic.monitor` package; the platform architecture and phase roadmap live in `docs/superpowers/specs/2026-06-18-neuroscope-platform-design.md`.
 
 Two front-ends read the same trace contract:
 
 ### Batch dashboard (matplotlib, static figure)
 
-One multi-panel PNG from a saved trace — 5 spike rasters, an inter-region communication heatmap, the grid-world state, and a reward curve. From the repo root with the venv active:
+One multi-panel PNG from a saved trace: 5 spike rasters, an inter-region communication heatmap, the grid-world state, and a reward curve. From the repo root with the venv active:
 
 ```powershell
 python -m dashboard.multi_region_viz outputs/week11_dashboard_trace.jsonl
@@ -128,18 +128,18 @@ python -m dashboard.multi_region_viz outputs/week11_dashboard_trace.jsonl
 
 (`dashboard` here resolves to `src/dashboard/`, importable via `pip install -e .`.)
 
-### Live web dashboard (NEURO·SCOPE — Vite + React + react-three-fiber)
+### Live web dashboard (NEURO·SCOPE: Vite + React + react-three-fiber)
 
-A real-time replay with a WebGL neuron-field hero and reactive panels, under `dashboard/` (a separate JS toolchain — Node ≥ 20). First run:
+A real-time replay with a WebGL neuron-field hero and reactive panels, under `dashboard/` (a separate JS toolchain, Node ≥ 20). First run:
 
 ```powershell
 cd dashboard
 npm install
-npm run sync:trace   # copies the gitignored trace into public/ (required before dev/build)
-npm run dev          # serves on http://localhost:5173 — press ▶ to animate
+npm run sync:trace   # copies the trace into public/ (required before dev/build)
+npm run dev          # serves on http://localhost:5173 (press ▶ to animate)
 ```
 
-Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **Phase 0** (foundation, minimal hero, two panels) is built and merged; **Phase 1** ("parity" — all five panels, full hero treatments, themes) is specced and planned in `docs/superpowers/{specs,plans}/`.
+Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **Phase 0** (foundation, minimal hero, two panels) and **Phase 1a** (all five data-driven panels) are built and merged; the full hero treatments and theming are the remaining Phase 1 slices, planned in `docs/superpowers/{specs,plans}/`.
 
 ---
 
@@ -147,13 +147,13 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 
 | Phase | Window | Focus |
 |---|---|---|
-| 0 — Foundations | Apr–May 2026 | NN concepts, PyTorch, snnTorch tutorials, RL basics |
-| 1 — Single-region SNNs | May 2026 | Spiking MNIST, recurrence, surrogate gradients, STDP |
-| 2 — Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task |
-| 3 — Rubik's Cube | Aug–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization |
-| 4 — Capstone | Oct–Dec 2026 | Documentation, write-up, video, public release |
+| 0: Foundations | Apr–May 2026 | NN concepts, PyTorch, snnTorch tutorials, RL basics |
+| 1: Single-region SNNs | May 2026 | Spiking MNIST, recurrence, surrogate gradients, STDP |
+| 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task |
+| 3: Rubik's Cube | Aug–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization |
+| 4: Capstone | Oct–Dec 2026 | Documentation, write-up, video, public release |
 
-Future (Year 2+): **Strategy Sentinel** — applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
+Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
 ---
 
