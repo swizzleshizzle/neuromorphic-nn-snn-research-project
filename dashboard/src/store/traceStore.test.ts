@@ -40,4 +40,10 @@ describe("traceStore", () => {
     useTraceStore.getState().pause();
     expect(useTraceStore.getState().playing).toBe(false);
   });
+
+  it("toggles hero layout", () => {
+    expect(useTraceStore.getState().heroLayout).toBe("cloud");
+    useTraceStore.getState().setHeroLayout("flow");
+    expect(useTraceStore.getState().heroLayout).toBe("flow");
+  });
 });
