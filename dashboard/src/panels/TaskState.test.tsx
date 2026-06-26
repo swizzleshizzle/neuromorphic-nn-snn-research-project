@@ -8,8 +8,7 @@ const header = {
   schema_version: "1.0",
   brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
   task: { type: "gridworld", grid_n: 5, action_labels: ["up", "right", "down", "left"] },
-  regions: [],
-  pathways: [],
+  regions: [], pathways: [],
 } as TraceHeader;
 const frame = {
   episode: 0, step: 0, t: 0,
@@ -18,12 +17,17 @@ const frame = {
 } as unknown as Frame;
 
 describe("TaskState", () => {
-  it("renders a grid_n x grid_n grid and the action/coords readout", () => {
+  it("renders the grid, action arrow, coords, and sign-colored reward/return", () => {
     useTraceStore.getState().load(header, [frame]);
     const { container } = render(<TaskState />);
-    // 25 cells for grid_n=5
     expect(container.querySelectorAll("[data-cell]")).toHaveLength(25);
-    expect(screen.getByText(/right/i)).toBeInTheDocument();
+    expect(screen.getByText(/▶ right/i)).toBeInTheDocument();
     expect(screen.getByText(/2,\s*3/)).toBeInTheDocument();
+    const reward = container.querySelector("[data-reward]") as HTMLElement;
+    const ret = container.querySelector("[data-return]") as HTMLElement;
+    expect(reward.textContent).toBe("-1");
+    expect(reward.style.color).toBe("var(--reward-neg)");
+    expect(ret.textContent).toBe("-5");
+    expect(ret.style.color).toBe("var(--return-neg)");
   });
 });
