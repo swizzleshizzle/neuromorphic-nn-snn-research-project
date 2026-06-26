@@ -6,7 +6,7 @@ export function HeroCaption() {
   if (!header) return null;
   const caption =
     layout === "cloud"
-      ? "distributed neuron cloud · field spikes · auto-orbit"
+      ? "distributed neuron cloud · field spikes · drag to orbit"
       : header.regions.map((r) => r.label.split(" ")[0].toLowerCase()).join(" → ");
   return (
     <div

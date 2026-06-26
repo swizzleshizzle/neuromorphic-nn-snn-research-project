@@ -5,7 +5,11 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 const FLOW_POS = [0, 0, 3.0] as const;
 
-export function CameraRig({ morphRef }: { morphRef: MutableRefObject<number> }) {
+export function CameraRig({
+  morphRef,
+}: {
+  morphRef: MutableRefObject<number>;
+}) {
   const ref = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
 
@@ -13,8 +17,7 @@ export function CameraRig({ morphRef }: { morphRef: MutableRefObject<number> }) 
     const m = morphRef.current;
     const ctrl = ref.current;
     if (!ctrl) return;
-    // auto-rotate fades out as we approach flow; drag-orbit disabled in flow
-    ctrl.autoRotate = m < 0.05;
+    // drag-orbit enabled in cloud, disabled as we approach flow
     ctrl.enabled = m < 0.5;
     if (m > 0.001) {
       // ease the camera toward a locked front view while in/approaching flow
@@ -31,8 +34,6 @@ export function CameraRig({ morphRef }: { morphRef: MutableRefObject<number> }) 
     <OrbitControls
       ref={ref}
       enablePan={false}
-      autoRotate
-      autoRotateSpeed={0.6}
       enableDamping
       minDistance={2}
       maxDistance={6}
