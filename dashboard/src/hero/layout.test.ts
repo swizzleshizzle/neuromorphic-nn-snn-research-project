@@ -1,31 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Frame, TraceHeader } from "../contract";
-import { buildNeurons, isSpiking } from "./layout";
-import { buildHeroNeurons, clusterCentroids, shapeOf } from "./layout";
-
-const header = {
-  schema_version: "1.0",
-  brain: { id: "five-region", config_hash: "x", seed: 0, T: 4 },
-  task: { type: "gridworld", grid_n: 5, action_labels: [] },
-  regions: [
-    { id: "sensory", label: "Sensory", n_neurons: 2, role: "input", render: "dots" },
-    { id: "motor", label: "Motor", n_neurons: 3, role: "output", render: "dots" },
-  ],
-  pathways: [],
-} as TraceHeader;
-
-describe("buildNeurons", () => {
-  it("emits one entry per neuron across all regions, in flow order", () => {
-    const ns = buildNeurons(header);
-    expect(ns).toHaveLength(5); // 2 + 3
-    expect(ns.filter((n) => n.region === "sensory")).toHaveLength(2);
-    expect(ns[0]).toMatchObject({ region: "sensory", idx: 0 });
-    // x increases left-to-right by region order
-    const sx = ns.find((n) => n.region === "sensory")!.x;
-    const mx = ns.find((n) => n.region === "motor")!.x;
-    expect(mx).toBeGreaterThan(sx);
-  });
-});
+import { buildHeroNeurons, clusterCentroids, isSpiking, shapeOf } from "./layout";
 
 describe("isSpiking", () => {
   const frame = {
