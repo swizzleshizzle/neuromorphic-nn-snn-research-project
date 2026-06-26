@@ -35,7 +35,7 @@ export function SpikeRaster() {
           style={{ background: "var(--panel2)", borderRadius: 4, display: "block" }}
         >
           {marks}
-          <line x1={playheadX} x2={playheadX} y1={0} y2={STRIP_H} stroke="#fff" strokeWidth={1} strokeOpacity={0.6} />
+          <line x1={playheadX} x2={playheadX} y1={0} y2={STRIP_H} stroke="var(--text-bright)" strokeWidth={1} strokeOpacity={0.6} />
         </svg>
       </div>,
     );
