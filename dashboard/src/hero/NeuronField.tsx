@@ -3,7 +3,7 @@ import { type MutableRefObject, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useTraceStore } from "../store/traceStore";
 import { makeGlowTexture } from "./glowTexture";
-import { neuronGlow } from "./interp";
+import { lerpVec3, neuronGlow } from "./interp";
 import type { HeroNeuron } from "./layout";
 import { hueFor } from "./palette";
 
@@ -31,11 +31,7 @@ export function NeuronField({ neurons, morphRef }: { neurons: HeroNeuron[]; morp
     const morph = morphRef.current;
     for (let i = 0; i < neurons.length; i++) {
       const n = neurons[i];
-      dummy.position.set(
-        n.cloudPos[0] + (n.flowPos[0] - n.cloudPos[0]) * morph,
-        n.cloudPos[1] + (n.flowPos[1] - n.cloudPos[1]) * morph,
-        n.cloudPos[2] + (n.flowPos[2] - n.cloudPos[2]) * morph,
-      );
+      dummy.position.set(...lerpVec3(n.cloudPos, n.flowPos, morph));
       dummy.quaternion.copy(camera.quaternion); // billboard
       const g = frame ? neuronGlow(frame, n.region, n.idx, winTi, T) : { sp: 0, act: 0.06 };
       const flash = g.sp ? 1 : 0;
