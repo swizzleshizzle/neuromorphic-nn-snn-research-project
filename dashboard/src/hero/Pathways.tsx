@@ -33,10 +33,14 @@ export function Pathways({
     () =>
       edges.map(() => {
         const geo = new THREE.BufferGeometry();
-        const mat = new THREE.LineBasicMaterial({
+        // LineDashedMaterial so quiescent (gated-closed) edges can render dashed;
+        // gapSize is set to 0 each frame when the edge is open, which renders solid.
+        const mat = new THREE.LineDashedMaterial({
           transparent: true,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
+          dashSize: 0.05,
+          gapSize: 0.05,
         });
         return new THREE.Line(geo, mat);
       }),
@@ -76,9 +80,11 @@ export function Pathways({
           pts.push(new THREE.Vector3(p[0], p[1], p[2]));
         }
         lineObj.geometry.setFromPoints(pts);
-        const mat = lineObj.material as THREE.LineBasicMaterial;
+        lineObj.computeLineDistances(); // required for dashes after geometry changes
+        const mat = lineObj.material as THREE.LineDashedMaterial;
         mat.color.set(hueFor(e.src, ei));
         mat.opacity = st.quiescent ? 0.16 : 0.06 + st.inten * 0.3;
+        mat.gapSize = st.quiescent ? 0.05 : 0; // dashed when gated-closed, solid otherwise
       }
 
       if (pmesh && !st.quiescent) {
