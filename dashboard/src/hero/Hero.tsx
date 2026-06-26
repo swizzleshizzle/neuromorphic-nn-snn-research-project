@@ -1,6 +1,8 @@
 import { Canvas } from "@react-three/fiber";
 import { useRef } from "react";
 import { CloudFlowToggle } from "./overlays/CloudFlowToggle";
+import { HeroCaption } from "./overlays/HeroCaption";
+import { SensoryGrid } from "./overlays/SensoryGrid";
 import { Scene } from "./Scene";
 
 export function Hero() {
@@ -11,6 +13,8 @@ export function Hero() {
         <Scene morphRef={morphRef} />
       </Canvas>
       <CloudFlowToggle />
+      <HeroCaption />
+      <SensoryGrid />
     </div>
   );
 }
