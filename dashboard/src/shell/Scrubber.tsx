@@ -8,7 +8,23 @@ export function Scrubber() {
   const pause = useTraceStore((s) => s.pause);
 
   return (
-    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 62, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", font: "11px monospace", color: "#9aa3b6", background: "rgba(8,10,16,.86)" }}>
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 62,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "0 16px",
+        font: "11px monospace",
+        color: "var(--text-dim)",
+        background: "var(--bar)",
+        backdropFilter: "var(--blur)",
+      }}
+    >
       <button onClick={playing ? pause : play} style={{ font: "11px monospace" }}>
         {playing ? "❚❚" : "▶"}
       </button>

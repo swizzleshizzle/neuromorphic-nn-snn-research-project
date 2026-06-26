@@ -15,4 +15,11 @@ test("boots on the real trace and renders the data-driven shell", async ({ page 
 
   // The hero canvas mounted
   await expect(page.locator("canvas")).toBeVisible();
+
+  // Phase 1a panels render from the real trace
+  await expect(page.getByText(/PANEL 04/)).toBeVisible();
+  await expect(page.getByText("Communication Flow")).toBeVisible();
+  await expect(page.getByText("Spike Raster")).toBeVisible();
+  // at least one router gate pill is present
+  await expect(page.locator("[data-gate]").first()).toBeVisible();
 });

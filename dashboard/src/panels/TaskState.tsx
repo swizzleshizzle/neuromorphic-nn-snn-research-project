@@ -1,4 +1,7 @@
 import { useTraceStore } from "../store/traceStore";
+import { Panel } from "./Panel";
+
+const ARROW: Record<string, string> = { up: "▲", right: "▶", down: "▼", left: "◀" };
 
 export function TaskState() {
   const header = useTraceStore((s) => s.header);
@@ -16,24 +19,41 @@ export function TaskState() {
         <div
           key={`${x},${y}`}
           data-cell
-          style={{ aspectRatio: "1", border: "1px solid rgba(255,255,255,.06)", background: isAgent ? "#3fd2ff" : "transparent", boxShadow: isGoal ? "inset 0 0 0 2px #46f0a0" : "none" }}
+          style={{
+            aspectRatio: "1",
+            border: "1px solid var(--edge)",
+            borderRadius: 2,
+            background: isAgent ? "var(--c-sensory)" : "transparent",
+            boxShadow: isGoal ? "inset 0 0 0 2px var(--c-motor)" : "none",
+          }}
         />,
       );
     }
   }
 
+  const rewardColor = (v: number) => (v >= 0 ? "var(--reward-pos)" : "var(--reward-neg)");
+  const returnColor = (v: number) => (v >= 0 ? "var(--reward-pos)" : "var(--return-neg)");
+
   return (
-    <section style={{ padding: 13, font: "12px sans-serif", color: "#e9edf6" }}>
-      <h3 style={{ font: "600 8.5px monospace", letterSpacing: ".12em", color: "#5b6378", textTransform: "uppercase" }}>
-        Panel 03 · Task State
-      </h3>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${n}, 1fr)`, gap: 2, maxWidth: 200 }}>{cells}</div>
+    <Panel kicker="PANEL 03 · TASK" title="Task State">
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${n}, 1fr)`, gap: 3, maxWidth: 260, margin: "0 auto" }}>
+        {cells}
+      </div>
       {task && (
-        <div style={{ font: "11px monospace", color: "#9aa3b6", marginTop: 8 }}>
-          <div>agent {task.agent[0]},{task.agent[1]} · goal {task.goal[0]},{task.goal[1]}</div>
-          <div>action {task.action_label} · reward {task.reward} · return {task.return}</div>
+        <div style={{ font: "11px monospace", color: "var(--text-dim)", marginTop: 10, display: "flex", flexDirection: "column", gap: 3 }}>
+          <div>
+            agent {task.agent[0]},{task.agent[1]} · goal {task.goal[0]},{task.goal[1]}
+          </div>
+          <div>
+            action {ARROW[task.action_label] ?? ""} {task.action_label}
+          </div>
+          <div>
+            reward <span data-reward style={{ color: rewardColor(task.reward) }}>{task.reward}</span>
+            {" · return "}
+            <span data-return style={{ color: returnColor(task.return) }}>{task.return}</span>
+          </div>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

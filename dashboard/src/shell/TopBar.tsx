@@ -7,7 +7,17 @@ export function TopBar() {
   return (
     <header
       className="topbar"
-      style={{ display: "flex", gap: 16, alignItems: "center", height: 56, padding: "0 16px", font: "12px monospace", color: "#e9edf6", background: "#080a12", borderBottom: "1px solid rgba(255,255,255,.075)" }}
+      style={{
+        display: "flex",
+        gap: 16,
+        alignItems: "center",
+        height: 56,
+        padding: "0 16px",
+        font: "12px monospace",
+        color: "var(--text)",
+        background: "var(--bg2)",
+        borderBottom: "1px solid var(--edge)",
+      }}
     >
       <strong style={{ font: "700 14px sans-serif" }}>NEURO·SCOPE</strong>
       <span>{brain.id}</span>

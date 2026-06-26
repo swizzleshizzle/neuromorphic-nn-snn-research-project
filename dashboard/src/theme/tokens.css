@@ -1,0 +1,27 @@
+/* NEURO·SCOPE — Observatory theme (Phase 1a). Clinical set + toggle land in slice 1c. */
+:root {
+  --bg: #05060a;
+  --bg2: #080a12;
+  --bar: rgba(8, 10, 16, 0.86);
+  --panel: rgba(13, 16, 24, 0.66);
+  --panel2: rgba(22, 26, 37, 0.55);
+  --edge: rgba(255, 255, 255, 0.075);
+  --edge2: rgba(255, 255, 255, 0.045);
+  --text: #e9edf6;
+  --text-dim: #9aa3b6;
+  --text-faint: #5b6378;
+  --text-bright: #fff;
+  --blur: blur(9px);
+
+  --c-sensory: #3fd2ff;
+  --c-hippocampus: #ad8bff;
+  --c-prefrontal: #ffd24a;
+  --c-router: #ff5a8a;
+  --c-motor: #46f0a0;
+
+  --gate-open: #46f0a0;
+  --gate-closed: #ff5a8a;
+  --reward-pos: #46f0a0;
+  --reward-neg: #ffb37a;
+  --return-neg: #ff8aa6;
+}
