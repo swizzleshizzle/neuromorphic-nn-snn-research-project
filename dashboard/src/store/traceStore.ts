@@ -9,6 +9,7 @@ interface TraceStore {
   envStep: number;
   winTi: number;
   playing: boolean;
+  heroLayout: "cloud" | "flow";
 
   load: (header: TraceHeader, frames: Frame[]) => void;
   setEnvStep: (i: number) => void;
@@ -17,6 +18,7 @@ interface TraceStore {
   pause: () => void;
   tickWindow: () => void;
   reset: () => void;
+  setHeroLayout: (v: "cloud" | "flow") => void;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -27,6 +29,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   envStep: 0,
   winTi: 0,
   playing: false,
+  heroLayout: "cloud",
 
   load: (header, frames) =>
     set({ header, frames, T: header.brain.T, envStep: 0, winTi: 0, playing: false }),
@@ -45,4 +48,6 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
     set((s) => advancePlayback({ winTi: s.winTi, envStep: s.envStep, T: s.T, frameCount: s.frames.length })),
 
   reset: () => set({ header: undefined, frames: [], T: 1, envStep: 0, winTi: 0, playing: false }),
+
+  setHeroLayout: (v) => set({ heroLayout: v }),
 }));
