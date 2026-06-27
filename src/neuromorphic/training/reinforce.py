@@ -89,6 +89,7 @@ def train_episode(
     obs, _ = env.reset()
     log_probs: list[torch.Tensor] = []
     rewards: list[float] = []
+    entropies: list[torch.Tensor] = []
     reached_goal = False
     limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
 
@@ -97,6 +98,7 @@ def train_episode(
         dist, _ = action_distribution(brain, head, obs, generator=generator)
         action = dist.sample()
         log_probs.append(dist.log_prob(action))
+        entropies.append(dist.entropy())
         obs, reward, terminated, truncated, _ = env.step(int(action))
         rewards.append(float(reward))
         steps += 1
@@ -120,4 +122,5 @@ def train_episode(
         "mean_return": float(returns.mean()),
         "loss": float(loss.detach()),
         "reached_goal": reached_goal,
+        "mean_entropy": float(torch.stack(entropies).mean()) if entropies else 0.0,
     }
