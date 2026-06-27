@@ -57,6 +57,8 @@ class GridWorldEnv(gym.Env):
         max_steps: int = 100,
         goals=None,
         goal_seed: int | None = None,
+        reward_shaping: bool = False,
+        shaping_gamma: float = 1.0,
     ):
         super().__init__()
         self.size = size
@@ -68,6 +70,9 @@ class GridWorldEnv(gym.Env):
 
         self._goals = list(goals) if goals is not None else None
         self._goal_rng = random.Random(goal_seed)
+        self.reward_shaping = reward_shaping
+        self.shaping_gamma = shaping_gamma
+        self._prev_potential = 0.0
 
         self.action_space = spaces.Discrete(4)
         # obs = (agent_x, agent_y, goal_x, goal_y), each in [0, size).
@@ -91,6 +96,7 @@ class GridWorldEnv(gym.Env):
             self.goal = self._goal_rng.choice(self._goals)
         self._agent = np.array(self.start, dtype=np.int64)
         self._steps = 0
+        self._prev_potential = -manhattan(self._agent, self.goal)
         return self._obs(), {}
 
     def step(self, action: int):
@@ -106,6 +112,10 @@ class GridWorldEnv(gym.Env):
         terminated = bool(x == self.goal[0] and y == self.goal[1])
         truncated = bool(self._steps >= self.max_steps)
         reward = self.goal_reward if terminated else self.step_penalty
+        if self.reward_shaping:
+            pot = -manhattan(self._agent, self.goal)
+            reward += self.shaping_gamma * pot - self._prev_potential
+            self._prev_potential = pot
         return self._obs(), float(reward), terminated, truncated, {}
 
     def render(self):
