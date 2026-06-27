@@ -46,3 +46,21 @@ def test_evaluate_smoke():
     assert 0.0 <= res.success_rate <= 1.0
     assert res.mean_steps >= 0.0
     assert 0.0 <= res.optimality <= 1.0
+
+
+def test_run_generalization_smoke(tmp_path):
+    from neuromorphic.training.generalization import GenConfig, run_generalization
+
+    cfg = GenConfig(seed=0, episodes=2, max_steps=20, n_heldout=6, tag="smoke", out_dir=tmp_path)
+    summary = run_generalization(cfg)
+
+    assert (tmp_path / "024_grid_generalization_smoke_metrics.csv").exists()
+    assert (tmp_path / "024_grid_generalization_smoke_summary.json").exists()
+    assert "generalization_gap" in summary
+    assert "train" in summary["eval"] and "heldout" in summary["eval"]
+    assert 0.0 <= summary["eval"]["train"]["success_rate"] <= 1.0
+
+    # CSV has a header plus one row per episode
+    lines = (tmp_path / "024_grid_generalization_smoke_metrics.csv").read_text().strip().splitlines()
+    assert lines[0] == "episode,goal_x,goal_y,total_reward,steps,goal_reached,entropy"
+    assert len(lines) == 1 + 2  # header + 2 episodes
