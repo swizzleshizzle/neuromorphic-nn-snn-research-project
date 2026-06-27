@@ -18,9 +18,16 @@ plugs straight into the Sensory Cortex with no glue.
 
 from __future__ import annotations
 
+import random
+
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+
+
+def manhattan(a, b) -> int:
+    """L1 distance between two (x, y) cells."""
+    return abs(int(a[0]) - int(b[0])) + abs(int(a[1]) - int(b[1]))
 
 
 class GridWorldEnv(gym.Env):
@@ -48,6 +55,8 @@ class GridWorldEnv(gym.Env):
         step_penalty: float = -1.0,
         goal_reward: float = 10.0,
         max_steps: int = 100,
+        goals=None,
+        goal_seed: int | None = None,
     ):
         super().__init__()
         self.size = size
@@ -56,6 +65,9 @@ class GridWorldEnv(gym.Env):
         self.step_penalty = step_penalty
         self.goal_reward = goal_reward
         self.max_steps = max_steps
+
+        self._goals = list(goals) if goals is not None else None
+        self._goal_rng = random.Random(goal_seed)
 
         self.action_space = spaces.Discrete(4)
         # obs = (agent_x, agent_y, goal_x, goal_y), each in [0, size).
@@ -75,6 +87,8 @@ class GridWorldEnv(gym.Env):
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
+        if self._goals is not None:
+            self.goal = self._goal_rng.choice(self._goals)
         self._agent = np.array(self.start, dtype=np.int64)
         self._steps = 0
         return self._obs(), {}
