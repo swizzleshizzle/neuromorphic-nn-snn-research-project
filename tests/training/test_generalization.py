@@ -28,3 +28,21 @@ def test_optimality():
 def test_eval_result_fields():
     r = EvalResult(success_rate=0.5, mean_steps=8.0, optimality=0.9, n=4)
     assert r.success_rate == 0.5 and r.n == 4
+
+
+import torch
+
+from neuromorphic.brain import Brain
+from neuromorphic.training.generalization import evaluate
+from neuromorphic.training.reinforce import make_policy_head
+
+
+def test_evaluate_smoke():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    gen = torch.Generator().manual_seed(0)
+    res = evaluate(brain, head, [(1, 1), (2, 2)], size=5, start=(0, 0), max_steps=30, generator=gen)
+    assert res.n == 2
+    assert 0.0 <= res.success_rate <= 1.0
+    assert res.mean_steps >= 0.0
+    assert 0.0 <= res.optimality <= 1.0

@@ -10,7 +10,10 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
-from neuromorphic.envs.gridworld import manhattan
+import torch
+
+from neuromorphic.envs.gridworld import GridWorldEnv, manhattan
+from neuromorphic.training.reinforce import greedy_action
 
 
 def split_goals(
@@ -37,3 +40,42 @@ class EvalResult:
     mean_steps: float
     optimality: float
     n: int
+
+
+def evaluate(
+    brain,
+    head,
+    goals,
+    *,
+    size: int,
+    start: tuple[int, int],
+    max_steps: int,
+    generator: "torch.Generator | None" = None,
+) -> EvalResult:
+    """Greedy rollouts from ``start`` to each goal; aggregate success, steps, optimality."""
+    reached = 0
+    steps_reached: list[int] = []
+    opt_reached: list[float] = []
+    for goal in goals:
+        env = GridWorldEnv(size=size, start=start, goal=goal, max_steps=max_steps)
+        obs, _ = env.reset()
+        steps = 0
+        done = False
+        while steps < max_steps:
+            with torch.no_grad():
+                a = greedy_action(brain, head, obs, generator=generator)
+            obs, _, term, trunc, _ = env.step(a)
+            steps += 1
+            if term:
+                done = True
+                break
+            if trunc:
+                break
+        if done:
+            reached += 1
+            steps_reached.append(steps)
+            opt_reached.append(optimality(start, goal, steps))
+    n = len(goals)
+    mean_steps = sum(steps_reached) / len(steps_reached) if steps_reached else 0.0
+    mean_opt = sum(opt_reached) / len(opt_reached) if opt_reached else 0.0
+    return EvalResult(success_rate=reached / n if n else 0.0, mean_steps=mean_steps, optimality=mean_opt, n=n)
