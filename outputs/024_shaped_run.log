@@ -1,0 +1,4 @@
+EXP-024 · 600 eps · shaping True · tag shaped
+train  goals: success 28% · opt 1.00
+heldout goals: success 33% · opt 1.00
+generalization gap: -0.06 (train success minus heldout success)
