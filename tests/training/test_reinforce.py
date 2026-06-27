@@ -91,9 +91,26 @@ def test_train_episode_updates_head_but_not_the_frozen_brain():
         generator=torch.Generator().manual_seed(0), max_steps=10,
     )
 
-    assert set(stats) == {"steps", "total_reward", "mean_return", "loss", "reached_goal"}
+    assert set(stats) == {"steps", "total_reward", "mean_return", "loss", "reached_goal", "mean_entropy"}
     assert stats["steps"] >= 1
     assert isinstance(stats["reached_goal"], bool)
     # the head learned; the brain stayed frozen (v1)
     assert not torch.equal(head_before, head.weight.detach())
     assert torch.equal(sensory_before, brain.sensory.fc1.weight.detach())
+
+
+def test_train_episode_reports_mean_entropy():
+    import torch
+    from neuromorphic.brain import Brain
+    from neuromorphic.envs import GridWorldEnv
+    from neuromorphic.training.reinforce import make_policy_head, train_episode
+
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(head.parameters(), lr=1e-2)
+    gen = torch.Generator().manual_seed(0)
+    stats = train_episode(brain, head, env, opt, generator=gen, max_steps=10)
+    assert "mean_entropy" in stats
+    assert stats["mean_entropy"] >= 0.0
+    assert stats["mean_entropy"] == stats["mean_entropy"]  # not NaN
