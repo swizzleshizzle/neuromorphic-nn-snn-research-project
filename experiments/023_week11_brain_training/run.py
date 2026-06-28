@@ -21,7 +21,7 @@ import torch  # noqa: E402
 
 from neuromorphic.brain import Brain  # noqa: E402
 from neuromorphic.envs import GridWorldEnv  # noqa: E402
-from neuromorphic.monitor import FileSink, record_episode  # noqa: E402
+from neuromorphic.monitor import FileSink, record_policy_episode  # noqa: E402
 from neuromorphic.training.reinforce import (  # noqa: E402
     ema,
     greedy_action,
@@ -125,14 +125,15 @@ def main() -> None:
     plt.savefig(CURVE, dpi=110)
     print(f"training curve -> {CURVE}")
 
-    # Record one trained episode for the NEURO·SCOPE dashboard. We record with
-    # recall=True (memory active) so the trace populates all five regions — the
-    # monitor's build_frame expects every region's output train. The *policy* was
-    # trained reactively (recall=False, ADR-0001); this trace simply shows the full
-    # assembled brain running, which is what the dashboard visualizes.
+    # Record one trained episode for the dashboard, driven by the TRAINED HEAD
+    # (recall=False, the actual policy). Bypassed regions render silent; only the
+    # sensory region is on the policy path in v1.
     sink = FileSink(TRACE)
-    record_episode(brain, env, sink, seed=args.seed, recall=True, generator=gen)
-    print(f"trained trace  -> {TRACE}", flush=True)
+    summary = record_policy_episode(
+        brain, head, env, sink, seed=args.seed, recall=False,
+        policy_regions=("sensory",), generator=gen,
+    )
+    print(f"trained trace  -> {TRACE} (reached_goal={summary['reached_goal']})", flush=True)
 
 
 if __name__ == "__main__":
