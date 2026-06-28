@@ -113,6 +113,11 @@ def resolve_step(n_frames, step):
 
 # --- styling helpers ----------------------------------------------------
 
+def region_tag(region_id, policy_regions) -> str:
+    """Honest label: is this region on the policy path, or a frozen spectator?"""
+    return "● on policy path" if region_id in (policy_regions or []) else "○ spectator (frozen)"
+
+
 def _style_ax(ax, title=None, accent=MUTED):
     ax.set_facecolor(PANEL)
     for spine in ax.spines.values():
@@ -124,7 +129,7 @@ def _style_ax(ax, title=None, accent=MUTED):
 
 # --- panels -------------------------------------------------------------
 
-def _raster(ax, spikes, region, label):
+def _raster(ax, spikes, region, label, tag=""):
     """Spike raster for one region: x = time, y = neuron, tinted by region."""
     arr = np.asarray(spikes)
     color = PALETTE.get(region, TEXT)
@@ -135,7 +140,8 @@ def _raster(ax, spikes, region, label):
         ax.set_xlim(-0.5, T - 0.5)
         ax.set_ylim(-0.5, max(N - 0.5, 0.5))
     _style_ax(ax, accent=color)
-    ax.set_ylabel(f"{label}\n(n={arr.shape[1] if arr.size else 0})",
+    suffix = f"\n{tag}" if tag else ""
+    ax.set_ylabel(f"{label}\n(n={arr.shape[1] if arr.size else 0}){suffix}",
                   color=color, fontsize=8, rotation=0, ha="right", va="center")
     ax.yaxis.set_label_coords(-0.04, 0.5)
 
@@ -217,6 +223,7 @@ def render_dashboard(header, frames, step):
     frame = frames[step]
     order = [r["id"] for r in header["regions"]]
     labels = {r["id"]: r.get("label", r["id"]) for r in header["regions"]}
+    policy_regions = header.get("policy_regions", [])
 
     fig = plt.figure(figsize=(16, 11))
     fig.patch.set_facecolor(BG)
@@ -231,7 +238,8 @@ def render_dashboard(header, frames, step):
     raster_axes = []
     for i, rid in enumerate(order):
         ax = fig.add_subplot(left[i])
-        _raster(ax, frame["field"][rid]["spikes"], rid, labels[rid])
+        _raster(ax, frame["field"][rid]["spikes"], rid, labels[rid],
+                tag=region_tag(rid, policy_regions))
         raster_axes.append(ax)
         if i < len(order) - 1:
             ax.set_xticklabels([])
@@ -250,6 +258,10 @@ def render_dashboard(header, frames, step):
         f"step {step}/{last}  ·  return {task['return']:.1f}",
         color=TEXT, fontsize=13, y=0.96,
     )
+    if policy_regions:
+        fig.text(0.10, 0.005,
+                 "v1: only policy-path regions learn; spectators are frozen (run the brain to engage them).",
+                 color=MUTED, fontsize=8, ha="left")
     return fig
 
 
