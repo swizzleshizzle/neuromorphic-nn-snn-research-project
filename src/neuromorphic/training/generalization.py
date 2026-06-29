@@ -103,6 +103,8 @@ class GenConfig:
     baseline_beta: float = 0.1
     size: int = 5
     start: tuple[int, int] = (0, 0)
+    head_type: str = "linear"
+    hidden: int = 128
     tag: str = "shaped"
     out_dir: Path = field(default_factory=lambda: Path("outputs"))
 
@@ -117,7 +119,7 @@ def run_generalization(cfg: GenConfig) -> dict:
         reward_shaping=cfg.shaping, max_steps=cfg.max_steps,
     )
     brain = Brain(grid_n=cfg.size, seed=cfg.seed)
-    head = make_policy_head(brain)
+    head = make_policy_head(brain, head_type=cfg.head_type, hidden=cfg.hidden)
     gen = torch.Generator().manual_seed(cfg.seed)
     opt = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
 
