@@ -62,7 +62,7 @@ def _config_hash(brain, seed: int) -> str:
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def build_header(brain, *, seed: int, action_labels, task_type: str = "gridworld", grid_n: int | None = None) -> dict:
+def build_header(brain, *, seed: int, action_labels, task_type: str = "gridworld", grid_n: int | None = None, policy_regions=None) -> dict:
     """Build the once-per-run trace header declaring brain topology + run context."""
     grid_n = brain.grid_n if grid_n is None else grid_n
     regions = [
@@ -75,4 +75,5 @@ def build_header(brain, *, seed: int, action_labels, task_type: str = "gridworld
         "task": {"type": task_type, "grid_n": grid_n, "action_labels": list(action_labels)},
         "regions": regions,
         "pathways": [dict(p) for p in PATHWAYS],
+        "policy_regions": list(policy_regions or []),
     }

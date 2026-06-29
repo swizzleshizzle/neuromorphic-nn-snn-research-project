@@ -22,6 +22,7 @@ export interface TraceHeader {
   task: { type: string; grid_n: number; action_labels: string[] };
   regions: Region[];
   pathways: Pathway[];
+  policy_regions?: string[];
 }
 
 export interface RegionState {

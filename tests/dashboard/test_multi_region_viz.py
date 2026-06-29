@@ -91,3 +91,11 @@ def test_render_dashboard_on_real_trace():
     fig = render_dashboard(header, frames, step=len(frames) - 1)
     assert isinstance(fig, Figure)
     assert len(fig.axes) >= 8
+
+
+def test_region_tag_marks_policy_vs_spectator():
+    from dashboard.multi_region_viz import region_tag
+    assert region_tag("sensory", ["sensory"]) == "● on policy path"
+    assert region_tag("motor", ["sensory"]) == "○ spectator (frozen)"
+    # empty/missing policy_regions -> no claim, treat as spectator-unknown (spectator string)
+    assert region_tag("sensory", []) == "○ spectator (frozen)"

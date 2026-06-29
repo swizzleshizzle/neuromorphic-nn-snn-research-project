@@ -38,9 +38,13 @@ def make_policy_head(brain) -> nn.Linear:
     return nn.Linear(brain.content, brain.n_actions)
 
 
-def _concept_rate(out: dict) -> torch.Tensor:
-    """Mean firing rate of the sensory concept over the window, single agent. → [concept]."""
+def concept_rate(out: dict) -> torch.Tensor:
+    """Mean firing rate of the sensory concept over the window, single agent. -> [concept]."""
     return out["concept"].mean(dim=0)[0]
+
+
+# Backward-compatible alias (older callers import the private name).
+_concept_rate = concept_rate
 
 
 def action_distribution(

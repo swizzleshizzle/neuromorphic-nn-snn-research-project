@@ -30,4 +30,12 @@ test("boots on the real trace and renders the data-driven shell", async ({ page 
   await expect(page.getByText("Spike Raster")).toBeVisible();
   // at least one router gate pill is present
   await expect(page.locator("[data-gate]").first()).toBeVisible();
+
+  // spectator badges render for frozen regions (trace carries policy_regions)
+  await expect(page.locator("[data-spectator]").first()).toBeVisible();
+
+  // export control is present and clickable
+  const exportBtn = page.locator("[data-export-png]");
+  await expect(exportBtn).toBeVisible();
+  await exportBtn.click();
 });

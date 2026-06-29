@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = resolve(here, "../../outputs/week11_dashboard_trace.jsonl");
+const src = resolve(here, "../../outputs/week11_trained_trace.jsonl");
 const dst = resolve(here, "../public/week11_dashboard_trace.jsonl");
 
 if (!existsSync(src)) {

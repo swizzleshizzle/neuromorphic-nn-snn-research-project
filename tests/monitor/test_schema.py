@@ -56,3 +56,15 @@ def test_header_is_json_serializable():
     brain = Brain(grid_n=5, seed=0)
     h = build_header(brain, seed=0, action_labels=("up", "right", "down", "left"))
     json.dumps(h)  # must not raise
+
+
+def test_build_header_includes_policy_regions():
+    from neuromorphic.brain import Brain
+    from neuromorphic.monitor.schema import build_header
+
+    brain = Brain(grid_n=5, seed=0)
+    h = build_header(brain, seed=0, action_labels=["up", "right", "down", "left"], policy_regions=["sensory"])
+    assert h["policy_regions"] == ["sensory"]
+    # default is an empty list (backward compatible)
+    h2 = build_header(brain, seed=0, action_labels=["up", "right", "down", "left"])
+    assert h2["policy_regions"] == []
