@@ -33,9 +33,22 @@ def ema(old: float, new: float, beta: float) -> float:
     return (1.0 - beta) * old + beta * new
 
 
-def make_policy_head(brain) -> nn.Linear:
-    """A trainable actor head: sensory concept (``brain.content`` dims) → action logits."""
-    return nn.Linear(brain.content, brain.n_actions)
+def make_policy_head(brain, head_type: str = "linear", hidden: int = 128) -> nn.Module:
+    """A trainable actor head: sensory concept (``brain.content`` dims) -> action logits.
+
+    ``head_type="linear"`` is the v1 default (a single ``nn.Linear``); ``"mlp"`` adds one
+    ReLU hidden layer of width ``hidden`` to test whether a nonlinear readout extracts more
+    from the frozen sensory concept (EXP-025). The brain stays frozen either way.
+    """
+    if head_type == "linear":
+        return nn.Linear(brain.content, brain.n_actions)
+    if head_type == "mlp":
+        return nn.Sequential(
+            nn.Linear(brain.content, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, brain.n_actions),
+        )
+    raise ValueError(f"unknown head_type {head_type!r} (expected 'linear' or 'mlp')")
 
 
 def concept_rate(out: dict) -> torch.Tensor:
@@ -48,7 +61,7 @@ _concept_rate = concept_rate
 
 
 def action_distribution(
-    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
+    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
 ) -> tuple[Categorical, torch.Tensor]:
     """One forward pass → a categorical policy from the head on the sensory concept.
 
@@ -62,21 +75,21 @@ def action_distribution(
 
 
 def greedy_action(
-    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
+    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
 ) -> int:
     """The argmax-logit action (deterministic eval policy)."""
     _, logits = action_distribution(brain, head, obs, generator=generator)
     return int(logits.argmax())
 
 
-def policy_parameters(head: nn.Linear):
+def policy_parameters(head: nn.Module):
     """Trainable parameters of the policy. v1: the head only — the brain is frozen."""
     return head.parameters()
 
 
 def train_episode(
     brain,
-    head: nn.Linear,
+    head: nn.Module,
     env,
     optimizer,
     *,

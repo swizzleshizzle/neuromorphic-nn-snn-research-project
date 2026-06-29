@@ -1,6 +1,8 @@
 import math
 
+import pytest
 import torch
+import torch.nn as nn
 
 from neuromorphic.brain import Brain
 from neuromorphic.envs import GridWorldEnv
@@ -114,3 +116,48 @@ def test_train_episode_reports_mean_entropy():
     assert "mean_entropy" in stats
     assert stats["mean_entropy"] >= 0.0
     assert stats["mean_entropy"] == stats["mean_entropy"]  # not NaN
+
+
+def test_make_policy_head_linear_is_unchanged_default():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    assert isinstance(head, nn.Linear)
+    assert head.in_features == brain.content
+    assert head.out_features == brain.n_actions
+
+
+def test_make_policy_head_mlp_shape_and_forward():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    assert isinstance(head, nn.Sequential)
+    x = torch.zeros(brain.content)
+    out = head(x)
+    assert out.shape == (brain.n_actions,)
+    assert len(list(head.parameters())) > 0
+
+
+def test_make_policy_head_rejects_unknown_type():
+    brain = Brain(grid_n=5, seed=0)
+    with pytest.raises(ValueError):
+        make_policy_head(brain, head_type="transformer")
+
+
+def test_train_episode_updates_mlp_head_but_not_the_frozen_brain():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    env = GridWorldEnv()
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    params_before = [p.detach().clone() for p in head.parameters()]
+    sensory_before = brain.sensory.fc1.weight.detach().clone()
+
+    train_episode(
+        brain, head, env, opt, gamma=0.99, baseline=0.0,
+        generator=torch.Generator().manual_seed(0), max_steps=10,
+    )
+
+    changed = any(
+        not torch.equal(b, a.detach())
+        for b, a in zip(params_before, head.parameters())
+    )
+    assert changed
+    assert torch.equal(sensory_before, brain.sensory.fc1.weight.detach())
