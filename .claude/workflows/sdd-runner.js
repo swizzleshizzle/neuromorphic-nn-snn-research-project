@@ -69,7 +69,7 @@ Return: specPass (bool), qualityApproved (bool), blocking = array of {severity, 
 
 function fixPrompt(t, base, blocking) {
   const list = blocking.map((b, i) => `${i + 1}. [${b.severity}] ${b.finding}`).join('\n')
-  return `Address these blocking review findings on Task ${t.n} (you are on branch week12-grid-generalization):
+  return `Address these blocking review findings on Task ${t.n} (work on the current git branch, do not switch branches):
 
 ${list}
 
