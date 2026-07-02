@@ -8,6 +8,14 @@ spec = importlib.util.spec_from_file_location(
 agg_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agg_mod)
 
+import importlib.util as _ilu
+from pathlib import Path as _P
+_run_spec = _ilu.spec_from_file_location(
+    "exp025_run", _P(__file__).resolve().parents[2] / "experiments" / "025_head_capacity" / "run.py"
+)
+run_mod = _ilu.module_from_spec(_run_spec)
+_run_spec.loader.exec_module(run_mod)
+
 
 def _summary(head_type, shaping, heldout_success, train_success):
     return {
@@ -41,3 +49,16 @@ def test_format_table_is_markdown_with_both_heads():
     assert "linear" in table and "mlp" in table
     assert "sparse" in table
     assert table.count("|") >= 6  # at least a header row of cells
+
+
+def test_build_configs_sets_entropy_beta_and_tag_suffix(tmp_path):
+    cfgs = run_mod.build_configs([0], episodes=5, out_dir=tmp_path, entropy_beta=0.01)
+    assert len(cfgs) == 4  # 2 heads x 2 regimes x 1 seed
+    assert all(c.entropy_beta == 0.01 for c in cfgs)
+    assert all(c.tag.endswith("_b01") for c in cfgs)
+
+
+def test_build_configs_zero_beta_has_no_suffix(tmp_path):
+    cfgs = run_mod.build_configs([0], episodes=5, out_dir=tmp_path, entropy_beta=0.0)
+    assert all(not c.tag.endswith("_b01") for c in cfgs)
+    assert all(c.entropy_beta == 0.0 for c in cfgs)

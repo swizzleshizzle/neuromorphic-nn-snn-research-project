@@ -29,8 +29,9 @@ aggregate_mod = importlib.util.module_from_spec(_agg_spec)
 _agg_spec.loader.exec_module(aggregate_mod)
 
 
-def build_configs(seeds: list[int], episodes: int, out_dir: Path) -> list[GenConfig]:
-    """The 2 heads x 2 regimes x seeds sweep, each tagged uniquely by regime/head/seed."""
+def build_configs(seeds: list[int], episodes: int, out_dir: Path, entropy_beta: float = 0.0) -> list[GenConfig]:
+    """The 2 heads x 2 regimes x seeds sweep, tagged uniquely; _b01 suffix when beta>0."""
+    suffix = "_b01" if entropy_beta else ""
     configs = []
     for head_type in ("linear", "mlp"):
         for shaping in (True, False):
@@ -38,8 +39,8 @@ def build_configs(seeds: list[int], episodes: int, out_dir: Path) -> list[GenCon
             for seed in seeds:
                 configs.append(GenConfig(
                     seed=seed, episodes=episodes, shaping=shaping,
-                    head_type=head_type, hidden=128,
-                    tag=f"{regime}_{head_type}_seed{seed}", out_dir=out_dir,
+                    head_type=head_type, hidden=128, entropy_beta=entropy_beta,
+                    tag=f"{regime}_{head_type}_seed{seed}{suffix}", out_dir=out_dir,
                 ))
     return configs
 
@@ -56,13 +57,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--episodes", type=int, default=600)
     p.add_argument("--workers", type=int, default=14,
                    help="parallel processes (runs are independent and single-threaded)")
+    p.add_argument("--entropy-beta", type=float, default=0.01,
+                   help="entropy-bonus coefficient for the re-run (0 disables)")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     out_dir = HERE / "outputs"
-    configs = build_configs(args.seeds, args.episodes, out_dir)
+    configs = build_configs(args.seeds, args.episodes, out_dir, entropy_beta=args.entropy_beta)
     out_dir.mkdir(parents=True, exist_ok=True)
     workers = max(1, min(args.workers, len(configs)))
     print(f"running {len(configs)} configs across {workers} workers ...", flush=True)
