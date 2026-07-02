@@ -105,6 +105,7 @@ class GenConfig:
     start: tuple[int, int] = (0, 0)
     head_type: str = "linear"
     hidden: int = 128
+    entropy_beta: float = 0.0
     tag: str = "shaped"
     out_dir: Path = field(default_factory=lambda: Path("outputs"))
 
@@ -128,7 +129,7 @@ def run_generalization(cfg: GenConfig) -> dict:
     for ep in range(cfg.episodes):
         stats = train_episode(
             brain, head, env, opt, gamma=cfg.gamma, baseline=baseline,
-            generator=gen, max_steps=cfg.max_steps,
+            generator=gen, max_steps=cfg.max_steps, entropy_beta=cfg.entropy_beta,
         )
         baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
         gx, gy = int(env.goal[0]), int(env.goal[1])

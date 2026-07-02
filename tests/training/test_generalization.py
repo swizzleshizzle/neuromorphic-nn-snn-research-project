@@ -93,3 +93,16 @@ def test_run_generalization_is_deterministic_for_fixed_seed_and_head(tmp_path):
     assert a["eval"] == b["eval"]
     assert a["train_goals"] == b["train_goals"]
     assert a["heldout_goals"] == b["heldout_goals"]
+
+
+def test_genconfig_defaults_entropy_beta_zero():
+    assert GenConfig().entropy_beta == 0.0
+
+
+def test_run_generalization_records_entropy_beta(tmp_path):
+    cfg = GenConfig(
+        seed=0, episodes=3, n_heldout=2, max_steps=8,
+        entropy_beta=0.01, tag="smoke_beta", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["config"]["entropy_beta"] == 0.01
