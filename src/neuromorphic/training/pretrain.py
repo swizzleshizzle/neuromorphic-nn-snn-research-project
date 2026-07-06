@@ -39,3 +39,56 @@ def split_states(states: torch.Tensor, frac_heldout: float, seed: int) -> tuple[
     perm = torch.randperm(n, generator=torch.Generator().manual_seed(seed))
     n_held = round(n * frac_heldout)
     return states[perm[n_held:]], states[perm[:n_held]]
+
+
+def concept_rate_batch(sensory, obs, grid_n, T: int = 32, generator=None) -> torch.Tensor:
+    """Encode ``[B, 4]`` obs -> mean-over-T concept rate ``[B, concept]``, differentiable.
+
+    Calls the encoder directly (NOT via ``brain.step``, which wraps it in ``no_grad``) so
+    gradients reach ``sensory.fc1`` / ``fc2`` during pre-training.
+    """
+    spikes = encode_gridworld(obs, grid_n, T=T, generator=generator)   # [T, B, N_obs]
+    concept = sensory(spikes)                                          # [T, B, concept]
+    return concept.mean(dim=0)                                         # [B, concept]
+
+
+def _disp_mae(readout, sensory, obs, grid_n, T, generator) -> float:
+    with torch.no_grad():
+        pred = readout(concept_rate_batch(sensory, obs, grid_n, T=T, generator=generator))
+        return float((pred - displacement_target(obs, grid_n)).abs().mean())
+
+
+def pretrain_sensory(
+    sensory, *, grid_n, epochs: int = 200, lr: float = 1e-3, frac_heldout: float = 0.2,
+    seed: int = 0, T: int = 32, generator=None, freeze_encoder: bool = False,
+) -> dict:
+    """Pre-train ``sensory`` so its concept linearly decodes goal-relative displacement.
+
+    Trains a scratch ``Linear(concept -> 2)`` readout (and the encoder unless
+    ``freeze_encoder``) with MSE + Adam over the train state split; reports mean-absolute
+    displacement error on the train and held-out splits. The readout is discarded.
+    """
+    torch.manual_seed(seed)
+    states = enumerate_states(grid_n)
+    train_states, heldout_states = split_states(states, frac_heldout, seed)
+
+    readout = nn.Linear(sensory.concept, 2)
+    params = list(readout.parameters())
+    if not freeze_encoder:
+        params += list(sensory.parameters())
+    opt = torch.optim.Adam(params, lr=lr)
+
+    for _ in range(epochs):
+        rate = concept_rate_batch(sensory, train_states, grid_n, T=T, generator=generator)
+        pred = readout(rate)
+        loss = ((pred - displacement_target(train_states, grid_n)) ** 2).mean()
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+
+    return {
+        "train_disp_error": _disp_mae(readout, sensory, train_states, grid_n, T, generator),
+        "heldout_disp_error": _disp_mae(readout, sensory, heldout_states, grid_n, T, generator),
+        "epochs": epochs,
+        "freeze_encoder": freeze_encoder,
+    }
