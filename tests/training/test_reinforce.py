@@ -1,6 +1,8 @@
 import math
 
+import pytest
 import torch
+import torch.nn as nn
 
 from neuromorphic.brain import Brain
 from neuromorphic.envs import GridWorldEnv
@@ -114,3 +116,151 @@ def test_train_episode_reports_mean_entropy():
     assert "mean_entropy" in stats
     assert stats["mean_entropy"] >= 0.0
     assert stats["mean_entropy"] == stats["mean_entropy"]  # not NaN
+
+
+def test_make_policy_head_linear_is_unchanged_default():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    assert isinstance(head, nn.Linear)
+    assert head.in_features == brain.content
+    assert head.out_features == brain.n_actions
+
+
+def test_make_policy_head_mlp_shape_and_forward():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    assert isinstance(head, nn.Sequential)
+    x = torch.zeros(brain.content)
+    out = head(x)
+    assert out.shape == (brain.n_actions,)
+    assert len(list(head.parameters())) > 0
+
+
+def test_make_policy_head_rejects_unknown_type():
+    brain = Brain(grid_n=5, seed=0)
+    with pytest.raises(ValueError):
+        make_policy_head(brain, head_type="transformer")
+
+
+def test_train_episode_updates_mlp_head_but_not_the_frozen_brain():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    env = GridWorldEnv()
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    params_before = [p.detach().clone() for p in head.parameters()]
+    sensory_before = brain.sensory.fc1.weight.detach().clone()
+
+    train_episode(
+        brain, head, env, opt, gamma=0.99, baseline=0.0,
+        generator=torch.Generator().manual_seed(0), max_steps=10,
+    )
+
+    changed = any(
+        not torch.equal(b, a.detach())
+        for b, a in zip(params_before, head.parameters())
+    )
+    assert changed
+    assert torch.equal(sensory_before, brain.sensory.fc1.weight.detach())
+
+
+def test_train_episode_entropy_beta_default_matches_no_bonus():
+    """entropy_beta=0.0 must reproduce the exact loss (EXP-023/024 byte-identity)."""
+    def run(beta):
+        brain = Brain(grid_n=5, seed=0)
+        head = make_policy_head(brain)
+        env = GridWorldEnv(max_steps=10)
+        opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+        return train_episode(
+            brain, head, env, opt, gamma=0.99, baseline=0.0,
+            generator=torch.Generator().manual_seed(0), max_steps=10,
+            entropy_beta=beta,
+        )["loss"]
+    assert run(0.0) == run(0.0)  # deterministic
+    # explicit default path == explicitly passing 0.0
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    loss_default = train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0), max_steps=10,
+    )["loss"]
+    assert loss_default == run(0.0)
+
+
+def test_train_episode_entropy_bonus_lowers_loss():
+    """With entropy > 0, a positive beta subtracts a positive term -> lower loss."""
+    def loss_for(beta):
+        brain = Brain(grid_n=5, seed=0)
+        head = make_policy_head(brain)
+        env = GridWorldEnv(max_steps=10)
+        opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+        return train_episode(
+            brain, head, env, opt, gamma=0.99, baseline=0.0,
+            generator=torch.Generator().manual_seed(0), max_steps=10,
+            entropy_beta=beta,
+        )
+    base = loss_for(0.0)
+    bonus = loss_for(0.5)
+    assert base["mean_entropy"] > 0.0
+    assert bonus["loss"] < base["loss"]
+
+
+def test_train_episode_with_bonus_updates_head():
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    before = [p.detach().clone() for p in head.parameters()]
+    train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0),
+        max_steps=10, entropy_beta=0.01,
+    )
+    assert any(not torch.equal(b, a.detach()) for b, a in zip(before, head.parameters()))
+
+
+def _loss_with(normalize):
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    return train_episode(
+        brain, head, env, opt, gamma=0.99, baseline=0.0,
+        generator=torch.Generator().manual_seed(0), max_steps=10,
+        normalize_advantages=normalize,
+    )
+
+
+def test_normalize_advantages_default_matches_no_normalization():
+    """Default (False) must reproduce the exact loss (EXP-023/024/025-b0 byte-identity)."""
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    loss_default = train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0), max_steps=10,
+    )["loss"]
+    assert loss_default == _loss_with(False)["loss"]
+
+
+def test_normalize_advantages_changes_loss_and_stays_finite():
+    import math
+    base = _loss_with(False)["loss"]
+    norm = _loss_with(True)["loss"]
+    assert math.isfinite(norm)
+    assert norm != base
+
+
+def test_normalize_advantages_updates_head_no_nan():
+    import math
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    before = [p.detach().clone() for p in head.parameters()]
+    stats = train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0),
+        max_steps=10, entropy_beta=0.05, normalize_advantages=True,
+    )
+    assert math.isfinite(stats["loss"])
+    assert all(torch.isfinite(p).all() for p in head.parameters())
+    assert any(not torch.equal(b, a.detach()) for b, a in zip(before, head.parameters()))

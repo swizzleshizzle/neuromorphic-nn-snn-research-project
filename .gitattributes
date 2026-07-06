@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Workflow scripts must stay LF on checkout too: a CRLF byte trips the
+# Workflow tool's permission dialog with "script contains control characters".
+.claude/workflows/*.js text eol=lf

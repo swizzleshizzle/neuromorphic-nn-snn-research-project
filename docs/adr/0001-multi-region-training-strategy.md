@@ -1,6 +1,6 @@
 # ADR-0001 — Multi-Region Training Strategy
 
-- **Status:** Accepted (amended 2026-06-22, see Amendment 1)
+- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2)
 - **Date:** 2026-06-18
 - **Phase:** 2 (multi-region brain), Step 2.3 — "how does the whole brain learn?"
 - **Deciders:** project author
@@ -42,6 +42,36 @@ bypassed (`recall=False`). Result: untrained −60 / 0% goal → **trained +3 / 
   PFC/motor a non-degenerate readout so they can re-enter the policy path, are follow-ups
   (candidates: motor re-init to break the structural favourite, region pre-training, an
   entropy bonus). The R-STDP hybrid path (below) is unchanged.
+
+---
+
+## Amendment 2 (2026-07-06, Week-13 EXP-025) — the cap is the frozen encoder, not the readout
+
+Amendment 1 left one question open: is the ~30-50% held-out navigation cap caused by the *linear head*
+or by the *frozen encoder* underneath it? EXP-025 (`experiments/025_head_capacity/`) answers it by
+swapping a one-hidden-layer MLP head (`Linear(64→128)→ReLU→Linear(128→4)`) for the linear head and
+comparing held-out generalization across a paired 5-seed sweep.
+
+Getting a **fair** comparison took removing a confound. A naive MLP under REINFORCE walks straight
+into the Amendment-1 saturation failure — about half the seeds collapse to a zero-entropy one-hot
+policy and die. Two optional, default-off trainer stabilizers were added (byte-identical to prior
+baselines): an **entropy bonus** (`entropy_beta`, `-beta * sum_t H`) and **per-episode advantage
+normalization** (`normalize_advantages`). A modest `entropy_beta=0.01` alone did nothing (the summed
+entropy term was dwarfed by un-normalized advantages); **advantage normalization plus
+`entropy_beta=0.05` eliminated the collapse entirely** (0/10 MLP runs collapse; MLP entropy 1.11-1.35).
+
+**Result:** with a collapse-free, fair test, the **MLP head does not beat the linear head** on
+held-out goals (shaped 20% vs 10%; sparse 10% vs 20%; net even, each within the other's seed spread).
+A nonlinear readout extracts no more *generalizable* signal from the frozen 64-d sensory concept.
+
+**Amended conclusion:** readout capacity is **not** the binding constraint — the **frozen sensory
+encoder is the wall**. The v1 "frozen feature extractor + trainable head" design has been pushed to
+its representational ceiling. The next lever is to **engage the encoder**: supervised pre-training of
+the sensory region and/or unfreezing it to train end-to-end (the entropy-bonus and
+advantage-normalization stabilizers are now in place to make that tractable). This is the Phase-2→3
+bridge, and the first change that lets a region *specialize through learning* — which is what makes
+the deferred ablation studies meaningful. (Caveat: n=5 seeds, wide spread — the load-bearing claim is
+"no MLP advantage," not a precise cap figure.)
 
 ---
 

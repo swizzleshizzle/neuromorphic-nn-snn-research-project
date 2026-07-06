@@ -64,3 +64,58 @@ def test_run_generalization_smoke(tmp_path):
     lines = (tmp_path / "024_grid_generalization_smoke_metrics.csv").read_text().strip().splitlines()
     assert lines[0] == "episode,goal_x,goal_y,total_reward,steps,goal_reached,entropy"
     assert len(lines) == 1 + 2  # header + 2 episodes
+
+
+from neuromorphic.training.generalization import GenConfig, run_generalization
+
+
+def test_genconfig_defaults_to_linear_head():
+    cfg = GenConfig()
+    assert cfg.head_type == "linear"
+    assert cfg.hidden == 128
+
+
+def test_run_generalization_mlp_head_records_head_type(tmp_path):
+    cfg = GenConfig(
+        seed=0, episodes=3, n_heldout=2, max_steps=8,
+        head_type="mlp", hidden=32, tag="smoke_mlp", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["config"]["head_type"] == "mlp"
+    assert summary["config"]["hidden"] == 32
+    assert "train" in summary["eval"] and "heldout" in summary["eval"]
+
+
+def test_run_generalization_is_deterministic_for_fixed_seed_and_head(tmp_path):
+    base = dict(seed=1, episodes=3, n_heldout=2, max_steps=8, head_type="linear")
+    a = run_generalization(GenConfig(**base, tag="det_a", out_dir=tmp_path))
+    b = run_generalization(GenConfig(**base, tag="det_b", out_dir=tmp_path))
+    assert a["eval"] == b["eval"]
+    assert a["train_goals"] == b["train_goals"]
+    assert a["heldout_goals"] == b["heldout_goals"]
+
+
+def test_genconfig_defaults_entropy_beta_zero():
+    assert GenConfig().entropy_beta == 0.0
+
+
+def test_run_generalization_records_entropy_beta(tmp_path):
+    cfg = GenConfig(
+        seed=0, episodes=3, n_heldout=2, max_steps=8,
+        entropy_beta=0.01, tag="smoke_beta", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["config"]["entropy_beta"] == 0.01
+
+
+def test_genconfig_defaults_normalize_advantages_false():
+    assert GenConfig().normalize_advantages is False
+
+
+def test_run_generalization_records_normalize_advantages(tmp_path):
+    cfg = GenConfig(
+        seed=0, episodes=3, n_heldout=2, max_steps=8,
+        normalize_advantages=True, tag="smoke_an", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["config"]["normalize_advantages"] is True

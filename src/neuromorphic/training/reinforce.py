@@ -33,9 +33,22 @@ def ema(old: float, new: float, beta: float) -> float:
     return (1.0 - beta) * old + beta * new
 
 
-def make_policy_head(brain) -> nn.Linear:
-    """A trainable actor head: sensory concept (``brain.content`` dims) → action logits."""
-    return nn.Linear(brain.content, brain.n_actions)
+def make_policy_head(brain, head_type: str = "linear", hidden: int = 128) -> nn.Module:
+    """A trainable actor head: sensory concept (``brain.content`` dims) -> action logits.
+
+    ``head_type="linear"`` is the v1 default (a single ``nn.Linear``); ``"mlp"`` adds one
+    ReLU hidden layer of width ``hidden`` to test whether a nonlinear readout extracts more
+    from the frozen sensory concept (EXP-025). The brain stays frozen either way.
+    """
+    if head_type == "linear":
+        return nn.Linear(brain.content, brain.n_actions)
+    if head_type == "mlp":
+        return nn.Sequential(
+            nn.Linear(brain.content, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, brain.n_actions),
+        )
+    raise ValueError(f"unknown head_type {head_type!r} (expected 'linear' or 'mlp')")
 
 
 def concept_rate(out: dict) -> torch.Tensor:
@@ -48,7 +61,7 @@ _concept_rate = concept_rate
 
 
 def action_distribution(
-    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
+    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
 ) -> tuple[Categorical, torch.Tensor]:
     """One forward pass → a categorical policy from the head on the sensory concept.
 
@@ -62,21 +75,21 @@ def action_distribution(
 
 
 def greedy_action(
-    brain, head: nn.Linear, obs, *, generator: torch.Generator | None = None
+    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
 ) -> int:
     """The argmax-logit action (deterministic eval policy)."""
     _, logits = action_distribution(brain, head, obs, generator=generator)
     return int(logits.argmax())
 
 
-def policy_parameters(head: nn.Linear):
+def policy_parameters(head: nn.Module):
     """Trainable parameters of the policy. v1: the head only — the brain is frozen."""
     return head.parameters()
 
 
 def train_episode(
     brain,
-    head: nn.Linear,
+    head: nn.Module,
     env,
     optimizer,
     *,
@@ -84,8 +97,16 @@ def train_episode(
     baseline: float = 0.0,
     generator: torch.Generator | None = None,
     max_steps: int | None = None,
+    entropy_beta: float = 0.0,
+    normalize_advantages: bool = False,
 ) -> dict:
     """Run one episode, then apply one REINFORCE update to the head. Memory bypassed.
+
+    ``entropy_beta`` > 0 adds an optional ``-beta * sum_t H`` entropy bonus to the loss
+    (encourages exploration); the default 0.0 leaves the executed loss statement unchanged.
+    ``normalize_advantages`` standardizes advantages per episode (zero-mean/unit-scale,
+    population std to stay finite on 1-step episodes) so the entropy bonus and gradient are
+    on a predictable scale; the default False leaves the executed statements unchanged.
 
     Returns stats: ``steps``, ``total_reward`` (undiscounted), ``mean_return``
     (mean discounted return-to-go, for baseline tracking), ``loss``, ``reached_goal``.
@@ -114,7 +135,11 @@ def train_episode(
 
     returns = torch.tensor(discounted_returns(rewards, gamma), dtype=torch.float32)
     advantages = returns - baseline
+    if normalize_advantages:
+        advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     loss = -(torch.stack(log_probs) * advantages).sum()
+    if entropy_beta:
+        loss = loss - entropy_beta * torch.stack(entropies).sum()
 
     optimizer.zero_grad()
     loss.backward()
