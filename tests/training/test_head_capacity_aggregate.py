@@ -62,3 +62,20 @@ def test_build_configs_zero_beta_has_no_suffix(tmp_path):
     cfgs = run_mod.build_configs([0], episodes=5, out_dir=tmp_path, entropy_beta=0.0)
     assert all(not c.tag.endswith("_b01") for c in cfgs)
     assert all(c.entropy_beta == 0.0 for c in cfgs)
+
+
+def test_build_configs_normalize_advantages_flag_and_suffix(tmp_path):
+    cfgs = run_mod.build_configs(
+        [0], episodes=5, out_dir=tmp_path, entropy_beta=0.05, normalize_advantages=True
+    )
+    assert len(cfgs) == 4
+    assert all(c.normalize_advantages is True for c in cfgs)
+    assert all(c.entropy_beta == 0.05 for c in cfgs)
+    # suffix encodes both the beta value and the advantage-norm flag
+    assert all(c.tag.endswith("_b05_an") for c in cfgs)
+
+
+def test_build_configs_no_normalize_has_no_an_suffix(tmp_path):
+    cfgs = run_mod.build_configs([0], episodes=5, out_dir=tmp_path, entropy_beta=0.01)
+    assert all(c.normalize_advantages is False for c in cfgs)
+    assert all(not c.tag.endswith("_an") for c in cfgs)

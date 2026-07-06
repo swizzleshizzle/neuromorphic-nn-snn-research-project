@@ -106,3 +106,16 @@ def test_run_generalization_records_entropy_beta(tmp_path):
     )
     summary = run_generalization(cfg)
     assert summary["config"]["entropy_beta"] == 0.01
+
+
+def test_genconfig_defaults_normalize_advantages_false():
+    assert GenConfig().normalize_advantages is False
+
+
+def test_run_generalization_records_normalize_advantages(tmp_path):
+    cfg = GenConfig(
+        seed=0, episodes=3, n_heldout=2, max_steps=8,
+        normalize_advantages=True, tag="smoke_an", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["config"]["normalize_advantages"] is True

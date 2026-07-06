@@ -98,11 +98,15 @@ def train_episode(
     generator: torch.Generator | None = None,
     max_steps: int | None = None,
     entropy_beta: float = 0.0,
+    normalize_advantages: bool = False,
 ) -> dict:
     """Run one episode, then apply one REINFORCE update to the head. Memory bypassed.
 
     ``entropy_beta`` > 0 adds an optional ``-beta * sum_t H`` entropy bonus to the loss
     (encourages exploration); the default 0.0 leaves the executed loss statement unchanged.
+    ``normalize_advantages`` standardizes advantages per episode (zero-mean/unit-scale,
+    population std to stay finite on 1-step episodes) so the entropy bonus and gradient are
+    on a predictable scale; the default False leaves the executed statements unchanged.
 
     Returns stats: ``steps``, ``total_reward`` (undiscounted), ``mean_return``
     (mean discounted return-to-go, for baseline tracking), ``loss``, ``reached_goal``.
@@ -131,6 +135,8 @@ def train_episode(
 
     returns = torch.tensor(discounted_returns(rewards, gamma), dtype=torch.float32)
     advantages = returns - baseline
+    if normalize_advantages:
+        advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     loss = -(torch.stack(log_probs) * advantages).sum()
     if entropy_beta:
         loss = loss - entropy_beta * torch.stack(entropies).sum()

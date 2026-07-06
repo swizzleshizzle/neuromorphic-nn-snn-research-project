@@ -29,9 +29,15 @@ aggregate_mod = importlib.util.module_from_spec(_agg_spec)
 _agg_spec.loader.exec_module(aggregate_mod)
 
 
-def build_configs(seeds: list[int], episodes: int, out_dir: Path, entropy_beta: float = 0.0) -> list[GenConfig]:
-    """The 2 heads x 2 regimes x seeds sweep, tagged uniquely; _b01 suffix when beta>0."""
-    suffix = "_b01" if entropy_beta else ""
+def build_configs(seeds: list[int], episodes: int, out_dir: Path,
+                  entropy_beta: float = 0.0, normalize_advantages: bool = False) -> list[GenConfig]:
+    """The 2 heads x 2 regimes x seeds sweep, tagged uniquely.
+
+    Tag suffix encodes the run's config so re-runs never overwrite each other:
+    ``_b05`` for entropy_beta=0.05, ``_an`` for advantage normalization (e.g. ``_b05_an``).
+    """
+    suffix = (f"_b{round(entropy_beta * 100):02d}" if entropy_beta else "") + \
+             ("_an" if normalize_advantages else "")
     configs = []
     for head_type in ("linear", "mlp"):
         for shaping in (True, False):
@@ -40,6 +46,7 @@ def build_configs(seeds: list[int], episodes: int, out_dir: Path, entropy_beta: 
                 configs.append(GenConfig(
                     seed=seed, episodes=episodes, shaping=shaping,
                     head_type=head_type, hidden=128, entropy_beta=entropy_beta,
+                    normalize_advantages=normalize_advantages,
                     tag=f"{regime}_{head_type}_seed{seed}{suffix}", out_dir=out_dir,
                 ))
     return configs
@@ -59,13 +66,16 @@ def parse_args() -> argparse.Namespace:
                    help="parallel processes (runs are independent and single-threaded)")
     p.add_argument("--entropy-beta", type=float, default=0.01,
                    help="entropy-bonus coefficient for the re-run (0 disables)")
+    p.add_argument("--normalize-advantages", action="store_true",
+                   help="standardize advantages per episode (stabilizes the entropy bonus)")
     return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     out_dir = HERE / "outputs"
-    configs = build_configs(args.seeds, args.episodes, out_dir, entropy_beta=args.entropy_beta)
+    configs = build_configs(args.seeds, args.episodes, out_dir, entropy_beta=args.entropy_beta,
+                            normalize_advantages=args.normalize_advantages)
     out_dir.mkdir(parents=True, exist_ok=True)
     workers = max(1, min(args.workers, len(configs)))
     print(f"running {len(configs)} configs across {workers} workers ...", flush=True)

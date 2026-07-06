@@ -216,3 +216,51 @@ def test_train_episode_with_bonus_updates_head():
         max_steps=10, entropy_beta=0.01,
     )
     assert any(not torch.equal(b, a.detach()) for b, a in zip(before, head.parameters()))
+
+
+def _loss_with(normalize):
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    return train_episode(
+        brain, head, env, opt, gamma=0.99, baseline=0.0,
+        generator=torch.Generator().manual_seed(0), max_steps=10,
+        normalize_advantages=normalize,
+    )
+
+
+def test_normalize_advantages_default_matches_no_normalization():
+    """Default (False) must reproduce the exact loss (EXP-023/024/025-b0 byte-identity)."""
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    loss_default = train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0), max_steps=10,
+    )["loss"]
+    assert loss_default == _loss_with(False)["loss"]
+
+
+def test_normalize_advantages_changes_loss_and_stays_finite():
+    import math
+    base = _loss_with(False)["loss"]
+    norm = _loss_with(True)["loss"]
+    assert math.isfinite(norm)
+    assert norm != base
+
+
+def test_normalize_advantages_updates_head_no_nan():
+    import math
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain, head_type="mlp", hidden=128)
+    env = GridWorldEnv(max_steps=10)
+    opt = torch.optim.Adam(policy_parameters(head), lr=1e-2)
+    before = [p.detach().clone() for p in head.parameters()]
+    stats = train_episode(
+        brain, head, env, opt, generator=torch.Generator().manual_seed(0),
+        max_steps=10, entropy_beta=0.05, normalize_advantages=True,
+    )
+    assert math.isfinite(stats["loss"])
+    assert all(torch.isfinite(p).all() for p in head.parameters())
+    assert any(not torch.equal(b, a.detach()) for b, a in zip(before, head.parameters()))
