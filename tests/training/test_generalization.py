@@ -119,3 +119,31 @@ def test_run_generalization_records_normalize_advantages(tmp_path):
     )
     summary = run_generalization(cfg)
     assert summary["config"]["normalize_advantages"] is True
+
+
+def test_genconfig_defaults_no_pretrain():
+    cfg = GenConfig()
+    assert cfg.pretrain_sensory is False
+    assert cfg.pretrain_epochs == 200
+    assert cfg.pretrain_lr == 1e-3
+
+
+def test_run_generalization_without_pretrain_has_null_pretrain(tmp_path):
+    cfg = GenConfig(seed=0, episodes=2, n_heldout=2, max_steps=8, tag="no_pt", out_dir=tmp_path)
+    summary = run_generalization(cfg)
+    assert summary["pretrain"] is None
+
+
+def test_run_generalization_with_pretrain_records_gate_and_changes_encoder(tmp_path):
+    import torch
+    from neuromorphic.brain import Brain
+
+    random_w1 = Brain(grid_n=5, seed=0).sensory.fc1.weight.detach().clone()
+    cfg = GenConfig(
+        seed=0, episodes=2, n_heldout=2, max_steps=8,
+        pretrain_sensory=True, pretrain_epochs=10, tag="pt", out_dir=tmp_path,
+    )
+    summary = run_generalization(cfg)
+    assert summary["pretrain"] is not None
+    assert "heldout_disp_error" in summary["pretrain"]
+    assert summary["config"]["pretrain_sensory"] is True
