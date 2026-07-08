@@ -1,6 +1,6 @@
 # ADR-0001 — Multi-Region Training Strategy
 
-- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2)
+- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2; 2026-07-07 Amendment 3)
 - **Date:** 2026-06-18
 - **Phase:** 2 (multi-region brain), Step 2.3 — "how does the whole brain learn?"
 - **Deciders:** project author
@@ -72,6 +72,39 @@ advantage-normalization stabilizers are now in place to make that tractable). Th
 bridge, and the first change that lets a region *specialize through learning* — which is what makes
 the deferred ablation studies meaningful. (Caveat: n=5 seeds, wide spread — the load-bearing claim is
 "no MLP advantage," not a precise cap figure.)
+
+---
+
+## Amendment 3 (2026-07-07, Week-14 EXP-026) — engaging the encoder lifts the cap (Option B validated)
+
+Amendment 2 concluded the frozen sensory encoder is the navigation cap and pointed at engaging it.
+EXP-026 (`experiments/026_sensory_pretrain/`) does the first engagement: **pre-train the sensory
+encoder** on a supervised state-encoding task, freeze it, and re-run the generalization eval.
+
+The objective is **goal-relative displacement**: a scratch `Linear(concept -> 2)` readout is trained
+to predict `(gx-ax, gy-ay)` (normalized) from the concept rate, backprop through the spiking encoder
+(surrogate gradients); the readout is discarded and the shaped encoder kept, then frozen for the RL
+policy. A two-stage protocol: (1) a cheap gate on held-out *displacement* decode error, then (2) the
+paired held-out *navigation* eval.
+
+**Result (de-noised, 12 seeds, both arms paired by seed, held-out 10):**
+- Stage 1 gate passes decisively — pre-trained displacement error ~0.14 vs a random-encoder ~0.32,
+  all 12 seeds. The encoder learns goal-direction.
+- Stage 2 — pre-training **lifts held-out navigation** ~2.5-5x on the mean: paired per-seed,
+  pre-training beats the random encoder in **19 of 24 seed-regime cells** (shaped 9/12, +28 pts;
+  sparse 10/12, +34 pts; sparse sign-test p approx 0.02, pooled p < 0.001). An initial n=5 run had
+  read as a failure (sparse apparently regressing); that was seed noise, corrected by de-noising.
+
+**Conclusion:** **engaging a region via training lifts the representational cap.** The
+frozen-random encoder was a real binding constraint (consistent with Amendment 2), and shaping it
+moves the cap. This is the first evidence that a region specializing through learning helps the
+task — which also makes the deferred ablation studies meaningful. Caveats kept explicit: per-run
+variance is high (single seeds swing 0-100%), so the claim is an averaged effect, not a reliable
+per-run one; and the pre-registered "clears the band" (mean + range) criterion is not met, but the
+paired per-seed test is the correct analysis for a paired design and is decisively positive.
+
+Follow-ups this unlocks: ablation of the now-engaged encoder; reducing the RL variance; and the
+other Option-B flavor (unfreeze the encoder end-to-end so it adapts to the reward, not a proxy).
 
 ---
 
