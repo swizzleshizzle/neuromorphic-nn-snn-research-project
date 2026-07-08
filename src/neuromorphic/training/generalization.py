@@ -17,6 +17,7 @@ import torch
 
 from neuromorphic.brain import Brain
 from neuromorphic.envs.gridworld import GridWorldEnv, manhattan
+from neuromorphic.training.pretrain import pretrain_sensory
 from neuromorphic.training.reinforce import (
     ema,
     greedy_action,
@@ -107,6 +108,9 @@ class GenConfig:
     hidden: int = 128
     entropy_beta: float = 0.0
     normalize_advantages: bool = False
+    pretrain_sensory: bool = False
+    pretrain_epochs: int = 200
+    pretrain_lr: float = 1e-3
     tag: str = "shaped"
     out_dir: Path = field(default_factory=lambda: Path("outputs"))
 
@@ -121,6 +125,12 @@ def run_generalization(cfg: GenConfig) -> dict:
         reward_shaping=cfg.shaping, max_steps=cfg.max_steps,
     )
     brain = Brain(grid_n=cfg.size, seed=cfg.seed)
+    pretrain_info = None
+    if cfg.pretrain_sensory:
+        pretrain_info = pretrain_sensory(
+            brain.sensory, grid_n=cfg.size, epochs=cfg.pretrain_epochs, lr=cfg.pretrain_lr,
+            seed=cfg.seed, generator=torch.Generator().manual_seed(cfg.seed),
+        )
     head = make_policy_head(brain, head_type=cfg.head_type, hidden=cfg.hidden)
     gen = torch.Generator().manual_seed(cfg.seed)
     opt = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
@@ -156,6 +166,7 @@ def run_generalization(cfg: GenConfig) -> dict:
         "train_goals": train_goals,
         "heldout_goals": heldout_goals,
         "eval": {"train": asdict(eval_train), "heldout": asdict(eval_held)},
+        "pretrain": pretrain_info,
         "generalization_gap": gap,
     }
     json_path = cfg.out_dir / f"024_grid_generalization_{cfg.tag}_summary.json"
