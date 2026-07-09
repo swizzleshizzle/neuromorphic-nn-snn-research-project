@@ -4,6 +4,8 @@ from neuromorphic.analysis.probes import (
     optimal_action_targets, ridge_probe, peraction_probe, shuffle_null,
     pca_reduce, participation_ratio, unit_importance, keepk_curve,
 )
+from neuromorphic.brain import Brain
+from neuromorphic.analysis.probes import region_rate_matrix, task_targets
 
 
 def test_optimal_action_targets_known_cases():
@@ -69,3 +71,29 @@ def test_keepk_curve_monotone_top_units():
     curve = keepk_curve(X[:150], Y[:150], X[150:], Y[150:], order=order, ks=[1, 3, 12], lam=1e-2)
     r2 = {c["k"]: c["r2"] for c in curve}
     assert r2[3] > 0.8 and r2[3] >= r2[1] - 1e-6   # top-3 recover most signal
+
+
+def test_region_rate_matrix_sensory_shape_and_state_dependent():
+    brain = Brain(grid_n=5, seed=0)
+    states = torch.tensor([[0, 0, 4, 4], [4, 4, 0, 0], [1, 2, 3, 0]])
+    gen = torch.Generator().manual_seed(0)
+    R = region_rate_matrix(brain, states, region_key="sensory", signal_key="concept",
+                           width=64, recall=False, T=16, generator=gen)
+    assert R.shape == (3, 64)
+    assert not torch.allclose(R[0], R[1])   # different states -> different concept rate
+
+
+def test_region_rate_matrix_zero_fills_bypassed_hippocampus():
+    brain = Brain(grid_n=5, seed=0)
+    states = torch.tensor([[0, 0, 4, 4], [2, 2, 1, 1]])
+    R = region_rate_matrix(brain, states, region_key="hippocampus", signal_key="population",
+                           width=150, recall=False, T=16, generator=torch.Generator().manual_seed(0))
+    assert R.shape == (2, 150)
+    assert torch.count_nonzero(R) == 0   # bypassed -> zero-filled, not a crash
+
+
+def test_task_targets_shapes():
+    states = torch.tensor([[0, 0, 4, 4], [4, 0, 0, 4]])
+    t = task_targets(states, grid_n=5)
+    assert t["displacement"].shape == (2, 2)
+    assert t["optimal_action"].shape == (2, 4)

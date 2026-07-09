@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.optim import Adam
 
 from neuromorphic.envs.gridworld import manhattan
+from neuromorphic.training.pretrain import displacement_target
 
 _DELTAS = ((0, -1), (1, 0), (0, 1), (-1, 0))  # up, right, down, left (matches GridWorldEnv)
 
@@ -97,3 +98,39 @@ def keepk_curve(X_tr, Y_tr, X_te, Y_te, order, ks, lam: float) -> list:
         idx = order[:k]
         out.append({"k": int(k), "r2": ridge_probe(X_tr[:, idx], Y_tr, X_te[:, idx], Y_te, lam=lam)["r2"]})
     return out
+
+
+REGION_SIGNALS = {
+    "sensory": ("concept", 64),
+    "sensory_hidden": ("hidden", 128),
+    "prefrontal": ("utility", 4),
+    "prefrontal_state": ("state", 100),
+    "router": ("gate", 4),
+    "motor": ("action", 4),
+    "hippocampus": ("population", 150),
+}
+
+
+def region_rate_matrix(brain, states, *, region_key, signal_key, width,
+                       recall=False, T=32, generator=None) -> torch.Tensor:
+    """[M, width] mean-over-T rate for one region signal; zero-filled if the region is bypassed.
+
+    Uses a single batched brain.step(record=True) so all regions come from the same forward
+    pass; the region name is the Brain._regions key (sensory/hippocampus/prefrontal/router/motor),
+    NOT a dashboard/output alias. A bypassed region (hippocampus under recall=False) has an empty
+    recordings dict -> return zeros instead of index-crashing.
+    """
+    obs = states if torch.is_tensor(states) else torch.tensor(states)
+    out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+    rec = out["recordings"].get(region_key, {})           # {} for a bypassed region
+    train = rec.get(signal_key) if isinstance(rec, dict) else None
+    if train is None:
+        return torch.zeros(obs.shape[0], width)
+    return train.mean(dim=0)                               # [T,M,N] -> [M,N]
+
+
+def task_targets(states, grid_n) -> dict:
+    return {
+        "displacement": displacement_target(states, grid_n),
+        "optimal_action": optimal_action_targets(states, grid_n),
+    }
