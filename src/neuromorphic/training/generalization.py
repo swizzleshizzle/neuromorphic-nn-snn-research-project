@@ -113,6 +113,7 @@ class GenConfig:
     pretrain_lr: float = 1e-3
     tag: str = "shaped"
     out_dir: Path = field(default_factory=lambda: Path("outputs"))
+    checkpoint_path: str | None = None
 
 
 def run_generalization(cfg: GenConfig) -> dict:
@@ -160,6 +161,12 @@ def run_generalization(cfg: GenConfig) -> dict:
     eval_held = evaluate(brain, head, heldout_goals, size=cfg.size, start=cfg.start,
                          max_steps=cfg.max_steps, generator=gen)
     gap = eval_train.success_rate - eval_held.success_rate
+
+    if cfg.checkpoint_path is not None:
+        from neuromorphic.training.checkpoints import save_trained
+        save_trained(cfg.checkpoint_path, brain, head,
+                     {"head_type": cfg.head_type, "hidden": cfg.hidden,
+                      "seed": cfg.seed, "grid_n": cfg.size})
 
     summary = {
         "config": asdict(cfg) | {"out_dir": str(cfg.out_dir)},
