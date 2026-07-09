@@ -45,13 +45,60 @@ def test_peraction_probe_shape_and_range():
     assert 0.0 <= float(out["mean_acc"]) <= 1.0
 
 
-def test_shuffle_null_band_is_near_chance():
+def test_peraction_probe_learns_linearly_separable_target():
+    # Each action is a linear threshold on X -> a well-trained probe must beat the ~0.5 base rate.
     torch.manual_seed(0)
-    X = torch.randn(120, 8)
-    Y = torch.randn(120, 2)   # no real signal
+    N, M = 10, 400
+    Wt = torch.randn(N, 4)
+    X = torch.randn(M, N)
+    Y = (X @ Wt > 0).float()
+    out = peraction_probe(X[:300], Y[:300], X[300:], Y[300:], epochs=400)
+    base_rate = torch.maximum(Y[300:].mean(dim=0), 1 - Y[300:].mean(dim=0)).mean()
+    assert float(out["mean_acc"]) > 0.85            # substantially above chance
+    assert float(out["mean_acc"]) > float(base_rate) + 0.2   # and above the majority baseline
+
+
+def test_shuffle_null_band_is_near_chance():
+    # A STRONG real linear signal: the true fit must be high AND the shuffle-null far below it.
+    # (Independent noise would give R2~0 with or without permutation -> a vacuous test.)
+    torch.manual_seed(0)
+    N, M = 8, 240
+    W = torch.randn(N, 2)
+    X = torch.randn(M, N)
+    Y = X @ W + 0.01 * torch.randn(M, 2)   # near-deterministic linear map
     def fit(a, b, c, d): return ridge_probe(a, b, c, d, lam=1e-2)["r2"]
-    null = shuffle_null(fit, X[:90], Y[:90], X[90:], Y[90:], n=10, seed=0)
-    assert null["hi"] < 0.3   # permuted-label R2 stays near zero
+    true_r2 = fit(X[:180], Y[:180], X[180:], Y[180:])
+    null = shuffle_null(fit, X[:180], Y[:180], X[180:], Y[180:], n=10, seed=0)
+    assert true_r2 > 0.9              # the real signal is recovered
+    assert null["hi"] < 0.3           # permuting labels destroys it -> near chance
+    assert null["hi"] < true_r2 - 0.6  # the null band sits far below the true fit
+
+
+def test_pca_reduce_shapes_and_fits_on_train_only():
+    torch.manual_seed(0)
+    X = torch.randn(100, 6)
+    Xtr, Xte = X[:70], X[70:]
+    Ztr, Zte = pca_reduce(Xtr, Xte, k=3)
+    assert Ztr.shape == (70, 3) and Zte.shape == (30, 3)   # reduced to k columns
+    # the test projection must use the TRAIN mean + TRAIN components (PCA is fit on train)
+    mu = Xtr.mean(dim=0, keepdim=True)
+    _, _, Vh = torch.linalg.svd(Xtr - mu, full_matrices=False)
+    comp = Vh[:3].T
+    assert torch.allclose(Zte, (Xte - mu) @ comp, atol=1e-5)
+
+
+def test_pca_reduce_preserves_low_rank_signal():
+    # A rank-3 signal embedded in 12 dims: reducing to k>=rank must keep the ridge R2.
+    torch.manual_seed(0)
+    Z = torch.randn(300, 3)
+    X = Z @ torch.randn(3, 12)          # intrinsically rank-3 features
+    Y = Z @ torch.randn(3, 2) + 0.001 * torch.randn(300, 2)
+    Xtr, Xte, Ytr, Yte = X[:220], X[220:], Y[:220], Y[220:]
+    full = ridge_probe(Xtr, Ytr, Xte, Yte, lam=1e-3)["r2"]
+    xtr3, xte3 = pca_reduce(Xtr, Xte, k=3)
+    red = ridge_probe(xtr3, Ytr, xte3, Yte, lam=1e-3)["r2"]
+    assert full > 0.9
+    assert red > full - 0.05            # k == rank preserves the decodable signal
 
 
 def test_participation_ratio_bounds():

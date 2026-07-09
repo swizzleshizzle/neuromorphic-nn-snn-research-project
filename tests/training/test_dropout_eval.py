@@ -23,6 +23,24 @@ def test_masked_head_k0_matches_unmasked():
            greedy_action(brain, mh, [0, 0, 4, 4], generator=g2)
 
 
+def test_masked_head_masking_zeros_units_and_changes_output():
+    torch.manual_seed(0)
+    brain = Brain(grid_n=5, seed=0)
+    head = make_policy_head(brain)
+    mh = de.MaskedHead(head)
+    x = torch.ones(head.in_features)
+    # a fully-zero mask makes the head read all zeros -> the output is exactly its bias
+    mh.set_mask(torch.zeros(head.in_features))
+    assert torch.allclose(mh(x), head.bias)
+    # masking a single unit changes the output vs the unmasked head (mask is load-bearing for k>0)
+    mask = torch.ones(head.in_features)
+    mask[0] = 0.0
+    mh.set_mask(mask)
+    assert not torch.allclose(mh(x), head(x))
+    # the change is exactly the dropped unit's contribution
+    assert torch.allclose(head(x) - mh(x), head.weight[:, 0] * x[0])
+
+
 def test_random_mask_zeros_k_units():
     m = de.random_mask(64, 10, seed=0)
     assert m.shape == (64,)

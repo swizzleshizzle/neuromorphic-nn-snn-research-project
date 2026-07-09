@@ -100,6 +100,39 @@ def keepk_curve(X_tr, Y_tr, X_te, Y_te, order, ks, lam: float) -> list:
     return out
 
 
+def dropk_curve(X_tr, Y_tr, X_te, Y_te, order, ks, lam: float) -> list:
+    """Held-out R2 after DROPPING the top-k units (by `order`), keeping the remaining N-k."""
+    out = []
+    for k in ks:
+        idx = order[k:]
+        if idx.numel() == 0:
+            r2 = _r2(torch.zeros_like(Y_te), Y_te)   # no units left -> predict-zero endpoint
+        else:
+            r2 = ridge_probe(X_tr[:, idx], Y_tr, X_te[:, idx], Y_te, lam=lam)["r2"]
+        out.append({"k": int(k), "r2": r2})
+    return out
+
+
+def fraction_for_r2(keep_curve, full_r2, *, n_units, frac: float = 0.9) -> float:
+    """Fraction of units (from a keep-k curve) needed to reach `frac` of the full-population R2."""
+    if full_r2 <= 0:
+        return 1.0
+    target = frac * full_r2
+    for c in sorted(keep_curve, key=lambda c: c["k"]):
+        if c["r2"] >= target:
+            return c["k"] / n_units
+    return 1.0
+
+
+def single_unit_r2(X_tr, Y_tr, X_te, Y_te, *, lam: float) -> torch.Tensor:
+    """Per-unit held-out R2 (each unit probed alone) -> `[N]` tensor; the selectivity spread."""
+    N = X_tr.shape[1]
+    out = torch.empty(N)
+    for j in range(N):
+        out[j] = ridge_probe(X_tr[:, j:j + 1], Y_tr, X_te[:, j:j + 1], Y_te, lam=lam)["r2"]
+    return out
+
+
 REGION_SIGNALS = {
     "sensory": ("concept", 64),
     "sensory_hidden": ("hidden", 128),
@@ -112,21 +145,56 @@ REGION_SIGNALS = {
 
 
 def region_rate_matrix(brain, states, *, region_key, signal_key, width,
-                       recall=False, T=32, generator=None) -> torch.Tensor:
+                       recall=False, T=None, generator=None) -> torch.Tensor:
     """[M, width] mean-over-T rate for one region signal; zero-filled if the region is bypassed.
 
-    Uses a single batched brain.step(record=True) so all regions come from the same forward
-    pass; the region name is the Brain._regions key (sensory/hippocampus/prefrontal/router/motor),
-    NOT a dashboard/output alias. A bypassed region (hippocampus under recall=False) has an empty
-    recordings dict -> return zeros instead of index-crashing.
+    Uses a single batched brain.step(record=True); the region name is the Brain._regions key
+    (sensory/hippocampus/prefrontal/router/motor), NOT a dashboard/output alias. A bypassed
+    region (hippocampus under recall=False) has an empty recordings dict -> return zeros instead
+    of index-crashing. `T` (when given) temporarily narrows `brain.T` around the encode so
+    reduced-window smoke runs are actually faster; `None` leaves `brain.T` untouched (default).
     """
     obs = states if torch.is_tensor(states) else torch.tensor(states)
-    out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+    prev_T = brain.T
+    if T is not None:
+        brain.T = int(T)
+    try:
+        out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+    finally:
+        brain.T = prev_T
     rec = out["recordings"].get(region_key, {})           # {} for a bypassed region
     train = rec.get(signal_key) if isinstance(rec, dict) else None
     if train is None:
         return torch.zeros(obs.shape[0], width)
     return train.mean(dim=0)                               # [T,M,N] -> [M,N]
+
+
+def all_region_rates(brain, states, *, recall=False, T=None, generator=None) -> dict:
+    """One `brain.step` forward pass -> `{region_key: [M, width]}` for every REGION_SIGNALS entry.
+
+    Slices every region signal (sensory concept + hidden, PFC utility + state, router gate, motor
+    action, hippocampus population) out of the SAME recordings dict, so the cross-region contrast
+    and the concept geometry share a single Poisson draw instead of one independent draw per region
+    (and one `brain.step` instead of ~8). Bypassed regions (empty recording, e.g. hippocampus under
+    recall=False) are zero-filled. Honors a reduced `T` by temporarily narrowing `brain.T`
+    (restored after); `None` leaves `brain.T` untouched.
+    """
+    obs = states if torch.is_tensor(states) else torch.tensor(states)
+    M = obs.shape[0]
+    prev_T = brain.T
+    if T is not None:
+        brain.T = int(T)
+    try:
+        out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+    finally:
+        brain.T = prev_T
+    recordings = out["recordings"]
+    rates = {}
+    for region_key, (signal_key, width) in REGION_SIGNALS.items():
+        rec = recordings.get(region_key.split("_")[0], {})   # sensory_hidden -> sensory, etc.
+        signal = rec.get(signal_key) if isinstance(rec, dict) else None
+        rates[region_key] = torch.zeros(M, width) if signal is None else signal.mean(dim=0)
+    return rates
 
 
 def task_targets(states, grid_n) -> dict:

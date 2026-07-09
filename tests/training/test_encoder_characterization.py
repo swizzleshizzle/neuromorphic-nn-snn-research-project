@@ -16,8 +16,15 @@ def test_characterize_seed_smoke_and_specialization_direction():
     # trained sensory concept beats its own shuffle-null band on displacement
     s = res["regions"]["sensory"]
     assert s["displacement_r2"] > s["displacement_null_hi"]
-    # geometry present
+    # specialization direction on REAL data: the trained concept out-decodes the frozen
+    # spectators (motor AND router are attenuated lossy images of the concept).
+    assert s["displacement_r2"] > res["regions"]["motor"]["displacement_r2"]
+    assert s["displacement_r2"] > res["regions"]["router"]["displacement_r2"]
+    # geometry present (aim 2A readouts on the shared concept pass)
     assert 1.0 <= res["geometry"]["participation_ratio"] <= 64.0
+    assert 0.0 < res["geometry"]["frac_units_90pct_r2"] <= 1.0
+    assert len(res["geometry"]["single_unit_r2"]) == 64
+    assert len(res["geometry"]["dropk"]) == len(res["geometry"]["keepk"])
 
 
 import importlib.util as ilu2
