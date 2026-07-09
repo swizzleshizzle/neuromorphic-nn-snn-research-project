@@ -1,6 +1,6 @@
 # ADR-0001 — Multi-Region Training Strategy
 
-- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2; 2026-07-07 Amendment 3)
+- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2; 2026-07-07 Amendment 3; 2026-07-09 Amendment 4)
 - **Date:** 2026-06-18
 - **Phase:** 2 (multi-region brain), Step 2.3 — "how does the whole brain learn?"
 - **Deciders:** project author
@@ -105,6 +105,35 @@ paired per-seed test is the correct analysis for a paired design and is decisive
 
 Follow-ups this unlocks: ablation of the now-engaged encoder; reducing the RL variance; and the
 other Option-B flavor (unfreeze the encoder end-to-end so it adapts to the reward, not a proxy).
+
+---
+
+## Amendment 4 (2026-07-09, Week-14 EXP-027) — the engaged sensory region specializes (characterization)
+
+EXP-026 (Amendment 3) engaged the sensory encoder and lifted the cap; EXP-027
+(`experiments/027_encoder_characterization/`) characterizes what it learned, WITHOUT a redundant
+remove/freeze ablation (removing sensory = chance; freezing = already frozen; random-vs-trained = that
+is EXP-026). It probes, per region, how linearly decodable the task variables (goal-relative
+displacement, per-action optimality) are from that region's activity, with shuffle-null and
+PCA-matched controls, paired across the 12 EXP-026 seeds.
+
+**Aim 1 (specialization) - decisive.** The trained sensory hierarchy carries the task structure
+(concept[64] / hidden[128] decode displacement at R2 0.86-0.90 and per-action optimality at 0.89, far
+above their shuffle-null bands), and the sensory concept **beats every non-sensory spectator on both
+targets in 100% of 12 seeds**, surviving both controls. This is the first direct evidence a region
+specializes *through learning*. It is honestly a **gradient**, not a strawman: PFC's internal
+`state[100]` carries a real lossy image (R2 0.76) that attenuates sharply at each bottleneck (PFC
+output utility[4] 0.03 -> router/motor ~0); hippocampus is a true zero because it is bypassed
+(`recall=False`), reported as such.
+
+**Aim 2 (distributedness) - geometry only, causal pending.** The concept code is distributed
+(participation ratio ~24 of 64; ~50% of units needed for 90% of full decode R2), not a few load-bearing
+units. The causal confirmation (Component B: dropout-on-navigation via a MaskedHead) is built and
+tested but deferred (~1h checkpoint mint) to a follow-up; the full distributedness verdict awaits it.
+
+**Consequence:** a region now demonstrably specializes through learning, which makes the deferred
+**ablation studies meaningful** (degrade the sensory code and show navigation falls) - the natural next
+work. Also added: trained-model checkpoint save/load infrastructure (`training/checkpoints.py`).
 
 ---
 
