@@ -220,6 +220,8 @@ def render_dashboard(header, frames, step):
     """Render the 8-panel dashboard for a single frame; return the Figure."""
     import matplotlib.pyplot as plt
 
+    if not frames:
+        raise ValueError("trace has no frames to render (header-only trace)")
     frame = frames[step]
     order = [r["id"] for r in header["regions"]]
     labels = {r["id"]: r.get("label", r["id"]) for r in header["regions"]}
