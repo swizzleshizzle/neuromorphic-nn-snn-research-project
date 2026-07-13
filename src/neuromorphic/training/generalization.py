@@ -15,6 +15,7 @@ from pathlib import Path
 
 import torch
 
+from neuromorphic.analysis.ablate import AblatedConcept, AblationSpec
 from neuromorphic.brain import Brain
 from neuromorphic.envs.gridworld import GridWorldEnv, manhattan
 from neuromorphic.training.pretrain import pretrain_sensory
@@ -114,6 +115,9 @@ class GenConfig:
     tag: str = "shaped"
     out_dir: Path = field(default_factory=lambda: Path("outputs"))
     checkpoint_path: str | None = None
+    ablation: AblationSpec | None = None
+    ablation_order: "list[int] | None" = None
+    load_encoder_path: str | None = None
 
 
 def run_generalization(cfg: GenConfig) -> dict:
@@ -127,12 +131,17 @@ def run_generalization(cfg: GenConfig) -> dict:
     )
     brain = Brain(grid_n=cfg.size, seed=cfg.seed)
     pretrain_info = None
-    if cfg.pretrain_sensory:
+    if cfg.load_encoder_path is not None:
+        ckpt = torch.load(cfg.load_encoder_path, weights_only=True)
+        brain.sensory.load_state_dict(ckpt["sensory_state"])
+    elif cfg.pretrain_sensory:
         pretrain_info = pretrain_sensory(
             brain.sensory, grid_n=cfg.size, epochs=cfg.pretrain_epochs, lr=cfg.pretrain_lr,
             seed=cfg.seed, generator=torch.Generator().manual_seed(cfg.seed),
         )
     head = make_policy_head(brain, head_type=cfg.head_type, hidden=cfg.hidden)
+    if cfg.ablation is not None:
+        head = AblatedConcept(head, cfg.ablation, width=brain.content, order=cfg.ablation_order)
     gen = torch.Generator().manual_seed(cfg.seed)
     opt = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
 
