@@ -8,7 +8,9 @@ from neuromorphic.training.generalization import GenConfig, run_generalization
 
 
 def _cfg(tmp_path, **kw):
-    return GenConfig(seed=0, episodes=5, n_heldout=4, size=5,
+    # size=3 + pretrain_epochs=2 keep the pretrain path fast in CI (the hooks under test
+    # are grid-size-independent; the test only validates wiring, not learned quality)
+    return GenConfig(seed=0, episodes=5, n_heldout=4, size=3, pretrain_epochs=2,
                      out_dir=tmp_path, tag="t", **kw)
 
 
