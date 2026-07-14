@@ -137,6 +137,33 @@ work. Also added: trained-model checkpoint save/load infrastructure (`training/c
 
 ---
 
+## Amendment 5 (2026-07-13, Week-15) — Component B ran: Aim 2 causally closed; results committed to repo
+
+Supersedes Amendment 4's "Aim 2 - geometry only, causal pending." Component B (dropout-on-navigation
+via `MaskedHead`) was run on 12 seeds. Full-population held-out baseline **34.7%**; masking is
+**graceful and importance-ordered but non-catastrophic**: dropping *half* the 64 concept units (random-k
+at k=32) costs only ~11 pts (34.7% -> 24%), `bottom >= random >= top` holds at k=2/4/8/16, and even
+dropping the 16 most-important units only pulls top-k to 25% (no small-k cliff). Correlational geometry
+(Aim 2A) and causal behavior (Aim 2B) **agree**, so the strong form of the distributedness claim holds:
+the engaged sensory code is distributed **and** causally robust. Full numbers:
+`experiments/027_encoder_characterization/RESULTS.md`.
+
+**Records-hygiene correction (from the 2026-07-13 Phase-2 checkpoint audit).** Component B was run over
+SSH on a laptop; its `outputs/` artifacts are gitignored, so the result had lived only in a vault note
+while Amendment 4 and the committed `027_dropout.md` still read "pending" - the repo could not verify the
+claim. Fixed by committing `RESULTS.md` (an in-repo, non-ignored results record) alongside this
+amendment. **Habit adopted going forward:** every experiment commits a curated `RESULTS.md` so the
+authoritative record never diverges from a machine-local `outputs/` folder again.
+
+**Caveat kept loud:** this characterizes *how* the sensory code is represented; it does not raise the
+~42-45% navigation cap (that was EXP-026's job) and inherits the same high per-seed variance.
+
+**Next (still open):** EXP-028 re-training dose-response ablation (degrade the concept, re-train the
+head, measure the drop) is a *second, complementary* causal test - currently running; its result will be
+Amendment 6.
+
+---
+
 ## Context
 
 The five-region `Brain` (sensory → hippocampus → prefrontal → thalamic router → motor) is wired and runs end-to-end, but it is **untrained**: `Brain.learn(reward)` currently only pushes a value onto the dopamine bus; the actual weight update is a deferred hook. This ADR decides what fills that hook — the credit-assignment strategy for the whole brain on the grid-world task.
