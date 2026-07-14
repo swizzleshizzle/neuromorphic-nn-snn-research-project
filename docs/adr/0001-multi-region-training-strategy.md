@@ -164,6 +164,28 @@ Amendment 6.
 
 ---
 
+## Amendment 6 (2026-07-13, Week-15 EXP-028) — re-training dose-response ablation `RESULTS PENDING`
+
+Complements Amendment 5. Where Component B masked units on a *fixed* trained head (and found the code
+distributed), EXP-028 degrades the pre-trained concept and **re-trains the linear head against the
+degraded code** across a dose grid — a *policy-learning-level* causal test of whether concept fidelity
+drives the navigation lift. Two operators (Gaussian noise `sigma`, structural unit-drop `p` in
+random/top modes), 12 cached encoders re-used across doses, 12 seeds. Full numbers + the pre-registered
+interpretation contract: `experiments/028_sensory_ablation/RESULTS.md`.
+
+**Pre-registered expectation (fill on landing):** held-out success declines **monotonically and
+gracefully** from the ~35-45% baseline toward the random-encoder floor (~8-17%) as dose rises, both
+operators agreeing, `top` faster than `random`. That would make EXP-028 the causal, re-trained
+confirmation of EXP-026 — completing the chain: **EXP-026** (fidelity lifts the cap) → **EXP-027** (the
+lift is a distributed, specialized sensory code) → **EXP-028** (dose-dependently degrading fidelity
+removes the lift). Falsifiers: a *flat* curve (re-training compensates → fidelity is not the driver) or
+a *cliff* at tiny dose (brittle → conflicts with EXP-027); either is a result to reconcile, not smooth.
+
+**Result:** `PENDING` — baseline __%, ED50 gaussian sigma ≈ __, unit-drop p ≈ __, floor approached at
+max dose = __%. Verdict: __.
+
+---
+
 ## Context
 
 The five-region `Brain` (sensory → hippocampus → prefrontal → thalamic router → motor) is wired and runs end-to-end, but it is **untrained**: `Brain.learn(reward)` currently only pushes a value onto the dopamine bus; the actual weight update is a deferred hook. This ADR decides what fills that hook — the credit-assignment strategy for the whole brain on the grid-world task.
