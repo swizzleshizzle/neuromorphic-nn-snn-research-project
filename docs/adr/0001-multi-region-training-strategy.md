@@ -164,25 +164,37 @@ Amendment 6.
 
 ---
 
-## Amendment 6 (2026-07-13, Week-15 EXP-028) — re-training dose-response ablation `RESULTS PENDING`
+## Amendment 6 (2026-07-14, Week-15 EXP-028) — re-training dose-response ablation: fidelity is not the binding constraint, regularization is
 
-Complements Amendment 5. Where Component B masked units on a *fixed* trained head (and found the code
-distributed), EXP-028 degrades the pre-trained concept and **re-trains the linear head against the
-degraded code** across a dose grid — a *policy-learning-level* causal test of whether concept fidelity
-drives the navigation lift. Two operators (Gaussian noise `sigma`, structural unit-drop `p` in
-random/top modes), 12 cached encoders re-used across doses, 12 seeds. Full numbers + the pre-registered
-interpretation contract: `experiments/028_sensory_ablation/RESULTS.md`.
+Complements Amendment 5. Where Component B masked units on a *fixed* trained head (found the code
+distributed), EXP-028 degraded the pre-trained concept and **re-trained the linear head against the
+degraded code** across a dose grid — a policy-learning-level test of whether concept fidelity drives the
+navigation lift. Two operators (Gaussian noise `sigma`; structural unit-drop `p`, random/top modes), 12
+cached encoders reused across doses, 12 seeds. Baseline (clean re-train) = **43%** held-out.
+Full numbers: `experiments/028_sensory_ablation/RESULTS.md`.
 
-**Pre-registered expectation (fill on landing):** held-out success declines **monotonically and
-gracefully** from the ~35-45% baseline toward the random-encoder floor (~8-17%) as dose rises, both
-operators agreeing, `top` faster than `random`. That would make EXP-028 the causal, re-trained
-confirmation of EXP-026 — completing the chain: **EXP-026** (fidelity lifts the cap) → **EXP-027** (the
-lift is a distributed, specialized sensory code) → **EXP-028** (dose-dependently degrading fidelity
-removes the lift). Falsifiers: a *flat* curve (re-training compensates → fidelity is not the driver) or
-a *cliff* at tiny dose (brittle → conflicts with EXP-027); either is a result to reconcile, not smooth.
+**The pre-registered hypothesis was half-refuted, and the refutation is the finding.** Unit-drop behaved
+as predicted — monotone graceful decline, `top` faster than `random` (43%->15% vs 43%->26% at p=0.9),
+confirming EXP-027's distributed + importance-ordered code (removed information cannot be re-trained
+back). **Gaussian noise did the opposite of the prediction:** moderate additive noise *doubled* held-out
+success (43% -> 83% at sigma 0.4, all 12 seeds 67-100%), firing our pre-registered Falsifier A and then
+some (inverted, not flat). The optimality diagnostic shows sigma 0.4 is a genuine improvement (optimality
+0.57 vs 0.65 baseline, 13 vs 15 steps — more goals, still efficient), while sigma 0.8 tips into wandering
+(optimality 0.38, 25 steps).
 
-**Result:** `PENDING` — baseline __%, ED50 gaussian sigma ≈ __, unit-drop p ≈ __, floor approached at
-max dose = __%. Verdict: __.
+**Conclusion:** concept *fidelity* is not the binding constraint on this policy's learning — policy
+*optimization* is. The frozen-extractor + linear-head + REINFORCE setup is **under-regularized**;
+moderate input noise acts as a regularizer/exploration driver that escapes the weak, partially-collapsed
+policies of the deterministic baseline (directly echoing the EXP-025 entropy-collapse failure mode). So
+EXP-026's "engaging the encoder lifts the cap" stands, but EXP-028 shows the *remaining* ~43% cap is
+gated by optimization, not encoder fidelity — a concrete lever for later work: better regularization,
+not richer encoders, is the next thing to try on the cap.
+
+**Caveat + open follow-up:** noise was applied at both train and eval, so this run does not fully
+separate a training-regularization benefit from an eval-time input change (sigma-0.4 optimality argues
+for the former; sigma-0.8 wandering is the latter at high dose). A **train-noisy / eval-clean** variant
+would isolate it and is left open; it does not change the headline (unit-drop refutes brittleness;
+gaussian refutes fidelity-as-driver).
 
 ---
 

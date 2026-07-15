@@ -1,94 +1,102 @@
-# EXP-028 Results — Sensory-Code Ablation (dose-response) `RESULTS PENDING`
+# EXP-028 Results — Sensory-Code Ablation (dose-response)
 
 > **Why this file exists:** the standing habit adopted after the 2026-07-13 Phase-2 audit — every
 > experiment commits a curated, in-repo results record so the authoritative numbers never live only in
 > a gitignored `outputs/` folder or a vault note. Provenance: 12 seeds (0-11), grid 5, run on the laptop
-> 2026-07-13 (12 encoders cached once, then 216 head-retrains: 6 gaussian + 6x2 unit-drop doses x 12
-> seeds). **The interpretation contract below is pre-registered — written before the numbers land — so
-> the read stays honest.** Regenerate with the command at the bottom.
+> 2026-07-13/14 (12 encoders cached once, then 216 head-retrains: 6 gaussian + 6x2 unit-drop doses x 12
+> seeds). **The interpretation contract was pre-registered before the numbers landed** (git `c63f367`,
+> "results pending") — and the headline result *refuted* it, which is exactly why pre-registration
+> matters. Regenerate with the command at the bottom.
 
 ## What this tests (and how it differs from EXP-027 Component B)
 
-EXP-027 Component B masked concept units on a **fixed, already-trained** head and found the code
-causally distributed (dropping half the units cost ~11 pts). EXP-028 asks the complementary,
-policy-learning-level question:
+EXP-027 Component B masked concept units on a **fixed, already-trained** head (found the code causally
+distributed). EXP-028 degrades the pre-trained concept and **re-trains the linear head against the
+degraded code**, across a dose grid — the policy-learning-level question: is concept *fidelity* a
+load-bearing input to policy learning? Two operators degrade the frozen concept (cached encoder reused
+across doses; only the head re-trains): **Gaussian noise** (`sigma`, a continuous fidelity dose) and
+**unit-drop** (`p`, a structural dimensionality dose, `random` and `top`-importance modes). Noise is
+applied at **both train and eval** (the wrapper sits on the head throughout) — see the caveat.
 
-> If we **degrade the pre-trained sensory concept and then re-train the linear head against the
-> degraded code**, how much does held-out navigation fall, and how gracefully — i.e. is concept
-> *fidelity* a load-bearing input to policy learning, in a dose-dependent way?
+## Results
 
-Two operators degrade the frozen concept (cached encoder reused across doses; only the head re-trains):
-- **Gaussian noise** (`sigma`): additive `N(0, sigma^2)` on the concept rate — a continuous *fidelity* dose.
-- **Unit-drop** (`p`): zero a fraction of concept units for the whole run — a structural *dimensionality*
-  dose, in two modes: `random` (neutral) and `top` (drop the most displacement-important units first).
+Mean held-out nav success across 12 seeds (`outputs/028_curve.md`). The three `dose=0` cells are the
+same clean-baseline re-train and read identically (**43%**) — consistency check passed.
 
-## Pre-registered hypothesis + falsifiers (written before results)
+**Gaussian noise (fidelity dose) — INVERTED, not a decline:**
 
-- **Expected:** held-out success is a **monotone, graceful decreasing** function of dose. The `dose=0`
-  anchor ≈ the EXP-026/027 pretrained baseline (~35-45%); at maximum dose it approaches the
-  **random-encoder floor** (~8-17%, the EXP-026 random arm). Gaussian and unit-drop should **agree** on
-  a graceful monotone decline, and `unitdrop_top` should fall faster than `unitdrop_random` (importance
-  is real).
-- **Falsifier A — flat curve:** if success barely moves with dose, then re-training compensates for
-  degradation and concept *fidelity* is **not** what drives the lift → contradicts EXP-026's causal
-  story; investigate before claiming EXP-028 confirms it.
-- **Falsifier B — cliff at tiny dose:** if a small dose craters success, the code is **brittle** →
-  contradicts EXP-027's distributedness. A genuine A-vs-B conflict to reconcile, not smooth over.
+| sigma | held-out success | optimality | mean steps |
+|---|---|---|---|
+| **0.0 (baseline)** | **43%** | 0.65 | 15 |
+| 0.05 | 26% | – | – |
+| 0.1 | 32% | – | – |
+| 0.2 | 69% | – | – |
+| 0.4 | **83%** | 0.57 | 13 |
+| 0.8 | 83% | 0.38 | 25 |
 
-## Results `PENDING`
-
-Mean held-out nav success across 12 seeds (source: `outputs/028_curve.md` / `028_summary.json`). The
-three `dose=0` cells are the same clean-baseline re-train and should read ≈ equal (a consistency check).
-
-**Gaussian noise (fidelity dose):**
-
-| sigma | held-out success |
-|---|---|
-| **0.0 (baseline)** | __% |
-| 0.05 | __% |
-| 0.1 | __% |
-| 0.2 | __% |
-| 0.4 | __% |
-| 0.8 | __% |
-
-**Unit-drop (structural dose):**
+**Unit-drop (structural dose) — monotone graceful decline, as predicted:**
 
 | p dropped (of 64) | random | top |
 |---|---|---|
-| **0.0 (baseline)** | __% | __% |
-| 0.1 | __% | __% |
-| 0.25 | __% | __% |
-| 0.5 | __% | __% |
-| 0.75 | __% | __% |
-| 0.9 | __% | __% |
+| **0.0 (baseline)** | **43%** | 43% |
+| 0.1 | 42% | 31% |
+| 0.25 | 35% | 31% |
+| 0.5 | 31% | 17% |
+| 0.75 | 28% | 21% |
+| 0.9 | 26% | 15% |
 
-*Anchors to sanity-check the operators are calibrated: baseline ≈ __% (should match EXP-026/027 ~35-45%);
-max-dose ≈ __% (should approach the random-encoder floor ~8-17%). If the endpoints don't bracket, the
-operator is miscalibrated — fix before reading the middle.*
+## The finding — the two operators tell different stories
 
-## How to read it — the interpretation contract
+**Unit-drop confirmed the hypothesis.** Removing units degrades held-out navigation monotonically and
+gracefully; `top` (drop most-important-first) falls faster than `random` at every dose (43->15 vs
+43->26). Re-training cannot recover *removed* information. This is fully consistent with EXP-027: the
+code is distributed (robust to random loss) but importance-ordered (the top units carry more).
 
-- **Monotone & graceful (the expected, EXP-026-confirming result):** success declines smoothly from the
-  baseline toward the floor as dose rises; both operators agree; `top` falls faster than `random`. This
-  is the *causal, re-trained* confirmation that concept fidelity drives the navigation lift — and it
-  **quantifies** how much fidelity the policy needs (see ED50 below). Reconciles cleanly with EXP-027:
-  a fixed head tolerates *unit loss* (distributed), but the policy still *depends on overall fidelity*
-  when that fidelity is degraded across the board.
-- **ED50-style summary** `PENDING`: the dose at which success drops halfway between baseline and floor —
-  gaussian sigma ≈ __, unit-drop p ≈ __. One interpretable number for "how much degradation the policy
-  absorbs before it matters."
-- **Ordering check:** at matched `p`, expect `success(random) >= success(top)`. A violation means the
-  importance ranking or mask plumbing is off — flag, don't average past it.
+**Gaussian noise refuted the hypothesis — and revealed something more interesting.** Additive concept
+noise does not degrade navigation; moderate noise *roughly doubles* held-out success (43% -> 83%),
+consistently across all 12 seeds (per-seed 67-100% at sigma 0.4). Small noise (sigma 0.05-0.1) hurts;
+moderate-to-large noise helps. The optimality diagnostic separates the mechanism:
 
-## Verdict `PENDING`
+- **sigma 0.4 is a genuine improvement:** 2x the goals reached with path efficiency barely lower
+  (optimality 0.57 vs 0.65) and *fewer* steps (13 vs 15). Not wandering — better, more robust navigation.
+- **sigma 0.8 tips into wandering:** same 83% success but optimality collapses (0.38) and steps balloon
+  (25) — it reaches the goal by exploring, not by navigating well.
 
-> [!note] Fill when results land
-> Expected: **concept fidelity is causally load-bearing for policy learning, dose-dependently** —
-> completing the EXP-026 (fidelity lifts the cap) / EXP-027 (the lift is a distributed, specialized
-> code) / EXP-028 (degrading fidelity dose-dependently removes the lift) causal chain. Then: ADR-0001
-> **Amendment 6**, and this becomes the final evidence brick for the Phase-2 "regional specialization"
-> checkpoint criterion. If the curve is flat or a cliff instead, do NOT merge the confirming claim —
-> reconcile against EXP-026/027 first.
+**Interpretation (honest):** the frozen-encoder + linear-head + REINFORCE policy is **under-regularized**.
+Moderate input noise acts as a regularizer / exploration driver that escapes the weak, partially-collapsed
+policies the deterministic baseline settles into — directly echoing the entropy-collapse failure mode
+documented in EXP-025 (which the entropy bonus + advantage-norm only partly fixed). So concept *fidelity*
+is **not** the binding constraint on policy learning here; policy *optimization* is. Structural unit-drop
+still hurts because you cannot regularize back information that has been removed.
+
+This is a stronger, more useful result than the predicted "fidelity confirmed": it is a concrete lead
+that **better regularization could raise the ~43% navigation cap**, which matters going into Phase 3.
+
+## Pre-registration outcome
+
+- **Unit-drop:** hypothesis (monotone graceful decline, `top` < `random`) **CONFIRMED**.
+- **Gaussian:** hypothesis **REFUTED** — pre-registered Falsifier A ("re-training compensates so fidelity
+  is not the driver") fired, and harder: the curve is *inverted*, not flat. Reported as the finding, not
+  smoothed over.
+
+## Caveats + follow-up
+
+- **Noise is applied at train AND eval**, so this run cannot fully separate a *training-regularization*
+  benefit (the interesting claim) from an *eval-time* input change. The sigma-0.4 optimality (0.57, near
+  baseline) argues for a genuine training benefit; sigma-0.8 (0.38) shows an eval-time wandering component
+  at high dose. **Follow-up to pin the mechanism (open):** a **train-noisy / eval-clean** variant — if a
+  noise-trained head still beats baseline when evaluated on the *clean* concept, that isolates the
+  regularization interpretation cleanly. Not run yet; does not block this writeup.
+- High per-seed variance persists (baseline 17-83%); means are over 12 seeds.
+
+## Verdict
+
+> [!success] Concept fidelity is not the binding constraint on policy learning; policy regularization is.
+> Structural unit-drop degrades navigation monotonically (distributed + importance-ordered, confirming
+> EXP-027), but additive concept noise *improves* held-out navigation up to ~2x (genuine at sigma 0.4,
+> wandering by sigma 0.8) — evidence the frozen-extractor + REINFORCE policy is under-regularized, tying
+> back to the EXP-025 collapse story. ADR-0001 **Amendment 6**. Lead for Phase 3: regularization, not
+> encoder fidelity, is the next lever on the cap.
 
 ## Regenerate
 
