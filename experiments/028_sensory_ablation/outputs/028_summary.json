@@ -1,0 +1,1344 @@
+{
+  "config": {
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "grid_n": 5,
+    "episodes": 600
+  },
+  "cells": [
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 0,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 0,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 0,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 0,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 0,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 0,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 0,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 0,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 0,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 1,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 1,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 1,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 0,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 1,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 0,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 1,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 1,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 0,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 1,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 1,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 1,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 1,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 1,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 1,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 1,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 1,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 1,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 1,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 1,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 2,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 1,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 2,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 2,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 2,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 2,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 2,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 2,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 2,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 2,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 2,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 2,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 2,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 2,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 2,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 2,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 3,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 2,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 2,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 2,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 3,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 3,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 3,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 3,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 3,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 3,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 4,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 3,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 3,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 4,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 4,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 4,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 4,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 4,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 4,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 4,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 4,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 4,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 4,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 5,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 5,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 5,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 5,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 5,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 5,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 5,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 5,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 5,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 5,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 5,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 5,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 6,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 5,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 6,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 6,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 6,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 6,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 6,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 6,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 6,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 6,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 6,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 6,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 6,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 6,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 6,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 6,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 7,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 6,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 6,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 7,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 6,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 7,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 7,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 7,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 7,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 8,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 7,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 8,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 8,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 8,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 8,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 8,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 8,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 8,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 8,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 8,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 9,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 8,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 9,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 9,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 9,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 8,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 9,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 9,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 9,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 8,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 9,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 9,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 9,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 9,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 9,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 9,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 9,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 9,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 9,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 9,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 9,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 10,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 10,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 10,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 10,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 10,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 10,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 10,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 10,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 10,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 10,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 10,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.0,
+      "seed": 11,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.2,
+      "seed": 11,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.4,
+      "seed": 11,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.1,
+      "seed": 11,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 10,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.8,
+      "seed": 11,
+      "heldout_success": 1.0
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.0,
+      "seed": 11,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.1,
+      "seed": 11,
+      "heldout_success": 0.6666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.0,
+      "seed": 11,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "gaussian",
+      "dose": 0.05,
+      "seed": 11,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.1,
+      "seed": 11,
+      "heldout_success": 0.8333333333333334
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.5,
+      "seed": 11,
+      "heldout_success": 0.3333333333333333
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.25,
+      "seed": 11,
+      "heldout_success": 0.0
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.25,
+      "seed": 11,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.5,
+      "seed": 11,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.75,
+      "seed": 11,
+      "heldout_success": 0.5
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.75,
+      "seed": 11,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_random",
+      "dose": 0.9,
+      "seed": 11,
+      "heldout_success": 0.16666666666666666
+    },
+    {
+      "operator": "unitdrop_top",
+      "dose": 0.9,
+      "seed": 11,
+      "heldout_success": 0.0
+    }
+  ],
+  "curve": {
+    "unitdrop_random": {
+      "0.0": 0.4305555555555556,
+      "0.1": 0.4166666666666667,
+      "0.25": 0.34722222222222227,
+      "0.5": 0.3055555555555555,
+      "0.75": 0.27777777777777773,
+      "0.9": 0.2638888888888889
+    },
+    "unitdrop_top": {
+      "0.0": 0.4305555555555556,
+      "0.1": 0.3055555555555555,
+      "0.25": 0.3055555555555555,
+      "0.5": 0.16666666666666666,
+      "0.75": 0.20833333333333334,
+      "0.9": 0.15277777777777776
+    },
+    "gaussian": {
+      "0.0": 0.4305555555555556,
+      "0.05": 0.2638888888888889,
+      "0.1": 0.3194444444444444,
+      "0.2": 0.6944444444444445,
+      "0.4": 0.8333333333333334,
+      "0.8": 0.8333333333333334
+    }
+  }
+}
