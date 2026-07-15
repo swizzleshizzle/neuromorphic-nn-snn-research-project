@@ -28,6 +28,13 @@ plasticity) stop being optional. **Open decision for the kickoff:** do we rethin
 first trying the v1 recipe and letting it fail informatively? (Recommendation: one quick v1-recipe
 baseline on 1-move scrambles to quantify the gap, then engage.)
 
+**EXP-028 sharpens this.** The remaining grid-nav cap turned out to be **optimization-limited, not
+encoder-limited** — moderate input noise alone doubled held-out success (43%→83%), evidence the
+frozen-extractor + REINFORCE policy is under-regularized (ADR Amendment 6). Implication for the cube:
+**regularization / exploration is a cheap first lever** to squeeze before concluding "we need more
+regions / plasticity." Bake it into the v1-recipe baseline (carry the noise-regularization trick over),
+so the baseline is the *best* v1 can do, not an under-tuned strawman — a fairer measure of the real gap.
+
 ## What carries forward (do NOT rebuild)
 
 - **The five-region substrate** — SensoryCortex, Hippocampus, Prefrontal, ThalamicRouter, MotorCortex,
@@ -72,7 +79,8 @@ baseline on 1-move scrambles to quantify the gap, then engage.)
 
 ## Housekeeping to finish the Phase-2 → 3 rotation
 
-- Land EXP-028 (running) → ADR Amendment 6 → its own `RESULTS.md`.
+- ~~Land EXP-028 → ADR Amendment 6 → its own `RESULTS.md`.~~ **DONE** (9602265): input noise regularizes;
+  fidelity is not the cap. Threaded into the honest assessment (§ limitation 5, 12) and above.
 - Merge `week14-encoder-characterization` + `week15-phase2-closeout` to mainline and tag Phase 2 complete.
 - Promote `architecture-spec-v2.md` → v3 (fold in the as-trained config) as the first Phase-3 doc, since
   the region tables change materially for the cube anyway.

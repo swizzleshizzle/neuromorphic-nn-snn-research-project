@@ -56,8 +56,12 @@ story a generous reading might tell.
    biological-plausibility goal is explicitly unmet.
 
 ### Performance / statistics
-5. **The navigation ceiling is low.** Best (pretrained-encoder) held-out success is only ~42–45%; a
-   nonlinear MLP head does not beat linear, so the frozen encoder is a hard representational cap.
+5. **The navigation ceiling is low — and it is optimization-limited, not (only) encoder-limited.** Best
+   deterministic held-out success is ~42–45%; a nonlinear MLP head does not beat linear. But EXP-028
+   (below) showed that *re-training the head with moderate input noise doubles held-out success to ~83%*
+   — so the remaining cap is gated as much by **policy under-regularization** as by the frozen encoder.
+   The "frozen encoder is a hard representational cap" claim from EXP-025 holds for the *deterministic*
+   readout only; it is not the whole story.
 6. **It fails many *trained* goals too** (~53% train success) — not merely a generalization gap.
 7. **Extreme per-seed variance** (0–100% swings). Every positive claim is an average-only claim; a single
    run is unreliable.
@@ -72,8 +76,13 @@ story a generous reading might tell.
 11. **The engaged region learned via a hand-picked supervised proxy** (goal-relative displacement), then
     was frozen; it never adapts to the actual RL reward. Whether a richer target or end-to-end unfreezing
     raises the ceiling is untested.
-12. **The second causal test (EXP-028 re-training dose-response) is still running** — its result (whether
-    degrading the concept and re-training the head drops navigation) is not yet in.
+12. **The second causal test (EXP-028 re-training dose-response) refuted its own hypothesis — usefully.**
+    Structural unit-drop degrades navigation monotonically (confirming EXP-027's distributed,
+    importance-ordered code), but Gaussian concept-noise *improved* held-out success (43%→83% at
+    sigma 0.4, all 12 seeds; genuine per optimality, not just wandering). Concept *fidelity* is not the
+    binding constraint on policy learning — the policy is under-regularized (echoing EXP-025 collapse).
+    Open follow-up (noted, not blocking): train-noisy/eval-clean to isolate training-regularization from
+    the eval-time input change. See `experiments/028_sensory_ablation/RESULTS.md`, ADR Amendment 6.
 
 ### Records hygiene (being fixed this week)
 13. The Component B result had lived only in a vault note (gitignored, laptop-only) while the committed
@@ -90,3 +99,7 @@ substrate, but only engaged one region and never turned on plasticity* — is pr
 must close. Carry forward the methodology (paired seeds, controls, adversarial verification, committed
 RESULTS.md); carry forward the substrate; do **not** carry forward the assumption that the architecture
 alone buys multi-region behavior.
+
+One concrete lead EXP-028 hands to Phase 3: since the remaining cap is optimization-limited (input noise
+alone doubled success), **regularization / exploration is a cheaper first lever than richer encoders** —
+worth trying before, or alongside, engaging the other regions and turning on plasticity.
