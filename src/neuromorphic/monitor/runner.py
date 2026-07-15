@@ -29,47 +29,50 @@ def record_episode(
     sink.open(build_header(brain, seed=seed, action_labels=action_labels))
 
     # seed reseeds the env; the brain's Poisson stochasticity comes from `generator`.
-    obs, _ = env.reset(seed=seed)
-    if store_first:
-        brain.remember(obs, generator=generator)
-
     total_reward = 0.0
     reached_goal = False
     steps = 0
-    limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
+    try:
+        obs, _ = env.reset(seed=seed)
+        if store_first:
+            brain.remember(obs, generator=generator)
 
-    while steps < limit:
-        out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
-        action = int(out["action"])
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        brain.learn(reward)
-        total_reward += float(reward)
+        limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
 
-        task = {
-            "agent": [int(obs[0]), int(obs[1])],
-            "goal": [int(obs[2]), int(obs[3])],
-            "action": action,
-            "action_label": action_labels[action],
-            "reward": float(reward),
-            "return": total_reward,
-            "terminated": bool(terminated),
-            "truncated": bool(truncated),
-        }
-        frame = build_frame(
-            out, episode=0, step=steps, t=float(steps), task=task,
-            store=False, recall=recall, grid_n=brain.grid_n,
-        )
-        sink.write(frame)
+        while steps < limit:
+            out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+            action = int(out["action"])
+            next_obs, reward, terminated, truncated, _ = env.step(action)
+            brain.learn(reward)
+            total_reward += float(reward)
 
-        obs = next_obs
-        steps += 1
-        if terminated:
-            reached_goal = True
-            break
-        if truncated:
-            break
+            task = {
+                "agent": [int(obs[0]), int(obs[1])],
+                "goal": [int(obs[2]), int(obs[3])],
+                "action": action,
+                "action_label": action_labels[action],
+                "reward": float(reward),
+                "return": total_reward,
+                "terminated": bool(terminated),
+                "truncated": bool(truncated),
+            }
+            frame = build_frame(
+                out, episode=0, step=steps, t=float(steps), task=task,
+                store=False, recall=recall, grid_n=brain.grid_n,
+            )
+            sink.write(frame)
 
-    sink.close()
+            obs = next_obs
+            steps += 1
+            if terminated:
+                reached_goal = True
+                break
+            if truncated:
+                break
+    finally:
+        # Always flush/close so an exception mid-episode can't leak the handle
+        # (Windows file lock) or leave a silently-truncated trace behind.
+        sink.close()
     return {"steps": steps, "total_reward": total_reward, "reached_goal": reached_goal}
 
 
@@ -113,42 +116,45 @@ def record_policy_episode(
     regions bypassed under ``recall=False`` are zero-filled so frames build without error.
     """
     sink.open(build_header(brain, seed=seed, action_labels=action_labels, policy_regions=list(policy_regions)))
-    obs, _ = env.reset(seed=seed)
 
     total_reward = 0.0
     reached_goal = False
     steps = 0
-    limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
+    try:
+        obs, _ = env.reset(seed=seed)
+        limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
 
-    while steps < limit:
-        out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
-        concept = out["concept"].mean(dim=0)[0]  # inline (monitor must not import training)
-        action = int(head(concept).argmax())
-        _pad_bypassed_recordings(out, brain)
-        next_obs, reward, terminated, truncated, _ = env.step(action)
-        total_reward += float(reward)
+        while steps < limit:
+            out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
+            concept = out["concept"].mean(dim=0)[0]  # inline (monitor must not import training)
+            action = int(head(concept).argmax())
+            _pad_bypassed_recordings(out, brain)
+            next_obs, reward, terminated, truncated, _ = env.step(action)
+            total_reward += float(reward)
 
-        task = {
-            "agent": [int(obs[0]), int(obs[1])],
-            "goal": [int(obs[2]), int(obs[3])],
-            "action": action,
-            "action_label": action_labels[action],
-            "reward": float(reward),
-            "return": total_reward,
-            "terminated": bool(terminated),
-            "truncated": bool(truncated),
-        }
-        frame = build_frame(out, episode=0, step=steps, t=float(steps), task=task,
-                            store=False, recall=recall, grid_n=brain.grid_n)
-        sink.write(frame)
+            task = {
+                "agent": [int(obs[0]), int(obs[1])],
+                "goal": [int(obs[2]), int(obs[3])],
+                "action": action,
+                "action_label": action_labels[action],
+                "reward": float(reward),
+                "return": total_reward,
+                "terminated": bool(terminated),
+                "truncated": bool(truncated),
+            }
+            frame = build_frame(out, episode=0, step=steps, t=float(steps), task=task,
+                                store=False, recall=recall, grid_n=brain.grid_n)
+            sink.write(frame)
 
-        obs = next_obs
-        steps += 1
-        if terminated:
-            reached_goal = True
-            break
-        if truncated:
-            break
-
-    sink.close()
+            obs = next_obs
+            steps += 1
+            if terminated:
+                reached_goal = True
+                break
+            if truncated:
+                break
+    finally:
+        # Always flush/close so an exception mid-episode can't leak the handle
+        # (Windows file lock) or leave a silently-truncated trace behind.
+        sink.close()
     return {"steps": steps, "total_reward": total_reward, "reached_goal": reached_goal}

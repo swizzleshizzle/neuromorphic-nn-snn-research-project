@@ -1,6 +1,6 @@
 # ADR-0001 — Multi-Region Training Strategy
 
-- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2; 2026-07-07 Amendment 3)
+- **Status:** Accepted (amended 2026-06-22 Amendment 1; 2026-07-06 Amendment 2; 2026-07-07 Amendment 3; 2026-07-09 Amendment 4)
 - **Date:** 2026-06-18
 - **Phase:** 2 (multi-region brain), Step 2.3 — "how does the whole brain learn?"
 - **Deciders:** project author
@@ -105,6 +105,96 @@ paired per-seed test is the correct analysis for a paired design and is decisive
 
 Follow-ups this unlocks: ablation of the now-engaged encoder; reducing the RL variance; and the
 other Option-B flavor (unfreeze the encoder end-to-end so it adapts to the reward, not a proxy).
+
+---
+
+## Amendment 4 (2026-07-09, Week-14 EXP-027) — the engaged sensory region specializes (characterization)
+
+EXP-026 (Amendment 3) engaged the sensory encoder and lifted the cap; EXP-027
+(`experiments/027_encoder_characterization/`) characterizes what it learned, WITHOUT a redundant
+remove/freeze ablation (removing sensory = chance; freezing = already frozen; random-vs-trained = that
+is EXP-026). It probes, per region, how linearly decodable the task variables (goal-relative
+displacement, per-action optimality) are from that region's activity, with shuffle-null and
+PCA-matched controls, paired across the 12 EXP-026 seeds.
+
+**Aim 1 (specialization) - decisive.** The trained sensory hierarchy carries the task structure
+(concept[64] / hidden[128] decode displacement at R2 0.86-0.90 and per-action optimality at 0.89, far
+above their shuffle-null bands), and the sensory concept **beats every non-sensory spectator on both
+targets in 100% of 12 seeds**, surviving both controls. This is the first direct evidence a region
+specializes *through learning*. It is honestly a **gradient**, not a strawman: PFC's internal
+`state[100]` carries a real lossy image (R2 0.76) that attenuates sharply at each bottleneck (PFC
+output utility[4] 0.03 -> router/motor ~0); hippocampus is a true zero because it is bypassed
+(`recall=False`), reported as such.
+
+**Aim 2 (distributedness) - geometry only, causal pending.** The concept code is distributed
+(participation ratio ~24 of 64; ~50% of units needed for 90% of full decode R2), not a few load-bearing
+units. The causal confirmation (Component B: dropout-on-navigation via a MaskedHead) is built and
+tested but deferred (~1h checkpoint mint) to a follow-up; the full distributedness verdict awaits it.
+
+**Consequence:** a region now demonstrably specializes through learning, which makes the deferred
+**ablation studies meaningful** (degrade the sensory code and show navigation falls) - the natural next
+work. Also added: trained-model checkpoint save/load infrastructure (`training/checkpoints.py`).
+
+---
+
+## Amendment 5 (2026-07-13, Week-15) — Component B ran: Aim 2 causally closed; results committed to repo
+
+Supersedes Amendment 4's "Aim 2 - geometry only, causal pending." Component B (dropout-on-navigation
+via `MaskedHead`) was run on 12 seeds. Full-population held-out baseline **34.7%**; masking is
+**graceful and importance-ordered but non-catastrophic**: dropping *half* the 64 concept units (random-k
+at k=32) costs only ~11 pts (34.7% -> 24%), `bottom >= random >= top` holds at k=2/4/8/16, and even
+dropping the 16 most-important units only pulls top-k to 25% (no small-k cliff). Correlational geometry
+(Aim 2A) and causal behavior (Aim 2B) **agree**, so the strong form of the distributedness claim holds:
+the engaged sensory code is distributed **and** causally robust. Full numbers:
+`experiments/027_encoder_characterization/RESULTS.md`.
+
+**Records-hygiene correction (from the 2026-07-13 Phase-2 checkpoint audit).** Component B was run over
+SSH on a laptop; its `outputs/` artifacts are gitignored, so the result had lived only in a vault note
+while Amendment 4 and the committed `027_dropout.md` still read "pending" - the repo could not verify the
+claim. Fixed by committing `RESULTS.md` (an in-repo, non-ignored results record) alongside this
+amendment. **Habit adopted going forward:** every experiment commits a curated `RESULTS.md` so the
+authoritative record never diverges from a machine-local `outputs/` folder again.
+
+**Caveat kept loud:** this characterizes *how* the sensory code is represented; it does not raise the
+~42-45% navigation cap (that was EXP-026's job) and inherits the same high per-seed variance.
+
+**Next (still open):** EXP-028 re-training dose-response ablation (degrade the concept, re-train the
+head, measure the drop) is a *second, complementary* causal test - currently running; its result will be
+Amendment 6.
+
+---
+
+## Amendment 6 (2026-07-14, Week-15 EXP-028) — re-training dose-response ablation: fidelity is not the binding constraint, regularization is
+
+Complements Amendment 5. Where Component B masked units on a *fixed* trained head (found the code
+distributed), EXP-028 degraded the pre-trained concept and **re-trained the linear head against the
+degraded code** across a dose grid — a policy-learning-level test of whether concept fidelity drives the
+navigation lift. Two operators (Gaussian noise `sigma`; structural unit-drop `p`, random/top modes), 12
+cached encoders reused across doses, 12 seeds. Baseline (clean re-train) = **43%** held-out.
+Full numbers: `experiments/028_sensory_ablation/RESULTS.md`.
+
+**The pre-registered hypothesis was half-refuted, and the refutation is the finding.** Unit-drop behaved
+as predicted — monotone graceful decline, `top` faster than `random` (43%->15% vs 43%->26% at p=0.9),
+confirming EXP-027's distributed + importance-ordered code (removed information cannot be re-trained
+back). **Gaussian noise did the opposite of the prediction:** moderate additive noise *doubled* held-out
+success (43% -> 83% at sigma 0.4, all 12 seeds 67-100%), firing our pre-registered Falsifier A and then
+some (inverted, not flat). The optimality diagnostic shows sigma 0.4 is a genuine improvement (optimality
+0.57 vs 0.65 baseline, 13 vs 15 steps — more goals, still efficient), while sigma 0.8 tips into wandering
+(optimality 0.38, 25 steps).
+
+**Conclusion:** concept *fidelity* is not the binding constraint on this policy's learning — policy
+*optimization* is. The frozen-extractor + linear-head + REINFORCE setup is **under-regularized**;
+moderate input noise acts as a regularizer/exploration driver that escapes the weak, partially-collapsed
+policies of the deterministic baseline (directly echoing the EXP-025 entropy-collapse failure mode). So
+EXP-026's "engaging the encoder lifts the cap" stands, but EXP-028 shows the *remaining* ~43% cap is
+gated by optimization, not encoder fidelity — a concrete lever for later work: better regularization,
+not richer encoders, is the next thing to try on the cap.
+
+**Caveat + open follow-up:** noise was applied at both train and eval, so this run does not fully
+separate a training-regularization benefit from an eval-time input change (sigma-0.4 optimality argues
+for the former; sigma-0.8 wandering is the latter at high dose). A **train-noisy / eval-clean** variant
+would isolate it and is left open; it does not change the headline (unit-drop refutes brittleness;
+gaussian refutes fidelity-as-driver).
 
 ---
 

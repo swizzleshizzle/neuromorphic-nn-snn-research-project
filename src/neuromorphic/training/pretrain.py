@@ -15,7 +15,12 @@ from neuromorphic.regions.sensory_cortex import encode_gridworld
 
 
 def displacement_target(obs: torch.Tensor, grid_n: int) -> torch.Tensor:
-    """``[B, 4]`` obs (ax, ay, gx, gy) -> ``[B, 2]`` normalized (gx-ax, gy-ay) / (grid_n-1)."""
+    """``[B, 4]`` obs (ax, ay, gx, gy) -> ``[B, 2]`` normalized (gx-ax, gy-ay) / (grid_n-1).
+
+    Requires ``grid_n >= 2`` (normalization divides by ``grid_n - 1``).
+    """
+    if grid_n < 2:
+        raise ValueError(f"grid_n must be >= 2 for displacement normalization, got {grid_n}")
     ax, ay, gx, gy = obs[:, 0], obs[:, 1], obs[:, 2], obs[:, 3]
     disp = torch.stack([gx - ax, gy - ay], dim=1).float()
     return disp / (grid_n - 1)
