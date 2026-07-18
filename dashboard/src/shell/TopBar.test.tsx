@@ -24,3 +24,19 @@ describe("TopBar live badge", () => {
     expect(screen.getByTestId("live-badge").textContent?.toLowerCase()).toContain("live");
   });
 });
+
+describe("TopBar header fields", () => {
+  beforeEach(() => {
+    useTraceStore.getState().reset();
+    useTraceStore.getState().load(header, []);
+  });
+
+  it("renders header fields (brain id, config_hash, seed, T)", () => {
+    render(<TopBar />);
+    const headerElement = screen.getByRole("banner");
+    expect(headerElement.textContent).toContain("b");
+    expect(headerElement.textContent).toContain("h");
+    expect(headerElement.textContent).toContain("seed 0");
+    expect(headerElement.textContent).toContain("T 1");
+  });
+});
