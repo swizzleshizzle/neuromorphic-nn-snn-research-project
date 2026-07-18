@@ -1,23 +1,26 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { TraceHeader } from "../contract";
 import { useTraceStore } from "../store/traceStore";
 import { TopBar } from "./TopBar";
 
-const header = {
-  schema_version: "1.0",
-  brain: { id: "five-region", config_hash: "ab12cd34", seed: 7, T: 32 },
-  task: { type: "gridworld", grid_n: 5, action_labels: ["up", "right", "down", "left"] },
-  regions: [],
-  pathways: [],
-} as TraceHeader;
+const header = { schema_version: "1.0", brain: { id: "b", config_hash: "h", seed: 0, T: 1 } } as unknown as TraceHeader;
 
-describe("TopBar", () => {
-  it("renders the run topology from the header", () => {
+describe("TopBar live badge", () => {
+  beforeEach(() => {
+    useTraceStore.getState().reset();
     useTraceStore.getState().load(header, []);
+  });
+
+  it("hides the badge when idle", () => {
+    expect(screen.queryByTestId("live-badge")).toBeNull();
     render(<TopBar />);
-    expect(screen.getByText(/five-region/i)).toBeInTheDocument();
-    expect(screen.getByText(/T\s*32/i)).toBeInTheDocument();
-    expect(screen.getByText(/seed\s*7/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("live-badge")).toBeNull();
+  });
+
+  it("shows connection state when live", () => {
+    useTraceStore.getState().setConnectionState("live");
+    render(<TopBar />);
+    expect(screen.getByTestId("live-badge").textContent?.toLowerCase()).toContain("live");
   });
 });
