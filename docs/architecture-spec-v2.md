@@ -1,6 +1,8 @@
 # Five-Region Architecture Specification — v2
 
-**Status:** Authoritative on **regions + wiring**; **training/plasticity sections SUPERSEDED as of 2026-07-13** — see the banner below and ADR-0001 · v2 (2026-06-06, Week 9)
+**Status:** **SUPERSEDED by `docs/architecture-spec-v3.md` (2026-07-17).** Regions + wiring remain
+code-accurate here; the as-trained config and Phase-3 (cube) retarget live in v3, and training/plasticity
+is governed by ADR-0001. Kept as the as-built Week-9 snapshot. · v2 (2026-06-06, Week 9)
 **Date:** 2026-06-06 · Week 9 hands-on
 **Phase:** 2 — Multi-region brain · **Step 2.1/2.2** — architecture + first implementation pass
 **Supersedes:** `docs/architecture-spec-v1.md` (v1, archived — the pre-implementation starting point)
@@ -17,17 +19,18 @@ completion), EXP-020 (closed loop), EXP-021 (R-STDP taste)
 > (§1–§6) remains accurate and code-grounded. But everywhere it says "untrained / random init / no
 > plasticity exists yet / first taste only" it is **out of date** — that was true at bring-up, not now.
 > This document's own promotion condition ("promote to v3 once training makes selection
-> task-meaningful") has since fired. **For the current training/credit-assignment strategy and all
-> results, ADR-0001 is authoritative** (`docs/adr/0001-multi-region-training-strategy.md`, Amendments
-> 1–5).
+> task-meaningful") has since fired — **v3 now exists** (`docs/architecture-spec-v3.md`, 2026-07-17):
+> it folds the as-trained config into the region tables and retargets the architecture at the Phase-3
+> 2×2 cube. **For the current training/credit-assignment strategy and all results, ADR-0001 is
+> authoritative** (`docs/adr/0001-multi-region-training-strategy.md`, Amendments 1–6).
 >
 > **What actually trains (v1, as evaluated), which this spec does not describe:** the brain runs as a
 > **frozen feature extractor**; only a trainable `nn.Linear` **policy head** on the sensory
 > `concept[64]` learns, via surrogate-gradient **REINFORCE**. The hippocampus/memory is **bypassed**
 > (`recall=False`), and PFC / router / motor are computed and visualized but are **off the policy path**
 > — so **1 of 5 regions drives the navigation action**. Region-local R-STDP plasticity remains
-> designed-but-deferred (ADR-0001 "Migration path → Option 3"). A full v3 that folds the as-trained
-> configuration into the region tables is deferred to the Phase-2 → Phase-3 rotation.
+> designed-but-deferred (ADR-0001 "Migration path → Option 3"). The full v3 that folds the as-trained
+> configuration into the region tables **now exists** (`docs/architecture-spec-v3.md`).
 
 ## 0. Purpose and what changed from v1
 
