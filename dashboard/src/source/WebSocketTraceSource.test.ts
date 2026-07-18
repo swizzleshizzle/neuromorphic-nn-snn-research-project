@@ -73,7 +73,7 @@ describe("WebSocketTraceSource", () => {
     FakeWS.instances[0].send({ type: "header", data: {} });
     await p;
     FakeWS.instances[0].send({ type: "end" });
-    expect(states.at(-1)).toBe("ended");
+    expect(states[states.length - 1]).toBe("ended");
     vi.advanceTimersByTime(10000);
     expect(FakeWS.instances.length).toBe(1); // no reconnect after end
   });
