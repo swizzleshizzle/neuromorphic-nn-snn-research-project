@@ -107,7 +107,7 @@ To keep hosting a *later phase and not a rewrite*: endpoints come from **config*
 |---|---|---|
 | **0 — Foundation** | A real React app that replays the real trace, every seam in place | Monorepo `dashboard/` scaffold; `contract.ts`; `TraceSource` + `FileTraceSource`; Zustand `TraceStore`; data-driven Shell; a minimal R3F hero proving the imperative-rAF↔store seam; 2 real panels (Region Activity + Task State); tests. Replaces the prototype as the foundation — not full fidelity. |
 | **1 — Parity** | Match the design spec | All 5 panels; both hero treatments (3D cloud + flow map); focus mode; scrubber; Observatory/Clinical themes; encoding key. Port the prototype's visual logic into proper R3F/D3 components. |
-| **2 — Live** | Watch a sim think live | `WebSocketSink` in `monitor`; FastAPI server tailing the active trace file → WS; `WebSocketTraceSource`; live indicator + reconnect. |
+| **2 — Live** | Watch a sim think live | `WebSocketSink` in `monitor`; FastAPI server tailing the active trace file → WS; `WebSocketTraceSource`; live indicator + reconnect. — **SHIPPED 2026-07-17** (file-tail server + WebSocketTraceSource + reconnect; see plan 2026-07-17-neuroscope-phase2-live). |
 | **3 — Set of brains** | Manage runs | Trace registry (scan a traces dir + run metadata); trace picker; switch between brains/runs. Compare-runs a later sub-phase. |
 | **4 — Scale + host** | Beyond one local sim | RedisStreamSink + server consumer for multi-sim fan-out; cloud/density representation ladder for large brains; optional hosting (config endpoints, auth/CORS, deploy). |
 
