@@ -82,5 +82,6 @@ so the baseline is the *best* v1 can do, not an under-tuned strawman — a faire
 - ~~Land EXP-028 → ADR Amendment 6 → its own `RESULTS.md`.~~ **DONE** (9602265): input noise regularizes;
   fidelity is not the cap. Threaded into the honest assessment (§ limitation 5, 12) and above.
 - Merge `week14-encoder-characterization` + `week15-phase2-closeout` to mainline and tag Phase 2 complete.
-- Promote `architecture-spec-v2.md` → v3 (fold in the as-trained config) as the first Phase-3 doc, since
-  the region tables change materially for the cube anyway.
+- ~~Promote `architecture-spec-v2.md` → v3 (fold in the as-trained config) as the first Phase-3 doc, since
+  the region tables change materially for the cube anyway.~~ **DONE** (2026-07-17): `docs/architecture-spec-v3.md`
+  — as-trained config folded into the region tables, retargeted at the 2×2 cube; v2 superseded.
