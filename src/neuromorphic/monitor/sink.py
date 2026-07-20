@@ -36,11 +36,13 @@ class FileSink(TraceSink):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = self.path.open("w", encoding="utf-8")
         self._fh.write(json.dumps(header) + "\n")
+        self._fh.flush()
 
     def write(self, frame: dict) -> None:
         if self._fh is None:
             raise RuntimeError("FileSink.write called before open()")
         self._fh.write(json.dumps(frame) + "\n")
+        self._fh.flush()
 
     def close(self) -> None:
         if self._fh is not None:

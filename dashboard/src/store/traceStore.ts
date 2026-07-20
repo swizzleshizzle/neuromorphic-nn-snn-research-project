@@ -2,6 +2,8 @@ import { create } from "zustand";
 import type { Frame, TraceHeader } from "../contract";
 import { advancePlayback } from "../playback/advance";
 
+export type ConnectionState = "idle" | "connecting" | "live" | "reconnecting" | "ended" | "error";
+
 interface TraceStore {
   header?: TraceHeader;
   frames: Frame[];
@@ -10,8 +12,11 @@ interface TraceStore {
   winTi: number;
   playing: boolean;
   heroLayout: "cloud" | "flow";
+  connectionState: ConnectionState;
 
   load: (header: TraceHeader, frames: Frame[]) => void;
+  appendFrame: (frame: Frame) => void;
+  setConnectionState: (s: ConnectionState) => void;
   setEnvStep: (i: number) => void;
   setWinTi: (ti: number) => void;
   play: () => void;
@@ -30,9 +35,18 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   winTi: 0,
   playing: false,
   heroLayout: "cloud",
+  connectionState: "idle",
 
   load: (header, frames) =>
     set({ header, frames, T: header.brain.T, envStep: 0, winTi: 0, playing: false }),
+
+  appendFrame: (frame) =>
+    set((s) => {
+      const frames = [...s.frames, frame];
+      return { frames, envStep: frames.length - 1 }; // follow-live (unconditional for MVP)
+    }),
+
+  setConnectionState: (connectionState) => set({ connectionState }),
 
   setEnvStep: (i) => {
     const max = Math.max(0, get().frames.length - 1);
@@ -47,7 +61,7 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   tickWindow: () =>
     set((s) => advancePlayback({ winTi: s.winTi, envStep: s.envStep, T: s.T, frameCount: s.frames.length })),
 
-  reset: () => set({ header: undefined, frames: [], T: 1, envStep: 0, winTi: 0, playing: false }),
+  reset: () => set({ header: undefined, frames: [], T: 1, envStep: 0, winTi: 0, playing: false, connectionState: "idle" }),
 
   setHeroLayout: (v) => set({ heroLayout: v }),
 }));
