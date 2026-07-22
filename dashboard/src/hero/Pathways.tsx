@@ -3,13 +3,14 @@ import { type MutableRefObject, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { Frame } from "../contract";
 import { useTraceStore } from "../store/traceStore";
-import { buildEdges, edgeState, quadPoint } from "./edges";
+import { buildEdges, edgeState, pulseCount, pulsePhase, quadPoint } from "./edges";
 import { lerpVec3 } from "./interp";
 import { clusterCentroids, type HeroNeuron } from "./layout";
 import { hueFor } from "./palette";
 
 const SEGMENTS = 24;
 const PULSES = 3;
+const THRESH = 0.05; // below this per-pathway intensity, an edge shows no pulses (quiet = still)
 
 export function Pathways({
   neurons,
@@ -50,11 +51,10 @@ export function Pathways({
   const pulseRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
-  useFrame(({ clock }) => {
-    const { frames, envStep } = useTraceStore.getState();
+  useFrame(() => {
+    const { frames, envStep, winTi, T } = useTraceStore.getState();
     const frame: Frame | undefined = frames[envStep];
     const m = morphRef.current;
-    const t = clock.elapsedTime;
     let pulseI = 0;
     const pmesh = pulseRef.current;
 
@@ -87,10 +87,14 @@ export function Pathways({
         mat.gapSize = st.quiescent ? 0.05 : 0; // dashed when gated-closed, solid otherwise
       }
 
-      if (pmesh && !st.quiescent) {
-        for (let k = 0; k < PULSES; k++) {
-          let pp = (t * 0.18 + k / PULSES + ei * 0.21) % 1;
-          if (pp < 0) pp += 1;
+      // Pulses: phase from the playhead (winTi) so they freeze on pause; count
+      // gated on real intensity so quiet pathways show none. edgeOffset is a
+      // static per-edge phase offset for visual spacing only (encodes no data).
+      const count = st.quiescent ? 0 : pulseCount(st.inten, THRESH, PULSES);
+      if (pmesh && count > 0) {
+        const edgeOffset = ei * 0.21;
+        for (let k = 0; k < count; k++) {
+          const pp = pulsePhase(winTi, T, k, count, edgeOffset);
           const p = quadPoint(a, b, bow, pp);
           dummy.position.set(p[0], p[1], p[2]);
           dummy.scale.setScalar(0.02 + st.inten * 0.05);
