@@ -46,3 +46,35 @@ export function quadPoint(a: Vec3, b: Vec3, bow: number, t: number): Vec3 {
     u * u * a[2] + 2 * u * t * c[2] + t * t * b[2],
   ];
 }
+
+/**
+ * How many pulses an edge should show for a given intensity.
+ * 0 below `thresh` (quiet edge is still); otherwise 1..maxPulses,
+ * scaling with intensity above the threshold.
+ */
+export function pulseCount(inten: number, thresh: number, maxPulses: number): number {
+  if (inten < thresh) return 0;
+  const span = 1 - thresh;
+  const norm = span > 0 ? Math.min(1, (inten - thresh) / span) : 1;
+  return 1 + Math.round((maxPulses - 1) * norm);
+}
+
+/**
+ * Position in [0,1) along the edge (src -> dst) for pulse `k` of `count`,
+ * driven by the playback playhead `winTi` (0..T-1). Because it reads `winTi`
+ * and not a wall clock, pulses freeze when playback is paused. `edgeOffset`
+ * is a static per-edge phase offset for visual spacing only (encodes no data).
+ */
+export function pulsePhase(
+  winTi: number,
+  T: number,
+  k: number,
+  count: number,
+  edgeOffset: number,
+): number {
+  const base = T > 0 ? winTi / T : 0;
+  const stagger = count > 0 ? k / count : 0;
+  let pp = (base + stagger + edgeOffset) % 1;
+  if (pp < 0) pp += 1;
+  return pp;
+}
