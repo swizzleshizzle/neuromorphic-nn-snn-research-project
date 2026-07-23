@@ -14,6 +14,25 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 
+async def _watch_disconnect(ws, alive) -> None:
+    """Flip ``alive`` false as soon as the client disconnects.
+
+    ``stream_trace``'s poll loops only notice a drop when the next ``send`` raises, so an
+    idle client (no new frames, no ``.done``) would go unnoticed and leak a coroutine plus
+    file handle. Awaiting ``ws.receive()`` surfaces the disconnect even with no send in flight.
+    """
+    try:
+        while alive["v"]:
+            # Low-level receive() returns the disconnect as a message (it does not raise);
+            # a second call after that would raise RuntimeError, so return on it immediately.
+            message = await ws.receive()
+            if message.get("type") == "websocket.disconnect":
+                alive["v"] = False
+                return
+    except WebSocketDisconnect:  # defensive: higher-level receive() variants raise instead
+        alive["v"] = False
+
+
 async def _read_full_line(fh, poll: float, alive) -> str | None:
     """Return the next newline-terminated line, waiting for partial writes to complete."""
     while alive():
@@ -60,9 +79,17 @@ def create_app(trace_path, *, poll: float = 0.15) -> FastAPI:
     async def stream(ws: WebSocket) -> None:
         await ws.accept()
         alive = {"v": True}
+        watcher = asyncio.create_task(_watch_disconnect(ws, alive))
         try:
             await stream_trace(ws.send_json, trace_path, done_path, poll, lambda: alive["v"])
         except WebSocketDisconnect:
             alive["v"] = False
+        finally:
+            alive["v"] = False  # let the watcher's loop guard exit
+            watcher.cancel()
+            try:
+                await watcher
+            except (asyncio.CancelledError, WebSocketDisconnect):
+                pass
 
     return app
