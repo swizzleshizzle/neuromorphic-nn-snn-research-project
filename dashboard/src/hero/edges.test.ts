@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PathwayState, TraceHeader } from "../contract";
 import { buildEdges, edgeState, quadPoint } from "./edges";
+import { pulseCount, pulsePhase } from "./edges";
 
 describe("edgeState", () => {
   it("no pathway frame: open iff not gated", () => {
@@ -34,5 +35,59 @@ describe("quadPoint", () => {
     const mid = quadPoint([0, 0, 0], [2, 0, 0], 1, 0.5);
     expect(mid[0]).toBeCloseTo(1);
     expect(Math.abs(mid[1])).toBeGreaterThan(0); // bowed off the straight line
+  });
+});
+
+describe("pulseCount", () => {
+  it("returns 0 below threshold", () => {
+    expect(pulseCount(0.04, 0.05, 3)).toBe(0);
+    expect(pulseCount(0, 0.05, 3)).toBe(0);
+  });
+
+  it("returns 1 exactly at threshold", () => {
+    expect(pulseCount(0.05, 0.05, 3)).toBe(1);
+  });
+
+  it("returns maxPulses at full intensity", () => {
+    expect(pulseCount(1, 0.05, 3)).toBe(3);
+  });
+
+  it("is monotonically non-decreasing in intensity", () => {
+    let prev = -1;
+    for (let x = 0; x <= 1.0001; x += 0.05) {
+      const c = pulseCount(x, 0.05, 3);
+      expect(c).toBeGreaterThanOrEqual(prev);
+      prev = c;
+    }
+  });
+});
+
+describe("pulsePhase", () => {
+  it("is 0 at winTi=0 for pulse 0", () => {
+    expect(pulsePhase(0, 32, 0, 3, 0)).toBe(0);
+  });
+
+  it("freezes: identical winTi gives identical phase", () => {
+    const a = pulsePhase(7, 32, 1, 3, 0.21);
+    const b = pulsePhase(7, 32, 1, 3, 0.21);
+    expect(a).toBe(b);
+  });
+
+  it("always returns a value in [0, 1)", () => {
+    for (let winTi = 0; winTi < 32; winTi++) {
+      for (let k = 0; k < 3; k++) {
+        const p = pulsePhase(winTi, 32, k, 3, 0.6);
+        expect(p).toBeGreaterThanOrEqual(0);
+        expect(p).toBeLessThan(1);
+      }
+    }
+  });
+
+  it("advances with the playhead", () => {
+    expect(pulsePhase(16, 32, 0, 3, 0)).toBeCloseTo(0.5);
+  });
+
+  it("guards T=0 (no divide by zero)", () => {
+    expect(pulsePhase(5, 0, 0, 1, 0)).toBe(0);
   });
 });
