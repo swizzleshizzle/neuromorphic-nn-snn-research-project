@@ -11,7 +11,15 @@ describe("neuronGlow", () => {
     expect(neuronGlow(frame, "sensory", 0, 0, 4)).toMatchObject({ sp: 1 });
     expect(neuronGlow(frame, "sensory", 0, 0, 4).act).toBeCloseTo(0.56); // sp at 0, prev = ti-1 = 3 -> 0
     expect(neuronGlow(frame, "sensory", 0, 1, 4).act).toBeCloseTo(0.24); // ti=1 no spike, prev ti=0 spikes -> 0.06+0.18
-    expect(neuronGlow(frame, "missing", 0, 0, 4)).toEqual({ sp: 0, act: 0.06 });
+    expect(neuronGlow(frame, "missing", 0, 0, 4)).toEqual({ sp: 0, act: 0.06, flash: 0 });
+  });
+
+  it("flash decays over a 3-step window (1 -> 0.67 -> 0.33 -> 0) since the last spike", () => {
+    // neuron 0 fires only at ti=0.
+    expect(neuronGlow(frame, "sensory", 0, 0, 4).flash).toBeCloseTo(1); // just fired
+    expect(neuronGlow(frame, "sensory", 0, 1, 4).flash).toBeCloseTo(0.667); // fired 1 step ago
+    expect(neuronGlow(frame, "sensory", 0, 2, 4).flash).toBeCloseTo(0.333); // fired 2 steps ago
+    expect(neuronGlow(frame, "sensory", 0, 3, 4).flash).toBe(0); // fired 3 steps ago -> decayed out
   });
 });
 

@@ -33,8 +33,8 @@ export function NeuronField({ neurons, morphRef }: { neurons: HeroNeuron[]; morp
       const n = neurons[i];
       dummy.position.set(...lerpVec3(n.cloudPos, n.flowPos, morph));
       dummy.quaternion.copy(camera.quaternion); // billboard
-      const g = frame ? neuronGlow(frame, n.region, n.idx, winTi, T) : { sp: 0, act: 0.06 };
-      const flash = g.sp ? 1 : 0;
+      const g = frame ? neuronGlow(frame, n.region, n.idx, winTi, T) : { sp: 0, act: 0.06, flash: 0 };
+      const flash = g.flash;
       const size = n.r3 * UNIT * (1 + flash * 1.3);
       dummy.scale.setScalar(size);
       dummy.updateMatrix();
