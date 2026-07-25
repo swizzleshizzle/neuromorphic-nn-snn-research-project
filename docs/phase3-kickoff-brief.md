@@ -75,7 +75,7 @@ which is exactly the evidence we want.
 
 ## 3. Saturday's concrete first moves
 
-1. **Build the 2x2 cube Gymnasium env** + tests: 24-facelet state, 12 moves, scramble-depth curriculum
+1. **Build the 2x2 cube Gymnasium env** + tests: 24-facelet state, 6 moves, scramble-depth curriculum
    (1 -> 2 -> 3), mirroring `GridWorldEnv`'s structure. Safe, isolated infra; nothing depends on the
    training decisions.
 2. **Port the sensory encoding**: `encode_cube` (144 one-hot, Poisson), mirroring `encode_gridworld`.
@@ -86,11 +86,21 @@ which is exactly the evidence we want.
 
 ## 4. Pre-registered expectation for the baseline (write it before the numbers)
 
-A 1-move scramble is effectively a **12-way classification** ("recognize the perturbation, apply its
-inverse"), which a reactive frozen-extractor + linear head *should* be able to learn.
+> **Revised 2026-07-24 (design audit).** This section originally said *12-way* classification. The env
+> uses a **6-move** action space, because on a 2x2 a face turn equals the opposite face's counter-turn
+> (`U == D'`, `R == L'`, `F == B'`), making a 12-move space exactly 2x redundant. See the cube-env spec §1.
+> The revised numbers below supersede the originals; the *shape* of the prediction is unchanged.
+
+A 1-move scramble is effectively a **6-way classification** ("recognize the perturbation, apply its
+inverse"), which a reactive frozen-extractor + linear head *should* be able to learn. Each depth-1
+scramble has **exactly one** solving move, so **chance is 1/6 = 16.7%**.
 
 - **Expected:** solid success at depth 1; sharp degradation at depth 2; near-chance by depth 3. **The
   informative number is the depth at which it collapses.**
+- **Read the depth axis honestly.** `scramble_depth` is a move count, not a distance: a random walk of
+  `k` moves can land closer than `k` (measured: 0% contamination at depths 1-2, ~3.6% at depth 3, ~15%
+  at depth 6). Pass `exact_depth=True` with a distance provider if the collapse-vs-depth curve is the
+  headline number, otherwise report depth as an upper bound.
 - **If it fails at depth 1:** that is NOT an architecture verdict. It points at the encoding or the
   training setup, and must be debugged before any conclusion about regionalization is drawn.
 - **If it succeeds well beyond depth 1:** the cube is less of a forcing function than assumed, and the

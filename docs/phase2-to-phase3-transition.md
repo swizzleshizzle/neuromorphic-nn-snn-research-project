@@ -19,8 +19,9 @@ head), and memory is bypassed.* On a trivial fully-observable 5×5 grid, that su
   its place.
 - It **benefits from move history** (avoid cycles, recognize visited states) → the hippocampus/memory
   can no longer be bypassed.
-- The action space **triples** (4 → 12 moves) and the sensory input is **richer** (24 facelets × 6
-  colors) → a single frozen encoder + linear head is very unlikely to reach the checkpoint.
+- The action space **grows** (4 → 6 moves; revised from 12 on 2026-07-24, see the cube-env spec §1) and
+  the sensory input is **richer** (24 facelets × 6 colors) → a single frozen encoder + linear head is
+  very unlikely to reach the checkpoint.
 
 So Phase 3 is where the v1 architecture's deferred pieces (more regions on the path; plausibly real
 plasticity) stop being optional. **Open decision for the kickoff:** do we rethink the training strategy
@@ -52,9 +53,9 @@ so the baseline is the *best* v1 can do, not an under-tuned strawman — a faire
 
 | Area | Phase 2 (grid) | Phase 3 (2×2 cube) |
 |---|---|---|
-| Environment | 5×5 GridWorldEnv, fully observable | 2×2 cube Gymnasium env, 24 facelets, 12 moves, curriculum 1→2→3-move scrambles |
+| Environment | 5×5 GridWorldEnv, fully observable | 2×2 cube Gymnasium env, 24 facelets, 6 moves, curriculum 1→2→3-move scrambles |
 | Sensory input | 4-int obs (ax,ay,gx,gy) | 24 facelets × 6 colors — population coding (plan L13) |
-| Motor | 4 actions | 12 actions (expand MotorCortex) |
+| Motor | 4 actions | 6 actions (expand MotorCortex; 12 on a 3×3) |
 | Hippocampus | bypassed (`recall=False`) | **engaged** — track move history, recognize visited states |
 | Prefrontal | off policy path | **engaged** — subgoal decomposition |
 | Router | spectator | task-phase-dependent gating |
@@ -69,7 +70,7 @@ so the baseline is the *best* v1 can do, not an under-tuned strawman — a faire
 
 ## Suggested first moves at Phase-3 kickoff (not started yet)
 
-1. **Build the cube env** (Gymnasium, 24-facelet state, 12 moves, scramble-depth curriculum) + tests —
+1. **Build the cube env** (Gymnasium, 24-facelet state, 6 moves, scramble-depth curriculum) + tests —
    mirror the GridWorldEnv structure.
 2. **v1-recipe baseline** on 1-move scrambles to quantify how far the frozen-extractor + linear-head
    approach gets — an informative failure that motivates engagement.

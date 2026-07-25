@@ -54,7 +54,7 @@ dose-response). That is the scientific win of Phase 2, and the launch point for 
   *doubled* held-out success (43% → 83% at σ=0.4, all 12 seeds). So the first Phase-3 lever on the cap is
   **regularization / exploration**, not richer encoders (§4.3).
 - **The cube forces the deferred regions on-path** (§1, §3): hippocampus (move history) and PFC (subgoal
-  decomposition) can no longer be bypassed; the action space triples (4 → 12) and sensory input goes from
+  decomposition) can no longer be bypassed; the action space grows (4 → 6) and sensory input goes from
   4 ints to 24 facelets × 6 colors.
 - **New Phase-3 methodology commitments** carried from the honest assessment: a **monolithic
   same-neuron-count baseline** (the "does regionalization help?" control), **curriculum learning**
@@ -82,7 +82,7 @@ configuration for the cube.
 | 1 | Sensory Cortex | `SensoryCortex` | Leaky compression `N_obs→128→64` | **Yes — the only trained region.** Pre-trained on displacement (EXP-026), then frozen; the linear policy head reads its `concept[64]`. | Re-target input: **24 facelets × 6 colors → population coding**; re-shape/-train the encoder on cube state. |
 | 2 | Hippocampus | `Hippocampus` | Leaky + Hopfield recurrence, one-shot Hebbian imprint | **No — fully bypassed** (`recall=False`). Built, tested (EXP-017/019), never exercised by the policy. | **Engaged** — track move history, recognize visited states (avoid cycles). Memory can no longer be bypassed. |
 | 3 | Prefrontal | `Prefrontal` | RLeaky state-hold + Leaky transform + utility readout | **No — off policy path.** Runs and is visualized; its utility readout is degenerate at init (decodability collapses PFC state[100] R²0.76 → utility[4] 0.03). | **Engaged** — subgoal decomposition / lookahead. The cube needs structure a reactive policy can't give. |
-| 4 | Motor Cortex | `MotorCortex` | `N_actions` Leaky WTA + lateral inhibition | **No — off policy path.** Action comes from the linear head, not `motor.winner` (argmax saturates → zero-grad, ADR Amdt 1). | **Expand to 12 actions** (cube moves); re-enter the policy path once it has a non-degenerate, trainable readout. |
+| 4 | Motor Cortex | `MotorCortex` | `N_actions` Leaky WTA + lateral inhibition | **No — off policy path.** Action comes from the linear head, not `motor.winner` (argmax saturates → zero-grad, ADR Amdt 1). | **Expand to 6 actions** (cube moves; 12 on a 3×3); re-enter the policy path once it has a non-degenerate, trainable readout. |
 | 5 | Thalamic Router | `ThalamicRouter` | Leaky, 2 stages, per-action disinhibition + floor | **No — spectator.** Gates are computed but the trained policy is `sensory → head`. | **Task-phase-dependent gating** — route by cube-solving phase (e.g. scramble-recognition vs subgoal execution). |
 
 Plus the **neuromodulatory bus** `NeuromodBus` (not a region): broadcasts **dopamine** (reward /
@@ -137,14 +137,21 @@ unchanged. This section records only what training revealed and what the cube ch
   can't express, so PFC has to earn its place. Giving it a non-degenerate, trainable readout so it can
   re-enter the policy path is core Phase-3 work.
 
-### 2.4 Motor Cortex — 4 → 12 actions
+### 2.4 Motor Cortex — 4 → 6 actions
 
 - **As trained (grid):** off the policy path. The original "motor spike-counts ARE the logits" premise was
   broken two ways (saturation → zero-gradient absorbing state; degenerate one-hot readout) — see ADR Amdt 1.
   The action is read from the linear head instead.
-- **Cube change:** action space **triples, 4 → 12** (the cube's face turns). Expand the WTA layer to 12; the
+- **Cube change:** action space grows **4 → 6** (the cube's face turns). Expand the WTA layer to 6; the
   deferred learned decompression stack (v2 §2.4) may finally be needed. Re-entering the policy path depends
   on a trainable, non-saturating readout.
+- **Why 6 and not 12** (revised 2026-07-24, verified): a 2×2 has no centers, so turning a face is the same
+  physical act as counter-turning the opposite face (`U == D'`, `R == L'`, `F == B'`). A 12-move action space
+  is exactly 2× redundant. The env holds the DLB corner still and turns only U, R, F, which keeps all
+  3,674,160 states and God's number 14 while making every action distinct. **Chance on a depth-1 scramble is
+  therefore 1/6, not 1/12.** This is 2×2-only: a 3×3 has fixed centers, so all six faces are genuinely
+  distinct and its action space is 12 quarter turns (18 with half-turns). Read the width from
+  `neuromorphic.envs.cube.N_ACTIONS`, never a literal. See `docs/superpowers/specs/2026-07-24-cube-env-design.md` §1.
 
 ### 2.5 Thalamic Router — spectator → task-phase gating
 
@@ -167,7 +174,7 @@ pathways the policy actually uses**.
 | 3 Sensory → Hippocampus (store) | ✅ EXP-017/020 | **bypassed** (`recall=False`) | **engaged** — store visited cube states |
 | 4 Hippocampus → Prefrontal (recall) | ✅ EXP-020 | **bypassed** | **engaged** — recall feeds subgoal choice |
 | 5 Prefrontal → Motor (action-enable) | ✅ EXP-016 | router computes gates, **policy bypasses** | **on path** — routed, task-phase gated |
-| 6 Motor → Environment | ✅ spike-count winner | **replaced** by linear-head argmax | 12-action motor readout re-enters the loop |
+| 6 Motor → Environment | ✅ spike-count winner | **replaced** by linear-head argmax | 6-action motor readout re-enters the loop |
 
 **The v1 policy path, stated once:** `env → sensory encoder (frozen) → concept[64] → trainable nn.Linear
 head → action`. Everything else runs, is recorded, and is visualized — but is not where the learnable
@@ -239,9 +246,9 @@ state rather than reinventing it.
 
 | Area | Phase 2 (grid) | Phase 3 (2×2 cube) |
 |---|---|---|
-| Environment | 5×5 GridWorldEnv, fully observable | 2×2 cube Gymnasium env, 24 facelets, 12 moves, curriculum |
+| Environment | 5×5 GridWorldEnv, fully observable | 2×2 cube Gymnasium env, 24 facelets, 6 moves, curriculum |
 | Sensory input | 4-int obs | 24 facelets × 6 colors — population coding |
-| Motor | 4 actions | 12 actions |
+| Motor | 4 actions | 6 actions (12 on a 3×3) |
 | Hippocampus | bypassed | **engaged** — move history, visited states |
 | Prefrontal | off policy path | **engaged** — subgoal decomposition |
 | Router | spectator | task-phase-dependent gating |
