@@ -65,6 +65,14 @@ class ExactBFSDistance:
             counts[d] += 1
         return counts
 
+    def states_at_distance(self, depth: int) -> list[tuple[int, ...]]:
+        """Every state at exactly ``depth`` moves from solved, sorted for determinism.
+
+        The distance shell. Returns an empty list for a depth beyond a bounded table.
+        Callers get this instead of reaching into ``_table``.
+        """
+        return sorted(state for state, d in self._table.items() if d == depth)
+
     def distance(self, facelets) -> int | None:
         """Exact distance to solved, or ``None`` if beyond a bounded table."""
         return self._table.get(tuple(facelets))
