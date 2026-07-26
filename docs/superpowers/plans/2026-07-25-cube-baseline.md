@@ -958,7 +958,7 @@ git commit -m "feat(training): CubeRunner for the EXP-029 cube baseline"
 
 **Interfaces:**
 - Consumes: `CubeConfig`, `run_cube_baseline` from Task 4.
-- Produces: `outputs/exp029_runs.jsonl` and `outputs/029_curve.md`.
+- Produces: one `outputs/exp029_<arm>_d<depth>_s<seed>_sig<sigma>.json` per run, and the aggregated `outputs/029_curve.md`.
 
 - [ ] **Step 1: Write `run.py`**
 
