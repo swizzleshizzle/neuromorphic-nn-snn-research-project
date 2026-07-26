@@ -40,6 +40,13 @@ def main() -> None:
         raise SystemExit(f"no run records found in {args.runs}")
 
     winners = load_winners(args.runs)
+    for arm in ("regionalized", "monolithic"):
+        if arm not in winners:
+            print(f"WARNING: {arm!r} missing from 029_winners.json; its depth-1 cell will be n/a")
+
+    # Captured before the is_reported filter drops the losing-sigma records, so the
+    # depth-1-across-all-sigmas comparison in the note below reflects everything swept.
+    unfiltered = list(records)
 
     def is_reported(r: dict) -> bool:
         """Depth 1 has one record per swept sigma; only the winner is the reported cell."""
@@ -62,6 +69,23 @@ def main() -> None:
 
     lines = [
         "# EXP-029 collapse curve",
+        "",
+        "Note: the depth-1 cell for each trained arm is the winning-sigma run, selected by",
+        "max mean success over the swept sigmas on that same data, so depth 1 is an",
+        "optimistic estimate. Depths 2 and up use a fixed (pre-selected) sigma and are",
+        "unbiased.",
+    ]
+    for arm in ("regionalized", "monolithic"):
+        all_sigma_vals = [
+            r["success_rate"] for r in unfiltered if r["arm"] == arm and r["depth"] == 1
+        ]
+        if all_sigma_vals:
+            mean_all = 100 * sum(all_sigma_vals) / len(all_sigma_vals)
+            lines.append(
+                f"Unselected comparison: {arm} depth-1 mean across ALL swept sigmas = "
+                f"{mean_all:.0f}% (n={len(all_sigma_vals)})."
+            )
+    lines += [
         "",
         "| depth | eval | regionalized | monolithic | random floor | paired diff | n |",
         "|---|---|---|---|---|---|---|",

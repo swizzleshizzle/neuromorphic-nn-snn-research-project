@@ -148,7 +148,9 @@ class Brain:
         """One environment decision: obs → action, over the ``T``-window.
 
         Args:
-            obs: ``[4]`` or ``[B, 4]`` integer observation ``(ax, ay, gx, gy)``.
+            obs: ``[obs_width]`` or ``[B, obs_width]`` integer observation, where
+                ``obs_width`` is set at construction (default 4, the grid's
+                ``(ax, ay, gx, gy)``; a cube-configured ``Brain`` uses 24 raw facelets).
             store: imprint the current sensory snapshot into the hippocampus (pathway 3).
             recall: feed the (gated) hippocampal recall into PFC's memory afferent
                 (pathway 4). ``False`` → sensory-only PFC (recall=None).
@@ -159,8 +161,10 @@ class Brain:
         Returns:
             dict with ``action`` (int for a single agent, else ``[B]`` tensor),
             ``utilities``/``recall``/``gate``/``action_spikes`` ``[T, B, N]`` tensors,
-            ``obs_spikes`` (the encoder input ``[T, B, 2*grid_n**2]``), and
-            ``recordings`` (per-region ``{key: [T,B,N]}``) when ``record=True``.
+            ``obs_spikes`` (the encoder's output, ``[T, B, n_obs]``; ``n_obs`` is set at
+            construction, e.g. ``2*grid_n**2`` for the default grid encoder or 144 for
+            the cube encoder), and ``recordings`` (per-region ``{key: [T,B,N]}``) when
+            ``record=True``.
         """
         obs_t = self._to_obs_tensor(obs)
         B = obs_t.shape[0]

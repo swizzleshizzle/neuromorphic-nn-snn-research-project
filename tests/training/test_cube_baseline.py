@@ -72,6 +72,19 @@ def test_random_arm_scores_above_zero_but_well_below_one(provider):
     assert 0.0 <= res["success_rate"] <= 1.0
 
 
+def test_different_rng_seeds_give_different_random_arm_results(provider):
+    """Fix 1: the chance floor must not be one realization replayed under every seed.
+
+    Depth 3's shell (120 states) is large enough that two different rng seeds land on
+    different success rates almost surely; seeds 0 and 1 are checked here and verified
+    not to tie. No training happens, so this stays fast.
+    """
+    states = shell_states(provider, 3)
+    res_a = evaluate_states(None, None, states, depth=3, random_policy=True, rng_seed=0)
+    res_b = evaluate_states(None, None, states, depth=3, random_policy=True, rng_seed=1)
+    assert res_a["success_rate"] != res_b["success_rate"]
+
+
 def test_agents_are_built_for_both_arms():
     reg = make_agent(CubeConfig(arm="regionalized"))
     mono = make_agent(CubeConfig(arm="monolithic"))
@@ -90,4 +103,20 @@ def test_smoke_run_produces_a_wellformed_record(tmp_path):
         assert key in rec
     assert rec["arm"] == "regionalized"
     assert rec["is_heldout"] is False  # depth 1
-    assert 0.0 <= rec["success_rate"] <= 1.0
+    assert rec["n"] == 6  # depth-1 shell size (PUBLISHED[1])
+    solved_count = rec["success_rate"] * rec["n"]
+    assert solved_count == pytest.approx(round(solved_count))  # success_rate is solved/n
+
+
+def test_both_arms_get_identical_head_init_at_a_fixed_seed():
+    """The paired comparison assumes matched heads; only topology should differ."""
+    from neuromorphic.training.reinforce import make_policy_head
+
+    weights = {}
+    for arm in ("regionalized", "monolithic"):
+        cfg = CubeConfig(arm=arm, seed=0)
+        agent = make_agent(cfg)
+        torch.manual_seed(cfg.seed)
+        head = make_policy_head(agent, "linear")
+        weights[arm] = head.weight.detach().clone()
+    assert torch.equal(weights["regionalized"], weights["monolithic"])

@@ -140,11 +140,12 @@ def evaluate_states(
     depth: int,
     generator: torch.Generator | None = None,
     random_policy: bool = False,
+    rng_seed: int = 0,
 ) -> dict:
     """Greedy rollouts from each state. ``random_policy`` measures the chance floor."""
     limit = max_steps_for(depth)
-    env = CubeEnv(scramble_depth=depth, max_steps=limit)
-    rng = random.Random(0)
+    env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
+    rng = random.Random(rng_seed)
     solved = 0
     steps_solved: list[int] = []
     for state in states:
@@ -186,10 +187,13 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
     )
 
     if cfg.arm == "random":
-        result = evaluate_states(None, None, eval_states, depth=cfg.depth, random_policy=True)
+        result = evaluate_states(
+            None, None, eval_states, depth=cfg.depth, random_policy=True, rng_seed=cfg.seed
+        )
         episodes_run = 0
     else:
         agent = make_agent(cfg)
+        torch.manual_seed(cfg.seed)  # head init and sampling stream matched across arms
         spec = AblationSpec(kind="gaussian", dose=cfg.sigma, seed=cfg.seed) if cfg.sigma else None
         head = AblatedConcept(
             make_policy_head(agent, "linear"), spec, width=cfg.content
@@ -210,7 +214,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             )
             baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
         result = evaluate_states(
-            agent, head, eval_states, depth=cfg.depth, generator=generator
+            agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed
         )
         episodes_run = cfg.episodes
 
@@ -223,6 +227,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "is_heldout": is_heldout,
         "n_train": len(train_states),
         "tag": cfg.tag,
+        "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},
         **result,
     }
 
