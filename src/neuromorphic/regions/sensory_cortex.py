@@ -64,6 +64,45 @@ def encode_gridworld(
     return torch.bernoulli(probs, generator=generator)
 
 
+def encode_cube(
+    obs: torch.Tensor,
+    cube_n: int = 2,
+    n_colors: int = 6,
+    T: int = 32,
+    max_rate: float = 0.5,
+    generator: torch.Generator | None = None,
+) -> torch.Tensor:
+    """Rate-encode a cube facelet observation into Poisson spikes (mirrors encode_gridworld).
+
+    Args:
+        obs: ``[B, 6*cube_n**2]`` integer facelet colors, each in ``[0, n_colors)``.
+        cube_n: cube side length (2 for the Pocket Cube; size-generic for 3+).
+        n_colors: number of sticker colors (6).
+        T: number of time steps in the inference window.
+        max_rate: per-step spike probability for an active one-hot cell.
+        generator: RNG for reproducible Poisson sampling (``None`` = global RNG).
+
+    Returns:
+        ``[T, B, 6*cube_n**2*n_colors]`` binary spikes (one-hot facelet-color, Poisson-rated).
+    """
+    n_facelets = 6 * cube_n * cube_n
+    if obs.ndim != 2 or obs.shape[1] != n_facelets:
+        raise ValueError(f"encode_cube expects obs [B, {n_facelets}], got {tuple(obs.shape)}")
+    if int(obs.min()) < 0 or int(obs.max()) >= n_colors:
+        raise ValueError(f"facelet colors must be in [0, {n_colors})")
+
+    B = obs.shape[0]
+    n_in = n_facelets * n_colors
+
+    # one-hot each facelet's color: input index = facelet * n_colors + color
+    idx = torch.arange(n_facelets).unsqueeze(0) * n_colors + obs.long()
+    rate = torch.zeros(B, n_in)
+    rate.scatter_(1, idx, max_rate)
+
+    probs = rate.unsqueeze(0).expand(T, B, n_in).contiguous()
+    return torch.bernoulli(probs, generator=generator)
+
+
 class SensoryCortex(BrainRegion):
     """Feedforward spiking sensory region: ``N_obs → hidden → concept``.
 
