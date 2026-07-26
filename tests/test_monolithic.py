@@ -22,6 +22,15 @@ def test_neuron_count_matches_the_brain_exactly():
     assert mono.n_neurons == brain.n_neurons == 510
 
 
+def test_neuron_count_flows_from_total_neurons_parameter():
+    """Verify n_neurons is computed from the parameter, not hardcoded to 510."""
+    mono = MonolithicBrain(
+        n_obs=144, n_actions=6, total_neurons=200, content=64, obs_width=24, encoder=cube_encoder()
+    )
+    assert mono.n_neurons == 200
+    assert mono.stack.n_neurons == 200
+
+
 def test_step_returns_a_concept_of_the_right_shape():
     _, mono = _cube_pair()
     out = mono.step(np.zeros(24, dtype=np.int64), generator=torch.Generator().manual_seed(0))
