@@ -21,6 +21,14 @@ def load(out_dir: Path) -> list[dict]:
     return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(out_dir.glob("exp029_*.json"))]
 
 
+def load_winners(out_dir: Path) -> dict:
+    """Each arm's winning sigma from the phase-1 sweep, written by run.py."""
+    path = out_dir / "029_winners.json"
+    if not path.exists():
+        raise SystemExit(f"missing {path}; run.py writes it after the sigma sweep")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=Path, default=HERE / "outputs")
@@ -30,6 +38,17 @@ def main() -> None:
     records = load(args.runs)
     if not records:
         raise SystemExit(f"no run records found in {args.runs}")
+
+    winners = load_winners(args.runs)
+
+    def is_reported(r: dict) -> bool:
+        """Depth 1 has one record per swept sigma; only the winner is the reported cell."""
+        if r["depth"] != 1 or r["arm"] == "random":
+            return True
+        return r["sigma"] == winners.get(r["arm"])
+
+    records = [r for r in records if is_reported(r)]
+
     cells = defaultdict(list)
     heldout = {}
     for r in records:

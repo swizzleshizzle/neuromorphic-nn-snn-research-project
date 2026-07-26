@@ -12,6 +12,7 @@ Run (repo root, venv active):
 from __future__ import annotations
 
 import argparse
+import json
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -61,9 +62,19 @@ def main() -> None:
         by_arm_sigma[(r["arm"], r["sigma"])].append(r["success_rate"])
     best = {}
     for arm in TRAINED_ARMS:
-        means = {sig: sum(v) / len(v) for (a, sig), v in by_arm_sigma.items() if a == arm}
-        best[arm] = max(means, key=means.get)
+        means = {
+            sig: sum(by_arm_sigma[(arm, sig)]) / len(by_arm_sigma[(arm, sig)])
+            for sig in SIGMAS
+            if by_arm_sigma.get((arm, sig))
+        }
+        # Deterministic: fixed SIGMAS order, and on an exact tie prefer the smaller
+        # sigma rather than whichever worker finished first.
+        best[arm] = max(SIGMAS, key=lambda s: (means.get(s, float("-inf")), -s))
         print(f"  {arm}: sigma means {means} -> winner {best[arm]}")
+
+    manifest = args.out_dir / "029_winners.json"
+    manifest.write_text(json.dumps(best), encoding="utf-8")
+    print(f"  winners written to {manifest}")
 
     # Phase 2: depths 2-6 at each arm's winning sigma, plus the random floor everywhere.
     rest = [
