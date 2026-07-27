@@ -1,4 +1,4 @@
-# Session Handoff — 2026-07-26 (Sun) -> Week 17
+# Session Handoff - 2026-07-26 (Sun) -> Week 17
 
 > Single-page pickup point. Everything below is committed and pushed to `origin/main` (`3070921`);
 > nothing is stranded. Repo is `main`-only, working tree clean, 340 tests passing.
@@ -17,8 +17,8 @@ The full suite including the slow BFS test is 340 and takes about 16 minutes. Th
 
 **Phase 3 now has a complete cube stack, library plus harness.** Two merges:
 
-- `d48e943` — the 2x2 cube environment (`CubeEnv`, `ExactBFSDistance`, `encode_cube`)
-- `3070921` — the EXP-029 baseline harness (encoder seam, `MonolithicBrain`, `CubeRunner`, driver)
+- `d48e943` - the 2x2 cube environment (`CubeEnv`, `ExactBFSDistance`, `encode_cube`)
+- `3070921` - the EXP-029 baseline harness (encoder seam, `MonolithicBrain`, `CubeRunner`, driver)
 
 New library surface:
 
