@@ -169,3 +169,26 @@ def test_optional_flags_require_a_provider():
         CubeEnv(reward_shaping=True)
     with pytest.raises(ValueError):
         CubeEnv(exact_depth=True)
+
+
+def test_reset_accepts_an_explicit_start_state():
+    env = CubeEnv(scramble_depth=3, scramble_seed=0)
+    target = apply_move(SOLVED, 0)
+    obs, info = env.reset(options={"state": target})
+    assert tuple(int(c) for c in obs) == target
+    assert info["solved"] is False
+    # and it really is one move from solved
+    _, _, term, _, _ = env.step(inverse_action(0))
+    assert term is True
+
+
+def test_reset_without_options_still_scrambles():
+    env = CubeEnv(scramble_depth=2, scramble_seed=0)
+    obs, _ = env.reset()
+    assert tuple(int(c) for c in obs) != SOLVED
+
+
+def test_reset_rejects_a_malformed_state():
+    env = CubeEnv(scramble_seed=0)
+    with pytest.raises(ValueError, match="24"):
+        env.reset(options={"state": (0, 1, 2)})

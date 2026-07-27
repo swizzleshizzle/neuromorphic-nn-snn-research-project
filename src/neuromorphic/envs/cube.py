@@ -191,6 +191,38 @@ class CubeEnv(gym.Env):
         self._last_move: int | None = None
         self._prev_dist: int | None = None
 
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        """Reset the environment to a start state.
+
+        Args:
+            seed: seed for the RNG.
+            options: dict with optional "state" key. If provided,
+                options={"state": facelets} starts from that exact state instead of scrambling.
+
+        Returns:
+            (observation, info) tuple.
+        """
+        super().reset(seed=seed)
+        if seed is not None:
+            self._rng = random.Random(seed)
+        if options is not None and "state" in options:
+            # Explicit start state, for evaluating a specific held-out cube.
+            state = tuple(int(c) for c in options["state"])
+            if len(state) != 24:
+                raise ValueError(f"options['state'] must have 24 facelets, got {len(state)}")
+            self._state = state
+        else:
+            self._state = scramble(
+                self.scramble_depth,
+                self._rng,
+                provider=self.distance_provider if self.exact_depth else None,
+            )
+        self._steps = 0
+        self._last_move = None
+        d = self._distance()
+        self._prev_dist = d
+        return self._obs(), self._info(d)
+
     # ------------------------------------------------------------------ #
     def _obs(self) -> np.ndarray:
         return np.array(self._state, dtype=np.int64)
@@ -209,21 +241,6 @@ class CubeEnv(gym.Env):
             "move": self._last_move,
             "move_label": None if self._last_move is None else MOVE_LABELS[self._last_move],
         }
-
-    def reset(self, *, seed: int | None = None, options: dict | None = None):
-        super().reset(seed=seed)
-        if seed is not None:
-            self._rng = random.Random(seed)
-        self._state = scramble(
-            self.scramble_depth,
-            self._rng,
-            provider=self.distance_provider if self.exact_depth else None,
-        )
-        self._steps = 0
-        self._last_move = None
-        d = self._distance()
-        self._prev_dist = d
-        return self._obs(), self._info(d)
 
     def step(self, action: int):
         if not self.action_space.contains(int(action)):

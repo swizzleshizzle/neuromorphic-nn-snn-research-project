@@ -1,0 +1,116 @@
+# experiments/029_cube_baseline/aggregate.py
+"""Aggregate EXP-029 records into the collapse table.
+
+Reports mean success per (arm, depth) across seeds, with the paired regionalized-minus-
+monolithic difference. Depths 1 and 2 are training-distribution; 3 to 6 are held-out, and
+the table says which is which rather than leaving the reader to guess.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from collections import defaultdict
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def load(out_dir: Path) -> list[dict]:
+    """Every per-run record. One file per run, written by the workers."""
+    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(out_dir.glob("exp029_*.json"))]
+
+
+def load_winners(out_dir: Path) -> dict:
+    """Each arm's winning sigma from the phase-1 sweep, written by run.py."""
+    path = out_dir / "029_winners.json"
+    if not path.exists():
+        raise SystemExit(f"missing {path}; run.py writes it after the sigma sweep")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs", type=Path, default=HERE / "outputs")
+    ap.add_argument("--out", type=Path, default=HERE / "outputs" / "029_curve.md")
+    args = ap.parse_args()
+
+    records = load(args.runs)
+    if not records:
+        raise SystemExit(f"no run records found in {args.runs}")
+
+    winners = load_winners(args.runs)
+    for arm in ("regionalized", "monolithic"):
+        if arm not in winners:
+            print(f"WARNING: {arm!r} missing from 029_winners.json; its depth-1 cell will be n/a")
+
+    # Captured before the is_reported filter drops the losing-sigma records, so the
+    # depth-1-across-all-sigmas comparison in the note below reflects everything swept.
+    unfiltered = list(records)
+
+    def is_reported(r: dict) -> bool:
+        """Depth 1 has one record per swept sigma; only the winner is the reported cell."""
+        if r["depth"] != 1 or r["arm"] == "random":
+            return True
+        return r["sigma"] == winners.get(r["arm"])
+
+    records = [r for r in records if is_reported(r)]
+
+    cells = defaultdict(list)
+    heldout = {}
+    for r in records:
+        cells[(r["arm"], r["depth"])].append(r["success_rate"])
+        heldout[r["depth"]] = r["is_heldout"]
+
+    by_seed = defaultdict(dict)
+    for r in records:
+        if r["arm"] in ("regionalized", "monolithic"):
+            by_seed[(r["depth"], r["seed"])][r["arm"]] = r["success_rate"]
+
+    lines = [
+        "# EXP-029 collapse curve",
+        "",
+        "Note: the depth-1 cell for each trained arm is the winning-sigma run, selected by",
+        "max mean success over the swept sigmas on that same data, so depth 1 is an",
+        "optimistic estimate. Depths 2 and up use a fixed (pre-selected) sigma and are",
+        "unbiased.",
+    ]
+    for arm in ("regionalized", "monolithic"):
+        all_sigma_vals = [
+            r["success_rate"] for r in unfiltered if r["arm"] == arm and r["depth"] == 1
+        ]
+        if all_sigma_vals:
+            mean_all = 100 * sum(all_sigma_vals) / len(all_sigma_vals)
+            lines.append(
+                f"Unselected comparison: {arm} depth-1 mean across ALL swept sigmas = "
+                f"{mean_all:.0f}% (n={len(all_sigma_vals)})."
+            )
+    lines += [
+        "",
+        "| depth | eval | regionalized | monolithic | random floor | paired diff | n |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for depth in sorted({d for _, d in cells}):
+        def mean(arm):
+            vals = cells.get((arm, depth), [])
+            return f"{100 * sum(vals) / len(vals):.0f}%" if vals else "n/a"
+
+        pairs = [
+            v["regionalized"] - v["monolithic"]
+            for (d, _), v in by_seed.items()
+            if d == depth and "regionalized" in v and "monolithic" in v
+        ]
+        diff = f"{100 * sum(pairs) / len(pairs):+.0f} pts" if pairs else "n/a"
+        label = "held-out" if heldout.get(depth) else "train-dist"
+        lines.append(
+            f"| {depth} | {label} | {mean('regionalized')} | {mean('monolithic')} | "
+            f"{mean('random')} | {diff} | {len(pairs)} |"
+        )
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    main()

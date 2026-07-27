@@ -34,6 +34,7 @@ import numpy as np
 import torch
 
 from neuromorphic.connections import apply_gate
+from neuromorphic.encoders import grid_encoder
 from neuromorphic.neuromod import NeuromodBus
 from neuromorphic.regions import (
     Hippocampus,
@@ -41,7 +42,6 @@ from neuromorphic.regions import (
     Prefrontal,
     SensoryCortex,
     ThalamicRouter,
-    encode_gridworld,
 )
 
 
@@ -67,6 +67,9 @@ class Brain:
         num_steps: int = 32,
         seed: int = 0,
         bus: NeuromodBus | None = None,
+        encoder=None,
+        n_obs: int | None = None,
+        obs_width: int = 4,
     ):
         self.grid_n = grid_n
         self.content = content
@@ -74,8 +77,16 @@ class Brain:
         self.T = num_steps
         self.bus = bus if bus is not None else NeuromodBus()
 
-        n_obs = 2 * grid_n * grid_n
-        self.sensory = SensoryCortex(n_obs=n_obs, concept=content, num_steps=num_steps, seed=seed)
+        # Encoder seam: default reproduces the grid behavior exactly, so every existing
+        # caller (Brain(grid_n=5)) is untouched. A cube passes cube_encoder() with
+        # n_obs=144 and obs_width=24. See docs/.../2026-07-25-cube-baseline-design.md.
+        self.obs_width = obs_width
+        self._encoder = encoder if encoder is not None else grid_encoder(grid_n)
+        self.n_obs = n_obs if n_obs is not None else 2 * grid_n * grid_n
+
+        self.sensory = SensoryCortex(
+            n_obs=self.n_obs, concept=content, num_steps=num_steps, seed=seed
+        )
         self.hippo = Hippocampus(
             content_dim=content, n_neurons=n_hippo, num_steps=num_steps, seed=seed
         )
@@ -97,15 +108,21 @@ class Brain:
             "motor": self.motor,
         }
 
+    @property
+    def n_neurons(self) -> int:
+        """Total neurons across all regions. The matching budget for MonolithicBrain."""
+        return sum(r.n_neurons for r in self._regions.values())
+
     # ------------------------------------------------------------------ #
-    @staticmethod
-    def _to_obs_tensor(obs) -> torch.Tensor:
-        """Coerce an observation to a ``[B, 4]`` int tensor."""
+    def _to_obs_tensor(self, obs) -> torch.Tensor:
+        """Coerce an observation to a ``[B, obs_width]`` int tensor."""
         arr = np.asarray(obs)
         if arr.ndim == 1:
             arr = arr[None, :]
-        if arr.ndim != 2 or arr.shape[1] != 4:
-            raise ValueError(f"obs must be [4] or [B, 4] (agent_x,y,goal_x,y); got {arr.shape}")
+        if arr.ndim != 2 or arr.shape[1] != self.obs_width:
+            raise ValueError(
+                f"obs must be [{self.obs_width}] or [B, {self.obs_width}]; got {arr.shape}"
+            )
         return torch.as_tensor(arr, dtype=torch.long)
 
     def remember(self, obs, generator: torch.Generator | None = None) -> torch.Tensor:
@@ -114,7 +131,7 @@ class Brain:
         Returns the stored sparse pattern ``p`` (``[n_hippo]``).
         """
         obs_t = self._to_obs_tensor(obs)
-        spikes = encode_gridworld(obs_t, grid_n=self.grid_n, T=self.T, generator=generator)
+        spikes = self._encoder(obs_t, T=self.T, generator=generator)
         concept = self.sensory(spikes)
         snapshot = concept.mean(dim=0)  # [B, content] sensory snapshot
         return self.hippo.store(snapshot)
@@ -131,7 +148,9 @@ class Brain:
         """One environment decision: obs → action, over the ``T``-window.
 
         Args:
-            obs: ``[4]`` or ``[B, 4]`` integer observation ``(ax, ay, gx, gy)``.
+            obs: ``[obs_width]`` or ``[B, obs_width]`` integer observation, where
+                ``obs_width`` is set at construction (default 4, the grid's
+                ``(ax, ay, gx, gy)``; a cube-configured ``Brain`` uses 24 raw facelets).
             store: imprint the current sensory snapshot into the hippocampus (pathway 3).
             recall: feed the (gated) hippocampal recall into PFC's memory afferent
                 (pathway 4). ``False`` → sensory-only PFC (recall=None).
@@ -142,8 +161,10 @@ class Brain:
         Returns:
             dict with ``action`` (int for a single agent, else ``[B]`` tensor),
             ``utilities``/``recall``/``gate``/``action_spikes`` ``[T, B, N]`` tensors,
-            ``obs_spikes`` (the encoder input ``[T, B, 2*grid_n**2]``), and
-            ``recordings`` (per-region ``{key: [T,B,N]}``) when ``record=True``.
+            ``obs_spikes`` (the encoder's output, ``[T, B, n_obs]``; ``n_obs`` is set at
+            construction, e.g. ``2*grid_n**2`` for the default grid encoder or 144 for
+            the cube encoder), and ``recordings`` (per-region ``{key: [T,B,N]}``) when
+            ``record=True``.
         """
         obs_t = self._to_obs_tensor(obs)
         B = obs_t.shape[0]
@@ -153,7 +174,7 @@ class Brain:
                 r.enable_recording(True)
 
         # 1. Environment → Sensory Cortex
-        obs_spikes = encode_gridworld(obs_t, grid_n=self.grid_n, T=self.T, generator=generator)
+        obs_spikes = self._encoder(obs_t, T=self.T, generator=generator)
         concept = self.sensory(obs_spikes)  # [T, B, content]
 
         # 2. Sensory → Hippocampus (gated store / recall — "via thalamus")

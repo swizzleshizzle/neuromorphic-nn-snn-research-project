@@ -70,7 +70,9 @@ Matches the 027/028 layout: `run.py`, `aggregate.py`, `outputs/` (gitignored), `
 | Recall | `False` |
 | `max_steps` | `2d + 3` (optimal is `d`) |
 
-**Arms.** `regionalized` is the five-region `Brain`. `monolithic` is an unregionalized spiking stack matched on **total neuron count**, frozen at random init, with the identical head, optimizer, seeds and depth grid, so that topology is the only difference and any gap is attributable to regionalization. `random` is a uniform-policy arm, evaluation only and no training, which measures the true chance floor (see §5).
+**Arms.** `regionalized` is the five-region `Brain`. `monolithic` is an unregionalized spiking stack matched on **total neuron count**, frozen at random init, with the identical head, optimizer, seeds and depth grid. `random` is a uniform-policy arm, evaluation only and no training, which measures the true chance floor (see §5).
+
+Total-neuron matching does NOT put the two arms on equal footing on the path that actually feeds the policy head. With `recall=False`, the regionalized policy path is the sensory region only (144 -> 128 hidden -> 64 concept); hippocampus (150 neurons) never runs, and prefrontal (150), router (12) and motor (6) run but their outputs are discarded before the head. The monolithic arm spends its whole budget on the path (144 -> 446 hidden -> 64 concept). Effective policy-path width is therefore **128 (regionalized) vs 446 (monolithic)**, not matched, and any gap between arms is confounded with this width difference, not attributable to topology alone.
 
 The matched neuron count is **computed from the live region sizes at construction time**, not hardcoded: sum the neuron counts of sensory (hidden + concept), hippocampus, prefrontal, router and motor for the cube configuration, and size the flat stack to the same total. A test asserts the two totals are equal, so the match cannot silently drift if a region's default changes.
 
@@ -96,6 +98,8 @@ Written before the numbers exist, per the EXP-028 lesson (where pre-registration
 - **A weak depth-1 result does NOT indict the architecture.** Depth 1 is a 6-way classification with exactly one correct action. Failing it indicts the encoding or the training setup, and must be debugged before any regionalization conclusion is drawn. Note the frozen-random encoder (locked input 2) as the leading suspect.
 - **The regionalization comparison is paired per seed.** `regionalized` vs `monolithic` at matched seed and depth, reported as a paired test, not as two independent means.
 - **A null result is a result.** If the two arms are indistinguishable, that is the finding, and it is reported as such rather than explored until something separates.
+- **A monolithic win is confounded with policy-path width.** Effective policy-path width is 128 (regionalized) vs 446 (monolithic; see §4), so a monolithic win reads as "a wider random feature bank wins," not "regionalization does not help." Only a regionalized win, achieved at roughly a third the effective width, is informative about topology.
+- **The depth-1 cell is optimistically biased.** It is selected by max over three swept sigmas on the same data it reports, while depths 2 to 6 use a single pre-selected sigma. Depth 1 is therefore not directly comparable in bias to the rest of the curve.
 
 ## 6. Outputs
 

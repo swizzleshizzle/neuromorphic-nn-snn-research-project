@@ -65,3 +65,16 @@ def test_full_table_size_and_god_number():
     assert d.max_distance == 14
     assert d.level_counts()[:7] == PUBLISHED_LEVELS
     assert all(c > 0 for c in d.level_counts())
+
+
+def test_states_at_distance_matches_published_shells(shallow):
+    for depth, expected in enumerate(PUBLISHED_LEVELS):
+        states = shallow.states_at_distance(depth)
+        assert len(states) == expected
+        assert all(shallow.distance(s) == depth for s in states)
+
+
+def test_states_at_distance_is_sorted_and_beyond_the_bound_is_empty(shallow):
+    states = shallow.states_at_distance(3)
+    assert states == sorted(states)
+    assert shallow.states_at_distance(12) == []
