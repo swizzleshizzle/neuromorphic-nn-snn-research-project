@@ -81,7 +81,7 @@ Run the `concept` arm first, read the revisit rate, and only then launch the two
 Written before the numbers exist.
 
 - **Primary:** `memory` beats `memory_shuffled`, paired per seed at n = 12. This is the claim the experiment stands or falls on.
-- **Secondary:** `memory` beats `concept`. If primary holds but secondary does not, the gain came from head width, not memory.
+- **Secondary:** `memory` beats `concept`. This comparison is confounded two ways: `concept` has a narrower head (64 vs 129), and `concept` cannot see the elapsed-time signal carried in the familiarity scalar (see the limitation below), so a `memory` win over `concept` is consistent with head width, elapsed-time drift, or memory content, in any combination. It can motivate a hypothesis but cannot settle one, and no content claim may rest on it. Any claim about memory content rests on the `memory` vs `memory_amnesic` comparison (both arms hold head width and elapsed-time exposure fixed and differ only in whether the attractor holds stored content at read time).
 - **Revisit rate is reported for every arm**, not only as the gate. A null alongside a near-zero revisit rate is a statement about the task, not about memory, and the writeup must say which it is.
 - **Capacity is measured, and the two mechanisms degrade differently (measured 2026-07-27 against a prototype of the accumulate fix).**
 
