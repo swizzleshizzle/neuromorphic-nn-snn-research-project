@@ -12,8 +12,12 @@ Two paired columns are reported, at matched (depth, seed):
   having any stored content help at all, as opposed to just a wider head reading the
   state it is already looking at?).
 
-The revisit rate and mean stored-pattern count are reported alongside, because a null
-with near-zero revisits is a statement about the task.
+The greedy-policy revisit rate and mean stored-pattern count are reported alongside,
+because a null with near-zero revisits is a statement about the task. The greedy rate
+(not the training-policy one) is the decision metric: it is computed over the
+deterministic evaluation rollouts, where a repeated state means a genuine cycle, rather
+than over the stochastic training policy, which revisits by construction (a random walk
+undoes a move about 1 step in 6).
 """
 
 from __future__ import annotations
@@ -56,7 +60,7 @@ def main() -> None:
     by_seed = defaultdict(dict)
     for r in records:
         cells[(r["readout"], r["depth"])].append(r["success_rate"])
-        revisit[(r["readout"], r["depth"])].append(r["revisit_rate"])
+        revisit[(r["readout"], r["depth"])].append(r["eval_revisit_rate"])
         stored[(r["readout"], r["depth"])].append(r["mean_n_stored"])
         by_seed[(r["depth"], r["seed"])][r["readout"]] = r["success_rate"]
 
@@ -70,12 +74,14 @@ def main() -> None:
         "(does having any stored content help at all, versus a wider head reading only",
         "the current state?): both arms feed the head the same feed-forward expansion of",
         "the current concept, differing only in whether the attractor holds anything at",
-        "read time. A near-zero revisit rate means there were no cycles to avoid, and any",
-        "null must be read that way.",
+        "read time. A near-zero GREEDY revisit rate means there were no cycles to avoid,",
+        "and any null must be read that way. The greedy rate is computed over the",
+        "deterministic evaluation policy, not the stochastic training policy, which",
+        "revisits by construction and is not a decision metric.",
         "",
         "| depth | concept | memory | shuffled | amnesic | paired mem-shuf | paired mem-amn "
-        "| revisit rate | mean stored | n |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| greedy revisit | mean stored | n shuf | n amn |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for depth in sorted({d for _, d in cells}):
         def mean(mode, table=cells, fmt="{:.0f}%", scale=100):
@@ -95,7 +101,7 @@ def main() -> None:
             f"| {depth} | {mean('concept')} | {mean('memory')} | {mean('memory_shuffled')} "
             f"| {mean('memory_amnesic')} | {diff_shuf} | {diff_amn} "
             f"| {mean('concept', revisit, '{:.3f}', 1)} "
-            f"| {mean('memory', stored, '{:.1f}', 1)} | {n_shuf} |"
+            f"| {mean('memory', stored, '{:.1f}', 1)} | {n_shuf} | {n_amn} |"
         )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

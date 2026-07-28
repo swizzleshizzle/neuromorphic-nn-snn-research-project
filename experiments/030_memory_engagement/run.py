@@ -67,11 +67,17 @@ def main() -> None:
 
     print("\nREVISIT GATE (the number that decides whether this experiment can work):")
     for d in args.depths:
-        rates = [r["revisit_rate"] for r in concept_records if r["depth"] == d]
-        mean = sum(rates) / len(rates) if rates else 0.0
-        print(f"  depth {d}: mean revisit rate {mean:.3f}")
-    print("  If these are near zero there are no cycles to avoid, and a null in the")
-    print("  memory arms would be a statement about the task, not about memory.\n")
+        greedy = [r["eval_revisit_rate"] for r in concept_records if r["depth"] == d]
+        train = [r["revisit_rate"] for r in concept_records if r["depth"] == d]
+        g = sum(greedy) / len(greedy) if greedy else 0.0
+        t = sum(train) / len(train) if train else 0.0
+        print(f"  depth {d}: greedy-policy revisit rate {g:.3f}   (training-policy {t:.3f})")
+    print("  The GREEDY number is the decision metric: a deterministic policy that revisits")
+    print("  a state is in a cycle, which is what memory could break. The training-policy")
+    print("  number is high by construction (a random walk undoes a move ~1 step in 6) and")
+    print("  must not be used to justify continuing.")
+    print("  If the greedy rates are near zero there are no cycles to avoid, and a null in")
+    print("  the memory arms would be a statement about the task, not about memory.\n")
 
     if not args.skip_gate:
         try:
