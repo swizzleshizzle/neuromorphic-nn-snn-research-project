@@ -61,24 +61,44 @@ _concept_rate = concept_rate
 
 
 def action_distribution(
-    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
+    brain,
+    head: nn.Module,
+    obs,
+    *,
+    generator: torch.Generator | None = None,
+    store: bool = False,
+    recall: bool = False,
+    feature_fn=None,
 ) -> tuple[Categorical, torch.Tensor]:
-    """One forward pass → a categorical policy from the head on the sensory concept.
+    """One forward pass -> a categorical policy from the head on the chosen features.
 
-    The brain runs under ``no_grad`` — it is a frozen feature extractor in v1, so only
-    the head carries gradient (also avoids backprop through the spiking unroll).
+    The brain runs under ``no_grad`` (frozen feature extractor; also avoids backprop
+    through the spiking unroll). ``feature_fn`` selects what the head reads and defaults
+    to the sensory concept, so omitting it reproduces v1 exactly. ``store``/``recall``
+    engage the hippocampal pathway (both off by default, as in v1).
     """
     with torch.no_grad():
-        out = brain.step(obs, store=False, recall=False, record=False, generator=generator)
-    logits = head(_concept_rate(out))
+        out = brain.step(obs, store=store, recall=recall, record=False, generator=generator)
+    features = concept_rate(out) if feature_fn is None else feature_fn(out)
+    logits = head(features)
     return Categorical(logits=logits), logits
 
 
 def greedy_action(
-    brain, head: nn.Module, obs, *, generator: torch.Generator | None = None
+    brain,
+    head: nn.Module,
+    obs,
+    *,
+    generator: torch.Generator | None = None,
+    store: bool = False,
+    recall: bool = False,
+    feature_fn=None,
 ) -> int:
     """The argmax-logit action (deterministic eval policy)."""
-    _, logits = action_distribution(brain, head, obs, generator=generator)
+    _, logits = action_distribution(
+        brain, head, obs, generator=generator,
+        store=store, recall=recall, feature_fn=feature_fn,
+    )
     return int(logits.argmax())
 
 
@@ -99,6 +119,9 @@ def train_episode(
     max_steps: int | None = None,
     entropy_beta: float = 0.0,
     normalize_advantages: bool = False,
+    store: bool = False,
+    recall: bool = False,
+    feature_fn=None,
 ) -> dict:
     """Run one episode, then apply one REINFORCE update to the head. Memory bypassed.
 
@@ -120,7 +143,10 @@ def train_episode(
 
     steps = 0
     while steps < limit:
-        dist, _ = action_distribution(brain, head, obs, generator=generator)
+        dist, _ = action_distribution(
+            brain, head, obs, generator=generator,
+            store=store, recall=recall, feature_fn=feature_fn,
+        )
         action = dist.sample()
         log_probs.append(dist.log_prob(action))
         entropies.append(dist.entropy())

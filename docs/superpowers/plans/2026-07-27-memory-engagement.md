@@ -701,7 +701,7 @@ from neuromorphic.training.cube_baseline import CubeConfig, run_cube_baseline
 torch.set_num_threads(1)
 
 HERE = Path(__file__).resolve().parent
-DEPTHS = [3, 4, 5, 6]
+DEPTHS = [1, 2, 3]
 MEMORY_ARMS = ["memory", "memory_shuffled"]
 
 

@@ -54,11 +54,13 @@ Two tests should have caught this and are too weak to. `test_store_imprints_recu
 | Axis | Value |
 |---|---|
 | Arms | `concept` (64), `memory` (129), `memory_shuffled` (129) |
-| Depths | pinned to EXP-029's knee; default 3 to 6 |
+| Depths | 1, 2, 3 (pinned to EXP-029's measured knee) |
 | Seeds | 0 to 11 |
 | Storage | every visited state, `clear()` at episode start |
 | `max_steps` | `2d + 3`, unchanged from EXP-029 |
-| Runs | 3 arms x 4 depths x 12 seeds = 144 |
+| Runs | 3 arms x 3 depths x 12 seeds = 108 |
+
+**Why 1, 2, 3 and not deeper (EXP-029 results, 2026-07-27).** The baseline collapse curve measured regionalized success of 88% at depth 1, 38% at depth 2, 2% at depth 3, and 0% at depths 4 to 6, against a measured random floor of 21%, 4%, 1%, 0%. Depths 4 and beyond sit exactly on the floor, so memory cannot improve a policy that is already at chance and those cells would buy a guaranteed null. Depth 2 is the only cell with substantial headroom, depth 1 bounds the ceiling, and depth 3 is the collapse. This supersedes the earlier default of 3 to 6, which was written before the baseline existed.
 
 **The primary comparison is `memory` vs `memory_shuffled`.** The shuffle-null holds head width and activity statistics fixed while destroying the correspondence between state and memory, so a difference is attributable to memory **content** rather than head capacity. This is the repo's established methodology from EXP-027, and it is the control EXP-029 lacked when it compared a 128-wide stack against a 446-wide one.
 
