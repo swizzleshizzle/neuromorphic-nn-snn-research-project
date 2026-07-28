@@ -413,11 +413,15 @@ from neuromorphic.training.cube_baseline import (
 )
 
 
-def _out(brain):
+def _out(brain, i=0):
+    """Vary the seed per call. With a FIXED seed every call returns a bit-identical
+    concept (encode_cube's spikes are a pure function of obs and seed, and
+    SensoryCortex.forward resets its state each call), so all cached 'visited states'
+    would be equal and the shuffle-differs assertion below could never fail."""
     import numpy as np
     return brain.step(
         np.zeros(24, dtype=np.int64), store=True, recall=True,
-        generator=torch.Generator().manual_seed(0),
+        generator=torch.Generator().manual_seed(i),
     )
 
 
@@ -633,6 +637,39 @@ And add a `step` override that appends each state reached:
 ```
 
 `len(env.visited) - len(set(env.visited))` is then the number of repeat visits in the episode just finished.
+
+**Evaluation must use the same readout as training, or the run crashes.** The head is built at
+`feature_width(cfg)` (129 for the memory modes), but `evaluate_states` calls `greedy_action` with no
+`feature_fn`, which defaults to the 64-wide `concept_rate`. Feeding 64-wide features to a 129-wide head
+raises a shape error (`1x64 and 129x6`). So `evaluate_states` needs the same three passthrough parameters,
+with defaults that preserve its current behavior exactly:
+
+```python
+def evaluate_states(
+    agent,
+    head,
+    states,
+    *,
+    depth: int,
+    generator: torch.Generator | None = None,
+    random_policy: bool = False,
+    rng_seed: int = 0,
+    feature_fn=None,
+    store: bool = False,
+    recall: bool = False,
+) -> dict:
+```
+
+Pass them through to `greedy_action`, and treat each evaluated state as its own episode: call
+`feature_fn.reset()` and `agent.hippo.clear()` before its rollout, mirroring the training loop. Then in
+`run_cube_baseline`, the post-training call becomes:
+
+```python
+        result = evaluate_states(
+            agent, head, eval_states, depth=cfg.depth, generator=generator,
+            rng_seed=cfg.seed, feature_fn=readout, store=use_memory, recall=use_memory,
+        )
+```
 
 - [ ] **Step 6: Extend the record**
 
