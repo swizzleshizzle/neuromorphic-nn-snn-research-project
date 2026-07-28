@@ -53,8 +53,7 @@ class CubeConfig:
     normalize_advantages: bool = False
     content: int = 64
     n_actions: int = 6
-    readout: str = "concept"    # "concept" | "memory" | "memory_shuffled"
-    n_revisit_probe: int = 0
+    readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" | "memory_amnesic"
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -128,7 +127,7 @@ def feature_width(cfg: CubeConfig) -> int:
     """Width of the policy head's input for a config's readout mode."""
     if cfg.readout == "concept":
         return cfg.content
-    if cfg.readout in ("memory", "memory_shuffled"):
+    if cfg.readout in ("memory", "memory_shuffled", "memory_amnesic"):
         return cfg.content * 2 + FAMILIARITY_WIDTH
     raise ValueError(f"unknown readout {cfg.readout!r}")
 
@@ -143,6 +142,13 @@ class MemoryReadout:
     in-distribution and correctly scaled; only the correspondence between the agent's
     current state and the memory it receives is destroyed. That isolates memory content
     from head width, which is the confound the control exists for.
+    ``memory_amnesic``: the same feed-forward expansion of the CURRENT concept as
+    ``memory``, but queried against an emptied attractor (``W_rec`` zeroed for the read).
+    This isolates memory CONTENT from "more features of the state the agent is already
+    looking at": measured over 79 real policy steps, 65% of the recall block's energy is
+    a memory-free nonlinear transform of the current concept (cosine 0.802 against a
+    ``W_rec``-zeroed version), so ``memory`` vs ``memory_shuffled`` alone cannot rule out
+    that a win is just "wider head reading the current state" rather than memory helping.
     """
 
     def __init__(self, mode: str, rng: random.Random, brain):
@@ -150,30 +156,54 @@ class MemoryReadout:
         self.rng = rng
         self.brain = brain
         self._cache: list[torch.Tensor] = []
+        self.unshuffled_steps = 0
 
     def reset(self) -> None:
         """Drop the episode's cached concepts. Call at every episode start."""
-        if self.mode not in ("concept", "memory", "memory_shuffled"):
+        if self.mode not in ("concept", "memory", "memory_shuffled", "memory_amnesic"):
             raise ValueError(f"unknown readout {self.mode!r}")
         self._cache = []
+        self.unshuffled_steps = 0
 
     def __call__(self, out: dict) -> torch.Tensor:
-        concept = concept_rate(out)                     # [content]
-        if self.mode == "concept":
-            return concept
+        with torch.no_grad():
+            concept = concept_rate(out)                     # [content]
+            if self.mode == "concept":
+                return concept
 
-        snapshot = out["concept"].mean(dim=0)           # [B, content]
-        if self.mode == "memory_shuffled" and len(self._cache) >= 1:
-            query = self.rng.choice(self._cache)
-        else:
-            query = snapshot
-        self._cache.append(snapshot)
+            snapshot = out["concept"].mean(dim=0)           # [B, content]
 
-        recall = self.brain.hippo(
-            query.unsqueeze(0).expand(self.brain.T, *query.shape)
-        ).mean(dim=0)[0]                                # [content]
-        fam = self.brain.hippo.familiarity(query)       # [B]
-        return torch.cat([concept, recall, fam[:1]])
+            if self.mode == "memory_amnesic":
+                # Same feed-forward expansion of the CURRENT concept, zero stored content.
+                # This is the arm that isolates memory content from "more features of the
+                # state the agent is already looking at".
+                saved = self.brain.hippo.W_rec
+                self.brain.hippo.W_rec = torch.zeros_like(saved)
+                try:
+                    recall = self.brain.hippo(
+                        snapshot.unsqueeze(0).expand(self.brain.T, *snapshot.shape)
+                    ).mean(dim=0)[0]
+                    fam = self.brain.hippo.familiarity(snapshot)
+                finally:
+                    self.brain.hippo.W_rec = saved
+                self._cache.append(snapshot)
+                return torch.cat([concept, recall, fam[:1]])
+
+            if self.mode == "memory_shuffled":
+                if len(self._cache) >= 1:
+                    query = self.rng.choice(self._cache)
+                else:
+                    self.unshuffled_steps += 1
+                    query = snapshot
+            else:
+                query = snapshot
+            self._cache.append(snapshot)
+
+            recall = self.brain.hippo(
+                query.unsqueeze(0).expand(self.brain.T, *query.shape)
+            ).mean(dim=0)[0]                                # [content]
+            fam = self.brain.hippo.familiarity(query)       # [B]
+            return torch.cat([concept, recall, fam[:1]])
 
 
 def make_agent(cfg: CubeConfig):
@@ -218,18 +248,31 @@ def evaluate_states(
     ``None``/``False``/``False`` reproduces the old concept-only eval exactly). Each
     state's rollout is treated as its own episode: the readout's cache and the
     hippocampus are cleared before it starts, so held-out states don't leak memory.
+
+    Also tracks ``eval_revisit_rate``: the revisit rate under the deterministic GREEDY
+    policy actually used here, as opposed to ``run_cube_baseline``'s ``revisit_rate``
+    which is measured over the stochastic sampled TRAINING policy (including the
+    untrained phase). Under near-uniform sampling a revisit happens whenever a move is
+    undone, about 1 in 6 by construction, so the training-time number reads misleadingly
+    high and always clears the pre-registered gate. A repeat under the greedy policy is a
+    deterministic cycle, which is what memory could actually break, so it is the
+    pre-registered quantity. ``CubeEnv`` (used here, unlike ``ShellCubeEnv``) has no
+    built-in visit tracking, so it is tracked locally per rollout via ``env._state``.
     """
     limit = max_steps_for(depth)
     env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
     rng = random.Random(rng_seed)
     solved = 0
     steps_solved: list[int] = []
+    eval_revisits = 0
+    eval_steps = 0
     for state in states:
         obs, _ = env.reset(options={"state": state})
         if feature_fn is not None:
             feature_fn.reset()
         if store:
             agent.hippo.clear()
+        visited = [env._state]
         for t in range(1, limit + 1):
             if random_policy:
                 action = rng.randrange(env.action_space.n)
@@ -240,12 +283,15 @@ def evaluate_states(
                         store=store, recall=recall, feature_fn=feature_fn,
                     )
             obs, _, terminated, truncated, _ = env.step(action)
+            visited.append(env._state)
+            eval_steps += 1
             if terminated:
                 solved += 1
                 steps_solved.append(t)
                 break
             if truncated:
                 break
+        eval_revisits += len(visited) - len(set(visited))
     n = len(states)
     total_steps = sum(steps_solved)
     return {
@@ -253,6 +299,7 @@ def evaluate_states(
         "mean_steps": total_steps / len(steps_solved) if steps_solved else 0.0,
         "optimality": (depth * len(steps_solved) / total_steps) if total_steps else 0.0,
         "n": n,
+        "eval_revisit_rate": (eval_revisits / eval_steps) if eval_steps else 0.0,
     }
 
 
@@ -275,6 +322,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         )
         episodes_run = 0
         revisits, steps_total, stored_counts = 0, 0, []
+        unshuffled_steps = 0
     else:
         agent = make_agent(cfg)
         torch.manual_seed(cfg.seed)  # head init and sampling stream matched across arms
@@ -291,6 +339,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         )
         baseline = 0.0
         revisits, steps_total, stored_counts = 0, 0, []
+        unshuffled_steps = 0
         for _ in range(cfg.episodes):
             readout.reset()
             if use_memory:
@@ -307,6 +356,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             steps_total += stats["steps"]
             revisits += len(env.visited) - len(set(env.visited))
             stored_counts.append(agent.hippo.n_stored if use_memory else 0)
+            unshuffled_steps += readout.unshuffled_steps
         result = evaluate_states(
             agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed,
             feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
@@ -325,6 +375,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "readout": cfg.readout,
         "revisit_rate": (revisits / steps_total) if steps_total else 0.0,
         "mean_n_stored": (sum(stored_counts) / len(stored_counts)) if stored_counts else 0.0,
+        "unshuffled_steps": unshuffled_steps,
+        "unshuffled_frac": (unshuffled_steps / steps_total) if steps_total else 0.0,
         "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},
         **result,
     }

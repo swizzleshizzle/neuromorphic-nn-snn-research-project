@@ -34,6 +34,7 @@ def test_feature_widths_per_mode():
     assert feature_width(CubeConfig(readout="concept")) == 64
     assert feature_width(CubeConfig(readout="memory")) == 129
     assert feature_width(CubeConfig(readout="memory_shuffled")) == 129
+    assert feature_width(CubeConfig(readout="memory_amnesic")) == 129
 
 
 def _brain():
@@ -78,6 +79,20 @@ def test_reset_clears_the_cache():
     assert len(r._cache) == 1
     r.reset()
     assert len(r._cache) == 0
+
+
+def test_amnesic_mode_has_zero_familiarity_and_restores_W_rec():
+    b = _brain()
+    r = MemoryReadout("memory_amnesic", random.Random(0), b)
+    r.reset()
+    outs = [_out(b, i) for i in range(3)]
+    feats = torch.stack([r(o) for o in outs])
+    assert feats.shape == (3, 129)
+    # familiarity is identically zero because W_rec is empty at read time
+    assert torch.allclose(feats[:, -1], torch.zeros(3))
+    # and the real memory was not damaged by the temporary zeroing
+    assert b.hippo.n_stored > 0
+    assert torch.count_nonzero(b.hippo.W_rec) > 0
 
 
 def test_unknown_mode_raises():
