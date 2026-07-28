@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import torch
+import torch.nn as nn
 
 from neuromorphic.analysis.ablate import AblatedConcept, AblationSpec
 from neuromorphic.brain import Brain
@@ -25,9 +26,9 @@ from neuromorphic.envs.cube import CubeEnv
 from neuromorphic.envs.cube_distance import ExactBFSDistance
 from neuromorphic.monolithic import MonolithicBrain
 from neuromorphic.training.reinforce import (
+    concept_rate,
     ema,
     greedy_action,
-    make_policy_head,
     policy_parameters,
     train_episode,
 )
@@ -52,6 +53,8 @@ class CubeConfig:
     normalize_advantages: bool = False
     content: int = 64
     n_actions: int = 6
+    readout: str = "concept"    # "concept" | "memory" | "memory_shuffled"
+    n_revisit_probe: int = 0
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -103,11 +106,74 @@ class ShellCubeEnv(CubeEnv):
         super().__init__(**kwargs)
         self._pool = list(states)
         self._pool_rng = rng
+        self.visited: list[tuple[int, ...]] = []
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         if options is None:
             options = {"state": self._pool_rng.choice(self._pool)}
-        return super().reset(seed=seed, options=options)
+        result = super().reset(seed=seed, options=options)
+        self.visited = [self._state]
+        return result
+
+    def step(self, action):
+        result = super().step(action)
+        self.visited.append(self._state)
+        return result
+
+
+FAMILIARITY_WIDTH = 1
+
+
+def feature_width(cfg: CubeConfig) -> int:
+    """Width of the policy head's input for a config's readout mode."""
+    if cfg.readout == "concept":
+        return cfg.content
+    if cfg.readout in ("memory", "memory_shuffled"):
+        return cfg.content * 2 + FAMILIARITY_WIDTH
+    raise ValueError(f"unknown readout {cfg.readout!r}")
+
+
+class MemoryReadout:
+    """Builds the policy head's input from a ``brain.step`` output.
+
+    ``concept``: the sensory concept alone, exactly v1.
+    ``memory``: concept, the hippocampal recall code, and a familiarity scalar.
+    ``memory_shuffled``: the same three, but recall and familiarity are computed from a
+    DIFFERENT state visited earlier this episode. Both memory readouts stay real,
+    in-distribution and correctly scaled; only the correspondence between the agent's
+    current state and the memory it receives is destroyed. That isolates memory content
+    from head width, which is the confound the control exists for.
+    """
+
+    def __init__(self, mode: str, rng: random.Random, brain):
+        self.mode = mode
+        self.rng = rng
+        self.brain = brain
+        self._cache: list[torch.Tensor] = []
+
+    def reset(self) -> None:
+        """Drop the episode's cached concepts. Call at every episode start."""
+        if self.mode not in ("concept", "memory", "memory_shuffled"):
+            raise ValueError(f"unknown readout {self.mode!r}")
+        self._cache = []
+
+    def __call__(self, out: dict) -> torch.Tensor:
+        concept = concept_rate(out)                     # [content]
+        if self.mode == "concept":
+            return concept
+
+        snapshot = out["concept"].mean(dim=0)           # [B, content]
+        if self.mode == "memory_shuffled" and len(self._cache) >= 1:
+            query = self.rng.choice(self._cache)
+        else:
+            query = snapshot
+        self._cache.append(snapshot)
+
+        recall = self.brain.hippo(
+            query.unsqueeze(0).expand(self.brain.T, *query.shape)
+        ).mean(dim=0)[0]                                # [content]
+        fam = self.brain.hippo.familiarity(query)       # [B]
+        return torch.cat([concept, recall, fam[:1]])
 
 
 def make_agent(cfg: CubeConfig):
@@ -141,8 +207,18 @@ def evaluate_states(
     generator: torch.Generator | None = None,
     random_policy: bool = False,
     rng_seed: int = 0,
+    feature_fn=None,
+    store: bool = False,
+    recall: bool = False,
 ) -> dict:
-    """Greedy rollouts from each state. ``random_policy`` measures the chance floor."""
+    """Greedy rollouts from each state. ``random_policy`` measures the chance floor.
+
+    ``feature_fn``/``store``/``recall`` mirror ``train_episode``'s memory kwargs so a
+    memory-readout head can be evaluated with the same readout it trained with (default
+    ``None``/``False``/``False`` reproduces the old concept-only eval exactly). Each
+    state's rollout is treated as its own episode: the readout's cache and the
+    hippocampus are cleared before it starts, so held-out states don't leak memory.
+    """
     limit = max_steps_for(depth)
     env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
     rng = random.Random(rng_seed)
@@ -150,12 +226,19 @@ def evaluate_states(
     steps_solved: list[int] = []
     for state in states:
         obs, _ = env.reset(options={"state": state})
+        if feature_fn is not None:
+            feature_fn.reset()
+        if store:
+            agent.hippo.clear()
         for t in range(1, limit + 1):
             if random_policy:
                 action = rng.randrange(env.action_space.n)
             else:
                 with torch.no_grad():
-                    action = greedy_action(agent, head, obs, generator=generator)
+                    action = greedy_action(
+                        agent, head, obs, generator=generator,
+                        store=store, recall=recall, feature_fn=feature_fn,
+                    )
             obs, _, terminated, truncated, _ = env.step(action)
             if terminated:
                 solved += 1
@@ -191,12 +274,15 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             None, None, eval_states, depth=cfg.depth, random_policy=True, rng_seed=cfg.seed
         )
         episodes_run = 0
+        revisits, steps_total, stored_counts = 0, 0, []
     else:
         agent = make_agent(cfg)
         torch.manual_seed(cfg.seed)  # head init and sampling stream matched across arms
+        readout = MemoryReadout(cfg.readout, random.Random(cfg.seed), agent)
+        use_memory = cfg.readout != "concept"
         spec = AblationSpec(kind="gaussian", dose=cfg.sigma, seed=cfg.seed) if cfg.sigma else None
         head = AblatedConcept(
-            make_policy_head(agent, "linear"), spec, width=cfg.content
+            nn.Linear(feature_width(cfg), cfg.n_actions), spec, width=feature_width(cfg)
         )
         optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
         env = ShellCubeEnv(
@@ -204,17 +290,26 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             scramble_depth=cfg.depth, max_steps=max_steps_for(cfg.depth),
         )
         baseline = 0.0
+        revisits, steps_total, stored_counts = 0, 0, []
         for _ in range(cfg.episodes):
+            readout.reset()
+            if use_memory:
+                agent.hippo.clear()
             stats = train_episode(
                 agent, head, env, optimizer,
                 gamma=cfg.gamma, baseline=baseline, generator=generator,
                 max_steps=max_steps_for(cfg.depth),
                 entropy_beta=cfg.entropy_beta,
                 normalize_advantages=cfg.normalize_advantages,
+                store=use_memory, recall=use_memory, feature_fn=readout,
             )
             baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
+            steps_total += stats["steps"]
+            revisits += len(env.visited) - len(set(env.visited))
+            stored_counts.append(agent.hippo.n_stored if use_memory else 0)
         result = evaluate_states(
-            agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed
+            agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed,
+            feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
         )
         episodes_run = cfg.episodes
 
@@ -227,6 +322,9 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "is_heldout": is_heldout,
         "n_train": len(train_states),
         "tag": cfg.tag,
+        "readout": cfg.readout,
+        "revisit_rate": (revisits / steps_total) if steps_total else 0.0,
+        "mean_n_stored": (sum(stored_counts) / len(stored_counts)) if stored_counts else 0.0,
         "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},
         **result,
     }
