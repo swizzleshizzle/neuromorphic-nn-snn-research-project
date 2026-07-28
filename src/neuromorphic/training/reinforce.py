@@ -7,7 +7,11 @@ saturate the softmax to an exact one-hot → a zero-gradient absorbing state tha
 learning, and (2) the motor/PFC output is a degenerate "structural favourite" (one live
 neuron, barely state-dependent), so it can't express a real four-action policy. A Linear
 head on the concept gives every action a gradient handle and a learnable scale. The brain
-is a fixed feature extractor in v1; memory stays bypassed (``recall=False``). See ADR-0001.
+is a fixed feature extractor in v1. ``action_distribution``/``greedy_action``/``train_episode``
+accept ``store``/``recall``/``feature_fn`` so callers can engage the hippocampal pathway
+and read memory-derived features (EXP-030); the defaults (``store=False``, ``recall=False``,
+``feature_fn=None``) still reproduce the v1 concept-only, memory-bypassed path exactly.
+See ADR-0001 and its amendments.
 """
 
 from __future__ import annotations
@@ -123,7 +127,11 @@ def train_episode(
     recall: bool = False,
     feature_fn=None,
 ) -> dict:
-    """Run one episode, then apply one REINFORCE update to the head. Memory bypassed.
+    """Run one episode, then apply one REINFORCE update to the head.
+
+    Memory is bypassed by default (``store=False``, ``recall=False``, ``feature_fn=None``,
+    which reproduces the v1 concept-only path exactly); pass ``store=True``/``recall=True``
+    with a memory-aware ``feature_fn`` to engage the hippocampal pathway instead (EXP-030).
 
     ``entropy_beta`` > 0 adds an optional ``-beta * sum_t H`` entropy bonus to the loss
     (encourages exploration); the default 0.0 leaves the executed loss statement unchanged.
