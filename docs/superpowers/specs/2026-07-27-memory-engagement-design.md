@@ -79,7 +79,19 @@ Written before the numbers exist.
 - **Primary:** `memory` beats `memory_shuffled`, paired per seed at n = 12. This is the claim the experiment stands or falls on.
 - **Secondary:** `memory` beats `concept`. If primary holds but secondary does not, the gain came from head width, not memory.
 - **Revisit rate is reported for every arm**, not only as the gate. A null alongside a near-zero revisit rate is a statement about the task, not about memory, and the writeup must say which it is.
-- **Capacity is measured, not assumed.** Classic Hopfield capacity is about `0.14 * N`, so roughly 21 patterns at N = 150. A depth-6 episode stores up to 15, which is inside capacity but close. Report familiarity across the episode; if everything reads familiar by step 10 the signal is exhausted, and that is a finding.
+- **Capacity is measured, and the two mechanisms degrade differently (measured 2026-07-27 against a prototype of the accumulate fix).**
+
+  | patterns stored | recall pairwise cosine | familiarity separation (visited minus novel) |
+  |---|---|---|
+  | 2 | 0.666 | +1.04 |
+  | 4 | 0.912 | +1.46 |
+  | 8 | 0.962 | +1.73 |
+  | 15 (a depth-6 episode) | 0.990 | +1.81 |
+  | 21 (nominal Hopfield capacity, 0.14N) | 0.994 | +1.40 |
+
+  The accumulate fix restores discriminability at low load (0.998 broken, 0.666 at k=2), but **the completion code degrades back toward input-invariance as an episode fills**: by 15 stored states it is at 0.990. **Familiarity separation is stable across the whole range**, including past nominal capacity.
+
+  Pre-registered consequence: the 64-wide completion code is expected to contribute at depth 3 (9 steps) and to be largely spent by depth 6 (15 steps), while familiarity should contribute throughout. If the memory arm wins only at shallow depths, that is the predicted pattern and not a surprise. If it wins at depth 6, the credit belongs to familiarity rather than completion.
 - **A null is a result** and is written up as one rather than explored until something separates.
 
 ## 7. Testing
