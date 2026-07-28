@@ -389,9 +389,9 @@ git commit -m "feat(training): pluggable policy readout and hippocampal flags"
 **Interfaces:**
 - Consumes: `Hippocampus.clear`/`familiarity`/`n_stored` (Task 1); `feature_fn`/`store`/`recall` (Task 2).
 - Produces:
-  - `CubeConfig.readout: str = "concept"` and `CubeConfig.n_revisit_probe: int = 0`.
-  - `MemoryReadout(mode, rng)` with `.reset()`, `.__call__(out) -> Tensor`, `.width(content) -> int`.
-  - `feature_width(cfg) -> int`.
+  - `CubeConfig.readout: str = "concept"`.
+  - `MemoryReadout(mode, rng, brain)` with `.reset()`, `.__call__(out) -> Tensor`.
+  - `feature_width(cfg) -> int` (a free function, not a method on `MemoryReadout`).
   - `run_cube_baseline` records `readout`, `revisit_rate`, `mean_n_stored`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -413,11 +413,15 @@ from neuromorphic.training.cube_baseline import (
 )
 
 
-def _out(brain):
+def _out(brain, i=0):
+    """Vary the seed per call. With a FIXED seed every call returns a bit-identical
+    concept (encode_cube's spikes are a pure function of obs and seed, and
+    SensoryCortex.forward resets its state each call), so all cached 'visited states'
+    would be equal and the shuffle-differs assertion below could never fail."""
     import numpy as np
     return brain.step(
         np.zeros(24, dtype=np.int64), store=True, recall=True,
-        generator=torch.Generator().manual_seed(0),
+        generator=torch.Generator().manual_seed(i),
     )
 
 
@@ -634,6 +638,39 @@ And add a `step` override that appends each state reached:
 
 `len(env.visited) - len(set(env.visited))` is then the number of repeat visits in the episode just finished.
 
+**Evaluation must use the same readout as training, or the run crashes.** The head is built at
+`feature_width(cfg)` (129 for the memory modes), but `evaluate_states` calls `greedy_action` with no
+`feature_fn`, which defaults to the 64-wide `concept_rate`. Feeding 64-wide features to a 129-wide head
+raises a shape error (`1x64 and 129x6`). So `evaluate_states` needs the same three passthrough parameters,
+with defaults that preserve its current behavior exactly:
+
+```python
+def evaluate_states(
+    agent,
+    head,
+    states,
+    *,
+    depth: int,
+    generator: torch.Generator | None = None,
+    random_policy: bool = False,
+    rng_seed: int = 0,
+    feature_fn=None,
+    store: bool = False,
+    recall: bool = False,
+) -> dict:
+```
+
+Pass them through to `greedy_action`, and treat each evaluated state as its own episode: call
+`feature_fn.reset()` and `agent.hippo.clear()` before its rollout, mirroring the training loop. Then in
+`run_cube_baseline`, the post-training call becomes:
+
+```python
+        result = evaluate_states(
+            agent, head, eval_states, depth=cfg.depth, generator=generator,
+            rng_seed=cfg.seed, feature_fn=readout, store=use_memory, recall=use_memory,
+        )
+```
+
 - [ ] **Step 6: Extend the record**
 
 Replace the `record` dict's opening keys to include:
@@ -669,7 +706,9 @@ git commit -m "feat(training): memory readout modes and revisit instrumentation"
 
 **Interfaces:**
 - Consumes: `CubeConfig`, `run_cube_baseline` (Task 3).
-- Produces: one `outputs/exp030_<readout>_d<depth>_s<seed>.json` per run, plus `outputs/030_curve.md`.
+- Produces: one `outputs/exp030_<readout>_regionalized_d<depth>_s<seed>_sig<sigma>.json` per run
+  (the filename is `{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json`, and
+  `tag` is `exp030_<readout>`), plus `outputs/030_curve.md`.
 
 Drivers are not unit tested in this repo (024-029 have none); verification is the smoke run in Step 4.
 
@@ -701,7 +740,7 @@ from neuromorphic.training.cube_baseline import CubeConfig, run_cube_baseline
 torch.set_num_threads(1)
 
 HERE = Path(__file__).resolve().parent
-DEPTHS = [3, 4, 5, 6]
+DEPTHS = [1, 2, 3]
 MEMORY_ARMS = ["memory", "memory_shuffled"]
 
 

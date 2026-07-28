@@ -66,6 +66,7 @@ class Hippocampus(BrainRegion):
 
         self.register_buffer("W_rec", torch.zeros(n_neurons, n_neurons))
         self._stored_pattern: torch.Tensor | None = None
+        self._stored_patterns: list[torch.Tensor] = []
         self.mem: torch.Tensor | None = None
         self.mem_out: torch.Tensor | None = None
         self.spk_prev: torch.Tensor | None = None
@@ -87,9 +88,41 @@ class Hippocampus(BrainRegion):
             s = 2.0 * p - 1.0  # bipolar {-1, +1}
             w = torch.outer(s, s) / self.n_neurons
             w.fill_diagonal_(0.0)
-            self.W_rec = self.recurrent_gain * w
+            # Accumulate, do not assign. Assigning kept only the most recent pattern,
+            # which collapsed recall to a near-constant code (measured cosine 0.998).
+            self.W_rec = self.W_rec + self.recurrent_gain * w
             self._stored_pattern = p
+            self._stored_patterns.append(p)
         return p
+
+    @property
+    def n_stored(self) -> int:
+        """How many patterns are currently imprinted."""
+        return len(self._stored_patterns)
+
+    def clear(self) -> None:
+        """Forget everything. Required for episodic memory: without it, imprints
+        persist across episodes and accumulate into an uninterpretable mixture."""
+        with torch.no_grad():
+            self.W_rec = torch.zeros_like(self.W_rec)
+            self._stored_pattern = None
+            self._stored_patterns = []
+
+    def familiarity(self, content: torch.Tensor) -> torch.Tensor:
+        """``[B, content_dim]`` -> ``[B]`` Hopfield field alignment, one scalar per item.
+
+        High when the content's sparse pattern sits near a stored attractor, so it
+        answers "have I been here?". Reuses ``W_rec`` rather than a lookup table, so
+        familiarity stays a property of the attractor. Zeros when nothing is stored.
+        """
+        with torch.no_grad():
+            drive = self.fc_in(content)                       # [B, n_neurons]
+            k = max(1, int(self.sparsity * self.n_neurons))
+            idx = torch.topk(drive, k, dim=1).indices
+            p = torch.zeros_like(drive)
+            p.scatter_(1, idx, 1.0)
+            s = 2.0 * p - 1.0
+            return ((s @ self.W_rec) * s).sum(dim=1) / self.n_neurons
 
     def reset(self, batch_size: int | None = None, device: torch.device | None = None) -> None:
         self.mem = self.lif.init_leaky()

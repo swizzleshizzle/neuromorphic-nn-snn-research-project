@@ -53,16 +53,20 @@ Two tests should have caught this and are too weak to. `test_store_imprints_recu
 
 | Axis | Value |
 |---|---|
-| Arms | `concept` (64), `memory` (129), `memory_shuffled` (129) |
-| Depths | pinned to EXP-029's knee; default 3 to 6 |
+| Arms | `concept` (64), `memory` (129), `memory_shuffled` (129), `memory_amnesic` (129) |
+| Depths | 1, 2, 3 (pinned to EXP-029's measured knee) |
 | Seeds | 0 to 11 |
 | Storage | every visited state, `clear()` at episode start |
 | `max_steps` | `2d + 3`, unchanged from EXP-029 |
-| Runs | 3 arms x 4 depths x 12 seeds = 144 |
+| Runs | 4 arms x 3 depths x 12 seeds = 144 |
+
+**Why 1, 2, 3 and not deeper (EXP-029 results, 2026-07-27).** The baseline collapse curve measured regionalized success of 88% at depth 1, 38% at depth 2, 2% at depth 3, and 0% at depths 4 to 6, against a measured random floor of 21%, 4%, 1%, 0%. Depths 4 and beyond sit exactly on the floor, so memory cannot improve a policy that is already at chance and those cells would buy a guaranteed null. Depth 2 is the only cell with substantial headroom, depth 1 bounds the ceiling, and depth 3 is the collapse. This supersedes the earlier default of 3 to 6, which was written before the baseline existed.
 
 **The primary comparison is `memory` vs `memory_shuffled`.** The shuffle-null holds head width and activity statistics fixed while destroying the correspondence between state and memory, so a difference is attributable to memory **content** rather than head capacity. This is the repo's established methodology from EXP-027, and it is the control EXP-029 lacked when it compared a 128-wide stack against a 446-wide one.
 
-**Attribution is deliberately deferred.** Separating the 64-wide completion code from the familiarity scalar would need five arms and 240 runs. Establish that memory content does anything first; spend a follow-up attributing it only if there is an effect to attribute. Comparing before establishing the mechanism works is the specific error EXP-029 made.
+**A fourth arm, `memory_amnesic`, isolates memory content from head width in a different way.** Measured over 79 real policy steps, 65% of the recall block's energy is a memory-free nonlinear transform of the CURRENT concept (cosine 0.802 against a `W_rec`-zeroed version): the recall/familiarity features are not purely a function of what was stored, they are substantially a function of what the agent is looking at right now, pushed through `hippo`'s feed-forward weights. So `memory` receives 64 extra features of the current state plus stored content, while `memory_shuffled` receives 64 extra features of a DIFFERENT state; a `memory` win over `memory_shuffled` is equally explained by "more features of what it is looking at" as by "memory helped." `memory_amnesic` holds the feed-forward expansion of the current concept fixed (same query, same width) and removes only the stored content (`W_rec` zeroed at read time, `n_stored` still advances normally). In short: **`memory` vs `memory_shuffled` isolates memory CORRESPONDENCE** (does it matter the memory matches the current state), while **`memory` vs `memory_amnesic` isolates memory CONTENT** (does having any stored content help at all).
+
+**Attribution is deliberately deferred.** Separating the 64-wide completion code from the familiarity scalar would need more arms and more runs. Establish that memory content does anything first; spend a follow-up attributing it only if there is an effect to attribute. Comparing before establishing the mechanism works is the specific error EXP-029 made.
 
 ## 5. Pre-flight gate: does the policy revisit states at all?
 
@@ -77,7 +81,7 @@ Run the `concept` arm first, read the revisit rate, and only then launch the two
 Written before the numbers exist.
 
 - **Primary:** `memory` beats `memory_shuffled`, paired per seed at n = 12. This is the claim the experiment stands or falls on.
-- **Secondary:** `memory` beats `concept`. If primary holds but secondary does not, the gain came from head width, not memory.
+- **Secondary:** `memory` beats `concept`. This comparison is confounded two ways: `concept` has a narrower head (64 vs 129), and `concept` cannot see the elapsed-time signal carried in the familiarity scalar (see the limitation below), so a `memory` win over `concept` is consistent with head width, elapsed-time drift, or memory content, in any combination. It can motivate a hypothesis but cannot settle one, and no content claim may rest on it. Any claim about memory content rests on the `memory` vs `memory_amnesic` comparison (both arms hold head width and elapsed-time exposure fixed and differ only in whether the attractor holds stored content at read time).
 - **Revisit rate is reported for every arm**, not only as the gate. A null alongside a near-zero revisit rate is a statement about the task, not about memory, and the writeup must say which it is.
 - **Capacity is measured, and the two mechanisms degrade differently (measured 2026-07-27 against a prototype of the accumulate fix).**
 
@@ -93,6 +97,7 @@ Written before the numbers exist.
 
   Pre-registered consequence: the 64-wide completion code is expected to contribute at depth 3 (9 steps) and to be largely spent by depth 6 (15 steps), while familiarity should contribute throughout. If the memory arm wins only at shallow depths, that is the predicted pattern and not a surprise. If it wins at depth 6, the credit belongs to familiarity rather than completion.
 - **A null is a result** and is written up as one rather than explored until something separates.
+- **Limitation: the familiarity scalar carries elapsed-time signal, not only visited-vs-novel signal.** Its absolute value grows with the number of stored patterns, which inside an episode is the step index, so it climbs mechanically as the episode runs (measured: 1.99 to 11.93 across one depth-3 episode). Roughly, it carries about 8 units of elapsed-time signal against about 1 unit of visited-versus-novel signal. This drift is matched between `memory`, `memory_shuffled` and `memory_amnesic` (all three read familiarity from a hippocampus at the same point in the same episode), so the primary paired comparisons (`memory` vs `memory_shuffled`, `memory` vs `memory_amnesic`) survive it. But the `memory` vs `concept` comparison is confounded: `concept` cannot see elapsed time at all, so a `memory` vs `concept` gap may reflect step-counting rather than memory content. No claim may rest on the `memory` vs `concept` comparison alone. This is a pre-registered limitation, not a fix: normalizing familiarity was considered and rejected, because it would drop the visited-novel separation below the threshold asserted by the passing Task-1 test (`test_familiarity_separates_visited_from_novel`), and weakening a passing test threshold is not acceptable here.
 
 ## 7. Testing
 
