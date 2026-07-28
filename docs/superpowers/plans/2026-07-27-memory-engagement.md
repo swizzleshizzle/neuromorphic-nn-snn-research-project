@@ -389,9 +389,9 @@ git commit -m "feat(training): pluggable policy readout and hippocampal flags"
 **Interfaces:**
 - Consumes: `Hippocampus.clear`/`familiarity`/`n_stored` (Task 1); `feature_fn`/`store`/`recall` (Task 2).
 - Produces:
-  - `CubeConfig.readout: str = "concept"` and `CubeConfig.n_revisit_probe: int = 0`.
-  - `MemoryReadout(mode, rng)` with `.reset()`, `.__call__(out) -> Tensor`, `.width(content) -> int`.
-  - `feature_width(cfg) -> int`.
+  - `CubeConfig.readout: str = "concept"`.
+  - `MemoryReadout(mode, rng, brain)` with `.reset()`, `.__call__(out) -> Tensor`.
+  - `feature_width(cfg) -> int` (a free function, not a method on `MemoryReadout`).
   - `run_cube_baseline` records `readout`, `revisit_rate`, `mean_n_stored`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -706,7 +706,9 @@ git commit -m "feat(training): memory readout modes and revisit instrumentation"
 
 **Interfaces:**
 - Consumes: `CubeConfig`, `run_cube_baseline` (Task 3).
-- Produces: one `outputs/exp030_<readout>_d<depth>_s<seed>.json` per run, plus `outputs/030_curve.md`.
+- Produces: one `outputs/exp030_<readout>_regionalized_d<depth>_s<seed>_sig<sigma>.json` per run
+  (the filename is `{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json`, and
+  `tag` is `exp030_<readout>`), plus `outputs/030_curve.md`.
 
 Drivers are not unit tested in this repo (024-029 have none); verification is the smoke run in Step 4.
 
