@@ -32,6 +32,15 @@ def main() -> None:
     if not records:
         raise SystemExit(f"no run records found in {args.runs}")
 
+    episodes_counts = defaultdict(int)
+    for r in records:
+        episodes_counts[r["episodes"]] += 1
+    if len(episodes_counts) > 1:
+        print("WARNING: Records from multiple episode budgets detected:")
+        for ep in sorted(episodes_counts.keys()):
+            print(f"  episodes={ep}: {episodes_counts[ep]} records")
+        print("  This may indicate stale records from a previous run. Ensure you intend to blend these.\n")
+
     cells = defaultdict(list)
     revisit = defaultdict(list)
     stored = defaultdict(list)

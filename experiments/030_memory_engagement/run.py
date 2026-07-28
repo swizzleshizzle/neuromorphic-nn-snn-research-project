@@ -56,11 +56,11 @@ def main() -> None:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     common = dict(arm="regionalized", episodes=args.episodes, sigma=0.0,
-                  out_dir=args.out_dir, tag="exp030")
+                  out_dir=args.out_dir)
 
     print(f"phase 1: concept arm, {len(args.depths) * len(args.seeds)} runs")
     concept_records = _fan_out(
-        [CubeConfig(readout="concept", depth=d, seed=s, **common)
+        [CubeConfig(readout="concept", tag="exp030_concept", depth=d, seed=s, **common)
          for d in args.depths for s in args.seeds],
         args.workers,
     )
@@ -79,7 +79,7 @@ def main() -> None:
             print("stopped at the gate. Records for the concept arm are already written.")
             return
 
-    rest = [CubeConfig(readout=r, depth=d, seed=s, **common)
+    rest = [CubeConfig(readout=r, tag=f"exp030_{r}", depth=d, seed=s, **common)
             for r in MEMORY_ARMS for d in args.depths for s in args.seeds]
     print(f"phase 2: memory arms, {len(rest)} runs")
     _fan_out(rest, args.workers)
