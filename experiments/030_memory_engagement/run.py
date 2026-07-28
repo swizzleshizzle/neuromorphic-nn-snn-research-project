@@ -24,7 +24,7 @@ torch.set_num_threads(1)
 
 HERE = Path(__file__).resolve().parent
 DEPTHS = [1, 2, 3]
-MEMORY_ARMS = ["memory", "memory_shuffled"]
+MEMORY_ARMS = ["memory", "memory_shuffled", "memory_amnesic"]
 
 
 def _run(cfg: CubeConfig) -> dict:
@@ -74,7 +74,11 @@ def main() -> None:
     print("  memory arms would be a statement about the task, not about memory.\n")
 
     if not args.skip_gate:
-        reply = input("continue to the memory arms? [y/N] ").strip().lower()
+        try:
+            reply = input("continue to the memory arms? [y/N] ").strip().lower()
+        except EOFError:
+            reply = "n"
+            print("(non-interactive shell, treating as no; pass --skip-gate to bypass)")
         if reply != "y":
             print("stopped at the gate. Records for the concept arm are already written.")
             return

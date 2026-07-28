@@ -1,10 +1,19 @@
 # experiments/030_memory_engagement/aggregate.py
 """Aggregate EXP-030 records.
 
-The headline is the PAIRED memory minus memory_shuffled difference at matched
-(depth, seed): both arms have identical head width, so a gap is memory content rather
-than capacity. The revisit rate and mean stored-pattern count are reported alongside,
-because a null with near-zero revisits is a statement about the task.
+Two paired columns are reported, at matched (depth, seed):
+
+- ``memory minus shuffled``: memory vs memory_shuffled. Both arms have identical head
+  width and receive real, in-distribution recall/familiarity features, so this isolates
+  memory CORRESPONDENCE (does it matter that the memory matches the current state?).
+- ``memory minus amnesic``: memory vs memory_amnesic. Both arms feed the head the same
+  feed-forward expansion of the CURRENT concept; amnesic differs only in that the
+  attractor is emptied (W_rec zeroed) at read time. This isolates memory CONTENT (does
+  having any stored content help at all, as opposed to just a wider head reading the
+  state it is already looking at?).
+
+The revisit rate and mean stored-pattern count are reported alongside, because a null
+with near-zero revisits is a statement about the task.
 """
 
 from __future__ import annotations
@@ -54,26 +63,39 @@ def main() -> None:
     lines = [
         "# EXP-030 memory engagement",
         "",
-        "Primary test is the paired memory minus memory_shuffled column: identical head",
-        "width, so a gap is memory content rather than capacity. A near-zero revisit rate",
-        "means there were no cycles to avoid, and any null must be read that way.",
+        "Two paired columns, both at matched (depth, seed). ``memory minus shuffled``",
+        "isolates memory CORRESPONDENCE (does it matter that the memory matches the",
+        "current state?): both arms have identical head width and real, in-distribution",
+        "recall/familiarity features. ``memory minus amnesic`` isolates memory CONTENT",
+        "(does having any stored content help at all, versus a wider head reading only",
+        "the current state?): both arms feed the head the same feed-forward expansion of",
+        "the current concept, differing only in whether the attractor holds anything at",
+        "read time. A near-zero revisit rate means there were no cycles to avoid, and any",
+        "null must be read that way.",
         "",
-        "| depth | concept | memory | shuffled | paired mem-shuf | revisit rate | mean stored | n |",
-        "|---|---|---|---|---|---|---|---|",
+        "| depth | concept | memory | shuffled | amnesic | paired mem-shuf | paired mem-amn "
+        "| revisit rate | mean stored | n |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for depth in sorted({d for _, d in cells}):
         def mean(mode, table=cells, fmt="{:.0f}%", scale=100):
             vals = table.get((mode, depth), [])
             return fmt.format(scale * sum(vals) / len(vals)) if vals else "n/a"
 
-        pairs = [v["memory"] - v["memory_shuffled"]
-                 for (d, _), v in by_seed.items()
-                 if d == depth and "memory" in v and "memory_shuffled" in v]
-        diff = f"{100 * sum(pairs) / len(pairs):+.0f} pts" if pairs else "n/a"
+        def paired(a, b):
+            vals = [v[a] - v[b]
+                    for (d, _), v in by_seed.items()
+                    if d == depth and a in v and b in v]
+            diff = f"{100 * sum(vals) / len(vals):+.0f} pts" if vals else "n/a"
+            return diff, len(vals)
+
+        diff_shuf, n_shuf = paired("memory", "memory_shuffled")
+        diff_amn, n_amn = paired("memory", "memory_amnesic")
         lines.append(
             f"| {depth} | {mean('concept')} | {mean('memory')} | {mean('memory_shuffled')} "
-            f"| {diff} | {mean('concept', revisit, '{:.3f}', 1)} "
-            f"| {mean('memory', stored, '{:.1f}', 1)} | {len(pairs)} |"
+            f"| {mean('memory_amnesic')} | {diff_shuf} | {diff_amn} "
+            f"| {mean('concept', revisit, '{:.3f}', 1)} "
+            f"| {mean('memory', stored, '{:.1f}', 1)} | {n_shuf} |"
         )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
