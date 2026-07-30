@@ -16,10 +16,24 @@ export interface Pathway {
   label?: string;
 }
 
+export interface GridTaskHeader {
+  type: "gridworld";
+  grid_n: number;
+  action_labels: string[];
+}
+
+export interface CubeTaskHeader {
+  type: "cube";
+  cube_n: number;
+  action_labels: string[];
+}
+
+export type TaskHeader = GridTaskHeader | CubeTaskHeader;
+
 export interface TraceHeader {
   schema_version: string;
   brain: { id: string; config_hash: string; seed: number; T: number };
-  task: { type: string; grid_n: number; action_labels: string[] };
+  task: TaskHeader;
   regions: Region[];
   pathways: Pathway[];
   policy_regions?: string[];
@@ -47,9 +61,7 @@ export interface FieldState {
   spikes: number[][]; // [T][N]
 }
 
-export interface TaskState {
-  agent: [number, number];
-  goal: [number, number];
+export interface TaskCore {
   action: number;
   action_label: string;
   reward: number;
@@ -58,12 +70,39 @@ export interface TaskState {
   truncated: boolean;
 }
 
-export interface SensoryInput {
+export interface GridTask extends TaskCore {
+  type: "gridworld";
+  agent: [number, number];
+  goal: [number, number];
+}
+
+export interface CubeTask extends TaskCore {
+  type: "cube";
+  facelets: number[];
+  solved: boolean;
+  distance: number | null;
+  scramble_depth: number;
+  move: number;
+  move_label: string | null;
+}
+
+export type TaskState = GridTask | CubeTask;
+
+export interface GridSensoryInput {
   spikes: number[][]; // [T][2*grid_n^2]
   grid_n: number;
   planes: string[];
   index: string;
 }
+
+export interface CubeSensoryInput {
+  spikes: number[][];
+  cube_n: number;
+  n_colors: number;
+  index: string;
+}
+
+export type SensoryInput = GridSensoryInput | CubeSensoryInput;
 
 export interface Frame {
   episode: number;

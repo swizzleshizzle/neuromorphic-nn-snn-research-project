@@ -46,4 +46,30 @@ describe("traceStore", () => {
     useTraceStore.getState().setHeroLayout("flow");
     expect(useTraceStore.getState().heroLayout).toBe("flow");
   });
+
+  it("stamps loaded frames with the header task type", () => {
+    const header = {
+      schema_version: "1.1",
+      brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+      task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+      regions: [], pathways: [],
+    } as unknown as TraceHeader;
+    const frame = { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame;
+    useTraceStore.getState().load(header, [frame]);
+    expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+  });
+
+  it("stamps appended live frames with the header task type", () => {
+    const header = {
+      schema_version: "1.1",
+      brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+      task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+      regions: [], pathways: [],
+    } as unknown as TraceHeader;
+    useTraceStore.getState().load(header, []);
+    useTraceStore.getState().appendFrame(
+      { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame,
+    );
+    expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+  });
 });

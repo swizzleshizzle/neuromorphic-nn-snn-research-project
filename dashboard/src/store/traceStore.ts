@@ -28,6 +28,18 @@ interface TraceStore {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** Stamp a frame's task with the run's task type from the header.
+ *
+ * The wire format carries the type once, in the header. parseTrace stamps file
+ * traces, but WebSocketTraceSource hands raw frames straight to appendFrame, so
+ * the store is the only point both paths share. Idempotent.
+ */
+const stamp = (frame: Frame, header?: TraceHeader): Frame => {
+  const type = header?.task?.type;
+  if (!type || !frame?.task) return frame;
+  return { ...frame, task: { ...frame.task, type } as Frame["task"] };
+};
+
 export const useTraceStore = create<TraceStore>((set, get) => ({
   frames: [],
   T: 1,
@@ -38,11 +50,15 @@ export const useTraceStore = create<TraceStore>((set, get) => ({
   connectionState: "idle",
 
   load: (header, frames) =>
-    set({ header, frames, T: header.brain.T, envStep: 0, winTi: 0, playing: false }),
+    set({
+      header,
+      frames: frames.map((f) => stamp(f, header)),
+      T: header.brain.T, envStep: 0, winTi: 0, playing: false,
+    }),
 
   appendFrame: (frame) =>
     set((s) => {
-      const frames = [...s.frames, frame];
+      const frames = [...s.frames, stamp(frame, s.header)];
       return { frames, envStep: frames.length - 1 }; // follow-live (unconditional for MVP)
     }),
 
