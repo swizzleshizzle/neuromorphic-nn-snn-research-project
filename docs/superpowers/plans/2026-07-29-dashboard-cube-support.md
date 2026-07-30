@@ -915,16 +915,97 @@ export function parseTrace(text: string): Trace {
 }
 ```
 
-- [ ] **Step 5: Run the dashboard tests**
+- [ ] **Step 5: Stamp in the store as well, so live frames are covered**
+
+`parseTrace` covers file traces only. `WebSocketTraceSource.handleMessage` calls
+`this.onFrame?.(msg.data as Frame)` on the raw payload (see
+`dashboard/src/source/WebSocketTraceSource.ts:79`), so a live frame never passes through
+`parseTrace` and would reach the panels unstamped. Both sources funnel through the store,
+so the store is the one place that covers both. Stamping twice is idempotent.
+
+Write the failing test first, appended to `dashboard/src/store/traceStore.test.ts`:
+
+```ts
+it("stamps loaded frames with the header task type", () => {
+  const header = {
+    schema_version: "1.1",
+    brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+    task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+    regions: [], pathways: [],
+  } as unknown as TraceHeader;
+  const frame = { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame;
+  useTraceStore.getState().load(header, [frame]);
+  expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+});
+
+it("stamps appended live frames with the header task type", () => {
+  const header = {
+    schema_version: "1.1",
+    brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+    task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+    regions: [], pathways: [],
+  } as unknown as TraceHeader;
+  useTraceStore.getState().load(header, []);
+  useTraceStore.getState().appendFrame(
+    { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame,
+  );
+  expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+});
+```
+
+Run `cd dashboard; npm test -- traceStore` and confirm both FAIL (`type` is undefined).
+
+Then in `dashboard/src/store/traceStore.ts`, add the helper and use it in both ingest paths:
+
+```ts
+/** Stamp a frame's task with the run's task type from the header.
+ *
+ * The wire format carries the type once, in the header. parseTrace stamps file
+ * traces, but WebSocketTraceSource hands raw frames straight to appendFrame, so
+ * the store is the only point both paths share. Idempotent.
+ */
+const stamp = (frame: Frame, header?: TraceHeader): Frame => {
+  const type = header?.task?.type;
+  if (!type || !frame?.task) return frame;
+  return { ...frame, task: { ...frame.task, type } as Frame["task"] };
+};
+```
+
+```ts
+  load: (header, frames) =>
+    set({
+      header,
+      frames: frames.map((f) => stamp(f, header)),
+      T: header.brain.T, envStep: 0, winTi: 0, playing: false,
+    }),
+
+  appendFrame: (frame) =>
+    set((s) => {
+      const frames = [...s.frames, stamp(frame, s.header)];
+      return { frames, envStep: frames.length - 1 }; // follow-live (unconditional for MVP)
+    }),
+```
+
+Run `cd dashboard; npm test -- traceStore` again. Expected: PASS.
+
+**This also means no existing test needs editing.** `TaskState.test.tsx` builds its frame
+without a `type` field and loads it through the store, so it gets stamped `"gridworld"`
+from its own header and keeps passing unchanged. If you find yourself editing an existing
+assertion to make this task pass, stop and report instead.
+
+- [ ] **Step 6: Run the dashboard tests**
 
 Run: `cd dashboard; npm test`
-Expected: PASS. Type errors will surface in `TaskState.tsx` and `SensoryGrid.tsx`; those are fixed in Tasks 6 and 7. If the suite blocks on them, complete Tasks 5 to 7 before re-running the full suite, but `npm test -- parseTrace` must pass now.
+Expected: PASS. Type errors will surface in `TaskState.tsx` and `SensoryGrid.tsx`; those are fixed in Tasks 6 and 7. If the suite blocks on them, complete Tasks 5 to 7 before re-running the full suite, but `npm test -- parseTrace` and `npm test -- traceStore` must pass now.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add dashboard/src/contract.ts dashboard/src/source/parseTrace.ts dashboard/src/source/parseTrace.test.ts
-git commit -m "feat(dashboard): discriminate task state by type, stamped at parse time"
+git add dashboard/src/contract.ts dashboard/src/source/parseTrace.ts dashboard/src/source/parseTrace.test.ts dashboard/src/store/traceStore.ts dashboard/src/store/traceStore.test.ts
+git commit -m "feat(dashboard): discriminate task state by type, stamped on ingest
+
+parseTrace covers file traces; the store covers both file and live, because
+WebSocketTraceSource hands raw frames to appendFrame without parsing."
 ```
 
 ---
@@ -1065,48 +1146,55 @@ git commit -m "feat(dashboard): add unfolded-net geometry for the 2x2 cube"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `dashboard/src/panels/TaskState.test.tsx` (follow the existing file's store-seeding helper):
+Append to `dashboard/src/panels/TaskState.test.tsx`. The existing file loads state with
+`useTraceStore.getState().load(header, [frame])`; use the same call. Do NOT modify the
+existing gridworld test: the store stamps its frame from its own header, so it must keep
+passing untouched.
 
 ```tsx
-it("renders 24 facelets for a cube trace", () => {
-  seedStore({
-    header: {
-      schema_version: "1.1",
-      brain: { id: "five-region", config_hash: "a", seed: 0, T: 8 },
-      task: { type: "cube", cube_n: 2, action_labels: ["U", "U'", "R", "R'", "F", "F'"] },
-      regions: [], pathways: [], policy_regions: [],
-    },
-    frames: [{
-      episode: 0, step: 0, t: 0,
-      task: {
-        type: "cube",
-        facelets: Array.from({ length: 24 }, (_, i) => i % 6),
-        solved: false, distance: 2, scramble_depth: 2,
-        move: 3, move_label: "R'",
-        action: 3, action_label: "R'",
-        reward: -1, return: -3, terminated: false, truncated: false,
-      },
-      regions: {}, pathways: {}, router: { gate_open: [], gate_open_t: [], utilities: [] }, field: {},
-    }],
-    envStep: 0,
+const cubeHeader = {
+  schema_version: "1.1",
+  brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+  task: { type: "cube", cube_n: 2, action_labels: ["U", "U'", "R", "R'", "F", "F'"] },
+  regions: [], pathways: [],
+} as unknown as TraceHeader;
+
+const cubeFrame = (distance: number | null) => ({
+  episode: 0, step: 0, t: 0,
+  task: {
+    facelets: Array.from({ length: 24 }, (_, i) => i % 6),
+    solved: false, distance, scramble_depth: 2,
+    move: 3, move_label: "R'",
+    action: 3, action_label: "R'",
+    reward: -1, return: -3, terminated: false, truncated: false,
+  },
+  regions: {}, pathways: {}, router: { gate_open: [], gate_open_t: [], utilities: [] }, field: {},
+}) as unknown as Frame;
+
+describe("TaskState cube", () => {
+  it("renders 24 facelets in a net for a cube trace", () => {
+    useTraceStore.getState().load(cubeHeader, [cubeFrame(2)]);
+    const { container } = render(<TaskState />);
+    expect(container.querySelectorAll("[data-facelet]")).toHaveLength(24);
+    expect(container.querySelector("[data-cube-net]")).toBeTruthy();
+    expect(container.querySelector("[data-cell]")).toBeNull();
+    expect(container.textContent).toContain("R'");
+    expect(container.textContent).toContain("distance 2");
   });
-  render(<TaskState />);
-  expect(document.querySelectorAll("[data-facelet]")).toHaveLength(24);
-  expect(document.querySelector("[data-cube-net]")).toBeTruthy();
-  expect(document.body.textContent).toContain("R'");
-  expect(document.body.textContent).toContain("2");
-});
 
-it("shows a dash when cube distance is null", () => {
-  // identical seed, with distance: null
-  // ...then:
-  expect(document.body.textContent).not.toContain("null");
-});
+  it("shows a dash rather than the string null when distance is absent", () => {
+    useTraceStore.getState().load(cubeHeader, [cubeFrame(null)]);
+    const { container } = render(<TaskState />);
+    expect(container.textContent).toContain("distance -");
+    expect(container.textContent).not.toContain("null");
+  });
 
-it("still renders the gridworld grid for a gridworld trace", () => {
-  // reuse the existing gridworld seed from this file
-  expect(document.querySelectorAll("[data-cell]").length).toBeGreaterThan(0);
-  expect(document.querySelector("[data-cube-net]")).toBeNull();
+  it("still renders the gridworld grid when the header says gridworld", () => {
+    useTraceStore.getState().load(header, [frame]);
+    const { container } = render(<TaskState />);
+    expect(container.querySelectorAll("[data-cell]")).toHaveLength(25);
+    expect(container.querySelector("[data-cube-net]")).toBeNull();
+  });
 });
 ```
 
@@ -1249,7 +1337,91 @@ Guard `aggregateSensoryGrid` the same way, returning `null` unless `"grid_n" in 
 
 - [ ] **Step 4: Update `SensoryGrid.tsx`**
 
-Branch on which aggregate returns non-null: render the existing grid for gridworld, and for cube render 24 swatches laid out with `cubeNetPosition`, captioned `SENSORY INPUT · CUBE 2x2`. Return `null` when both are null so an unknown task type degrades instead of crashing.
+Keep the existing gridworld body exactly as it is, moved into a `GridSensoryView`, and add
+the cube branch. The component returns `null` when neither aggregate matches, so an unknown
+task type degrades instead of crashing.
+
+```tsx
+import { useTraceStore } from "../../store/traceStore";
+import { cubeNetPosition, NET_COLS, NET_ROWS } from "../../panels/cubeNet";
+import { aggregateCubeFacelets, aggregateSensoryGrid } from "../sensory";
+
+const FACELET_COLOR = [
+  "#f2f2f2", "#e04a2f", "#2f7de0", "#f2c14a", "#3fae6a", "#c94ad6",
+];
+
+const shellStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 44,
+  left: 18,
+  padding: "10px 11px",
+  borderRadius: 10,
+  background: "var(--panel)",
+  border: "1px solid var(--edge)",
+  backdropFilter: "var(--blur)",
+  pointerEvents: "none",
+  zIndex: 10,
+};
+
+const captionStyle: React.CSSProperties = {
+  font: "600 8px/1 'IBM Plex Mono', monospace",
+  color: "var(--text-faint)",
+  letterSpacing: ".12em",
+  marginBottom: 7,
+};
+
+function CubeSensoryView({ colors, cubeN }: { colors: number[]; cubeN: number }) {
+  const cells = Array.from({ length: NET_ROWS * NET_COLS }, () => -1);
+  colors.forEach((color, f) => {
+    const { row, col } = cubeNetPosition(f);
+    cells[row * NET_COLS + col] = color;
+  });
+  return (
+    <div data-sensory-cube style={shellStyle}>
+      <div style={captionStyle}>
+        SENSORY INPUT · CUBE {cubeN}x{cubeN}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${NET_COLS}, 10px)`, gap: 2 }}>
+        {cells.map((color, idx) =>
+          color < 0 ? (
+            <div key={idx} style={{ width: 10, height: 10 }} />
+          ) : (
+            <div
+              key={idx}
+              data-sensory-facelet
+              style={{ width: 10, height: 10, borderRadius: 2, background: FACELET_COLOR[color] ?? "var(--edge)" }}
+            />
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function SensoryGrid() {
+  const header = useTraceStore((s) => s.header);
+  const envStep = useTraceStore((s) => s.envStep);
+  const frames = useTraceStore((s) => s.frames);
+  if (!header) return null;
+  const frame = frames[envStep];
+
+  const cube = aggregateCubeFacelets(frame?.encoding);
+  if (cube) {
+    const si = frame!.encoding!.sensory_input;
+    return <CubeSensoryView colors={cube} cubeN={"cube_n" in si ? si.cube_n : 2} />;
+  }
+
+  const agg = aggregateSensoryGrid(frame?.encoding);
+  if (!agg) return null;
+  const si = frame!.encoding!.sensory_input;
+  const g = "grid_n" in si ? si.grid_n : 0;
+  const cells = Array.from({ length: g * g }, (_, c) => c);
+  // ...existing gridworld markup, unchanged, using `cells`, `agg.agentCell`, `agg.goalCell`
+}
+```
+
+Preserve the existing gridworld JSX verbatim in place of the final comment. Do not
+restyle it.
 
 - [ ] **Step 5: Run the full dashboard suite**
 
