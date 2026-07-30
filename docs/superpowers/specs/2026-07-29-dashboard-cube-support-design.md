@@ -146,8 +146,54 @@ The full suite stays at 354 or more.
 
 ## Success criteria
 
-1. `scripts/record_cube_trace.py` writes a loadable cube trace with 6 action labels and 24 facelets per frame.
-2. The dashboard renders the unfolded net, and a recorded move visibly permutes the correct facelets.
-3. The committed gridworld trace still loads and renders unchanged.
-4. Every test in section 6 fails against pre-change code and passes after.
-5. Reusable machinery under `src/neuromorphic/monitor/`; only the recorder under `scripts/`.
+Verified 2026-07-30 (Task 8, final end-to-end check on `week17-dashboard-cube`, commit 7bde5d1).
+
+1. **MET.** `dashboard/public/cube_trace.jsonl` (depth 2, 2 frames, solves) and
+   `dashboard/public/cube_trace_d3.jsonl` (depth 3, 9 frames, cycles) both load and are
+   internally consistent: header `task.type == "cube"` with no `grid_n` and exactly 6
+   `action_labels` (`U U' R R' F F'`, matching `N_ACTIONS`); every frame's `task.facelets`
+   has 24 entries with no `agent`/`goal` key; the post-move invariant
+   `apply_move(facelets[i], action[i+1]) == facelets[i+1]` holds across all 9 consecutive
+   pairs checked; `task.solved` agrees with `is_solved(facelets)` on all 11 frames across
+   both files (this is the regression guard for the pre-fix defect where a scrambled cube
+   was labelled solved); `encoding.sensory_input` carries `cube_n`/`n_colors` with 144-wide
+   spike rows on every frame. Checked with a throwaway script, not committed.
+2. **VERIFIED BY TEST ONLY, not confirmed in a browser.** `cubeNet.test.ts` confirms the
+   24-facelet net mapping is a bijection, that U/D sit above/below F, that the middle band
+   orders L F R B, and that each face is a contiguous 2x2 block. `TaskState.test.tsx`
+   confirms a cube trace renders 24 `[data-facelet]` nodes inside a `[data-cube-net]`
+   container (not the gridworld `[data-cell]` grid) and shows the move label and distance.
+   **Gap found:** the spec's own `test_cube_net_reflects_a_known_move` (apply `R'` to
+   `SOLVED`, assert the net cells that change are exactly the verified permutation's) was
+   never implemented; `progress.md`'s Task 6 entry names this same gap ("held DLB corner
+   highlight renders correctly but has no test asserting it lands on exactly those 3
+   cells"). What exists is shape-only (bijection, band order, contiguity) plus a fixed
+   sample facelet array in the TaskState test, not a check that a real move's colors land
+   in the geometrically correct cells. Combined with not being able to drive `npm run dev`
+   in a browser per the controller correction, "a recorded move visibly permutes the
+   correct facelets" is unverified beyond the underlying `apply_move` invariant confirmed
+   in criterion 1's trace-level check.
+3. **MET.** `dashboard/public/week11_dashboard_trace.jsonl` still parses under the new
+   contract: header `task.type == "gridworld"` with `grid_n: 5`, `schema_version` is the
+   old `"1.0"` (expected: parse-time stamping is what lets old traces load), and frames
+   carry `agent`/`goal`. `test_gridworld_header_unchanged_except_version_and_hash` and
+   `test_gridworld_every_frame_is_field_identical` (`tests/monitor/test_gridworld_unchanged.py`)
+   pin this at the library level; `parseTrace.test.ts` ("stamps gridworld frames from the
+   header") and `TaskState.test.tsx` ("still renders the gridworld grid when the header
+   says gridworld") pin it at the dashboard level. Visual rendering in a live browser is
+   not separately confirmed (see criterion 2's caveat).
+4. **MOSTLY MET, one gap.** `test_cube_action_labels_match_move_count`,
+   `test_cube_frame_task_has_facelets_and_no_coordinates`, and
+   `test_cube_header_omits_grid_n_and_declares_cube_n` all exist in
+   `tests/monitor/test_tasks.py` and pass. The `cubeNet` bijection/band/contiguity tests
+   and the out-of-range-facelet guard exist and pass. The gridworld-unchanged test and the
+   parseTrace stamping/back-compat tests exist and pass. `parseTrace.test.ts` also has the
+   "mismatch is loud" tests (throws when a cube header carries gridworld frames and vice
+   versa). The one test named in section 6 that does not exist as specified is
+   `test_cube_net_reflects_a_known_move`; see criterion 2. Full suites are green: python
+   369 passed (>= 354 floor), dashboard 20 files / 79 tests passed, `npm run build` zero
+   TypeScript errors.
+5. **MET.** `src/neuromorphic/monitor/tasks.py` (adapters), `schema.py`, `frame.py`, and
+   `runner.py` hold all reusable machinery; `scripts/record_cube_trace.py` is the only new
+   file under `scripts/`, and it contains no logic beyond CLI plumbing into
+   `record_policy_episode`.
