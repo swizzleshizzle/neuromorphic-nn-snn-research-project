@@ -57,7 +57,7 @@ def test_record_episode_writes_a_replayable_trace(tmp_path):
     assert len(lines) == summary["steps"] + 1  # header + one frame per step
 
     header = json.loads(lines[0])
-    assert header["schema_version"] == "1.0"
+    assert header["schema_version"] == "1.1"
     assert [r["id"] for r in header["regions"]][0] == "sensory"
 
     frame = json.loads(lines[1])

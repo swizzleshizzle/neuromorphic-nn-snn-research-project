@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 # region id -> the per-step recording key whose [T, B, N] tensor is the region's
 # OUTPUT spike train (what the hero renders). Distinct from region.n_neurons.
@@ -50,29 +50,37 @@ def region_specs(brain):
     ]
 
 
-def _config_hash(brain, seed: int) -> str:
+def _config_hash(brain, seed: int, task_type: str) -> str:
     payload = {
         "content": brain.content,
         "n_actions": brain.n_actions,
         "n_hippo": brain.hippo.n_neurons,
         "T": brain.T,
-        "grid_n": brain.grid_n,
+        # n_obs is meaningful for every task; grid_n is meaningful for exactly one,
+        # and a cube brain carries the Brain default of 5, which means nothing.
+        "n_obs": brain.n_obs,
+        "task": task_type,
         "seed": seed,
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def build_header(brain, *, seed: int, action_labels, task_type: str = "gridworld", grid_n: int | None = None, policy_regions=None) -> dict:
+def build_header(brain, *, seed: int, adapter, policy_regions=None) -> dict:
     """Build the once-per-run trace header declaring brain topology + run context."""
-    grid_n = brain.grid_n if grid_n is None else grid_n
+    task = adapter.header_task()
     regions = [
         {"id": rid, "label": label, "n_neurons": n, "role": role, "render": render_for_n(n)}
         for rid, label, n, role in region_specs(brain)
     ]
     return {
         "schema_version": SCHEMA_VERSION,
-        "brain": {"id": "five-region", "config_hash": _config_hash(brain, seed), "seed": seed, "T": brain.T},
-        "task": {"type": task_type, "grid_n": grid_n, "action_labels": list(action_labels)},
+        "brain": {
+            "id": "five-region",
+            "config_hash": _config_hash(brain, seed, task["type"]),
+            "seed": seed,
+            "T": brain.T,
+        },
+        "task": task,
         "regions": regions,
         "pathways": [dict(p) for p in PATHWAYS],
         "policy_regions": list(policy_regions or []),

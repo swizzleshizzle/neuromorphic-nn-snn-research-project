@@ -4,6 +4,7 @@ import torch
 
 from neuromorphic.brain import Brain
 from neuromorphic.monitor.frame import build_frame
+from neuromorphic.monitor.tasks import GridworldAdapter
 
 
 def _recorded_step():
@@ -77,7 +78,8 @@ def test_step_returns_encoder_input():
 def test_frame_encoding_block_is_truthful_grid():
     brain, out = _recorded_step()
     frame = build_frame(
-        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True, grid_n=brain.grid_n
+        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True,
+        adapter=GridworldAdapter(brain.grid_n),
     )
     enc = frame["encoding"]["sensory_input"]
     assert enc["grid_n"] == brain.grid_n
@@ -95,6 +97,7 @@ def test_encoding_omitted_without_grid_n():
 def test_frame_is_json_serializable():
     brain, out = _recorded_step()
     frame = build_frame(
-        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True, grid_n=brain.grid_n
+        out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True,
+        adapter=GridworldAdapter(brain.grid_n),
     )
     json.dumps(frame)  # must not raise

@@ -43,19 +43,6 @@ def _pathways(region_rate: dict, pfc_motor_open: list, store: bool, recall: bool
     }
 
 
-def _encoding_block(out: dict, grid_n: int) -> dict:
-    """Truthful sensory input: the encode_gridworld planes [T, 2*grid_n**2]."""
-    obs_spk = out["obs_spikes"][:, 0, :]  # [T, n_obs]
-    return {
-        "sensory_input": {
-            "spikes": obs_spk.int().tolist(),
-            "grid_n": grid_n,
-            "planes": ["agent", "goal"],   # first grid_n**2 = agent, second = goal
-            "index": "y*grid_n + x",
-        }
-    }
-
-
 def build_frame(
     out: dict,
     *,
@@ -65,12 +52,12 @@ def build_frame(
     task: dict,
     store: bool,
     recall: bool,
-    grid_n: int | None = None,
+    adapter=None,
 ) -> dict:
     """Assemble one Frame. ``out`` must come from ``Brain.step(record=True)``.
 
-    ``grid_n`` enables the truthful ``encoding.sensory_input`` block (needs
-    ``out["obs_spikes"]``); omit it to skip the block.
+    ``adapter`` supplies the ``encoding`` block (needs ``out["obs_spikes"]``);
+    omit it to skip the block.
     """
     fields = {r: _field_tensor(out, r) for r in REGION_OUTPUT_KEY}
     regions = {r: _region_summary(f) for r, f in fields.items()}
@@ -88,6 +75,8 @@ def build_frame(
         # gate_closed mask (1=blocked); router.gate_open above is its inversion.
         "field": {r: {"spikes": f.int().tolist()} for r, f in fields.items()},
     }
-    if grid_n is not None and "obs_spikes" in out:
-        frame["encoding"] = _encoding_block(out, grid_n)
+    if adapter is not None:
+        encoding = adapter.encoding(out)
+        if encoding is not None:
+            frame["encoding"] = encoding
     return frame
