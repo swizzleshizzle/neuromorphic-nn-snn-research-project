@@ -50,7 +50,7 @@ def record_episode(
             total_reward += float(reward)
 
             task = adapter.frame_task(
-                obs, action=action, reward=reward, total=total_reward,
+                obs, next_obs=next_obs, action=action, reward=reward, total=total_reward,
                 terminated=terminated, truncated=truncated, info=info,
             )
             frame = build_frame(
@@ -132,7 +132,7 @@ def record_policy_episode(
             total_reward += float(reward)
 
             task = adapter.frame_task(
-                obs, action=action, reward=reward, total=total_reward,
+                obs, next_obs=next_obs, action=action, reward=reward, total=total_reward,
                 terminated=terminated, truncated=truncated, info=info,
             )
             frame = build_frame(out, episode=0, step=steps, t=float(steps), task=task,

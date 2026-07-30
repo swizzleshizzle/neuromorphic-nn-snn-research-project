@@ -22,7 +22,7 @@ class TaskAdapter(Protocol):
 
     def header_task(self) -> dict: ...
 
-    def frame_task(self, obs, *, action, reward, total, terminated, truncated, info) -> dict: ...
+    def frame_task(self, obs, *, next_obs, action, reward, total, terminated, truncated, info) -> dict: ...
 
     def encoding(self, out: dict) -> dict | None: ...
 
@@ -41,7 +41,9 @@ class GridworldAdapter:
             "action_labels": list(self.action_labels),
         }
 
-    def frame_task(self, obs, *, action, reward, total, terminated, truncated, info) -> dict:
+    def frame_task(self, obs, *, next_obs, action, reward, total, terminated, truncated, info) -> dict:
+        # Deliberately pre-move: gridworld's existing contract reads agent/goal from
+        # ``obs``, and the digest fixture test pins that. ``next_obs`` is unused here.
         return {
             "agent": [int(obs[0]), int(obs[1])],
             "goal": [int(obs[2]), int(obs[3])],
@@ -81,10 +83,16 @@ class CubeAdapter:
             "action_labels": list(self.action_labels),
         }
 
-    def frame_task(self, obs, *, action, reward, total, terminated, truncated, info) -> dict:
+    def frame_task(self, obs, *, next_obs, action, reward, total, terminated, truncated, info) -> dict:
+        # A cube frame describes the state AFTER its move: facelets, solved and
+        # distance must all agree, or the dashboard renders an unsolved cube
+        # labelled solved (the defect this fixed). ``solved``/``distance`` already
+        # come from the post-step ``info``, so ``facelets`` reads ``next_obs`` too.
+        # Gridworld deliberately stays pre-move (see GridworldAdapter above) to
+        # preserve its existing, digest-pinned contract.
         distance = info.get("distance")
         return {
-            "facelets": [int(c) for c in obs],
+            "facelets": [int(c) for c in next_obs],
             "solved": bool(info.get("solved", False)),
             "distance": None if distance is None else int(distance),
             "scramble_depth": int(info.get("scramble_depth", 0)),

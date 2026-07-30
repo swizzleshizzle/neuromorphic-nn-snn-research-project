@@ -31,12 +31,14 @@ def test_cube_action_labels_match_move_count():
 
 def test_cube_frame_task_has_facelets_and_no_coordinates():
     a = CubeAdapter()
+    action = 3  # R'
+    after = apply_move(SOLVED, action)
     info = {"solved": False, "scramble_depth": 2, "distance": 2,
-            "move": 3, "move_label": "R'"}
-    t = a.frame_task(SOLVED, action=3, reward=-1.0, total=-3.0,
+            "move": action, "move_label": "R'"}
+    t = a.frame_task(SOLVED, next_obs=after, action=action, reward=-1.0, total=-3.0,
                      terminated=False, truncated=False, info=info)
     assert len(t["facelets"]) == 24
-    assert t["facelets"] == list(SOLVED)
+    assert t["facelets"] == list(after)
     # The defect being fixed: facelet colors rendered as x/y coordinates.
     assert "agent" not in t
     assert "goal" not in t
@@ -46,7 +48,7 @@ def test_cube_frame_task_has_facelets_and_no_coordinates():
 
 def test_cube_frame_task_distance_stays_none_without_provider():
     t = CubeAdapter().frame_task(
-        SOLVED, action=0, reward=-1.0, total=-1.0, terminated=False,
+        SOLVED, next_obs=SOLVED, action=0, reward=-1.0, total=-1.0, terminated=False,
         truncated=False,
         info={"solved": False, "scramble_depth": 1, "distance": None,
               "move": 0, "move_label": "U"},
@@ -54,20 +56,34 @@ def test_cube_frame_task_distance_stays_none_without_provider():
     assert t["distance"] is None
 
 
-def test_cube_facelets_follow_the_applied_move():
-    """Consecutive frame tasks must differ by exactly the move permutation."""
+def test_cube_frame_task_reports_next_obs_as_facelets_not_obs():
+    """Pins the post-move contract: a cube frame describes the state AFTER its move.
+
+    Before the fix, ``frame_task`` read ``obs`` (pre-move), which paired
+    pre-move facelets with post-move ``solved``/``distance`` from ``info``.
+    This must fail if the adapter ever reverts to reading ``obs``.
+    """
     a = CubeAdapter()
-    before = SOLVED
     action = 3  # R'
-    after = apply_move(before, action)
+    after = apply_move(SOLVED, action)
+    assert after != SOLVED, "fixture move must actually change the state"
     info = {"solved": False, "scramble_depth": 1, "distance": 1,
             "move": action, "move_label": MOVE_LABELS[action]}
-    t0 = a.frame_task(before, action=action, reward=-1.0, total=-1.0,
-                      terminated=False, truncated=False, info=info)
-    t1 = a.frame_task(after, action=0, reward=-1.0, total=-2.0,
-                      terminated=False, truncated=False, info=info)
-    assert tuple(t1["facelets"]) == apply_move(tuple(t0["facelets"]), action)
-    assert tuple(t1["facelets"]) != tuple(t0["facelets"])
+    t = a.frame_task(SOLVED, next_obs=after, action=action, reward=-1.0, total=-1.0,
+                     terminated=False, truncated=False, info=info)
+    assert tuple(t["facelets"]) == after
+    assert tuple(t["facelets"]) != SOLVED
+
+
+def test_gridworld_frame_task_ignores_next_obs_and_reads_obs():
+    """Guards gridworld against ever silently switching to post-move semantics."""
+    a = GridworldAdapter(grid_n=5)
+    obs = [1, 2, 3, 4]
+    next_obs = [9, 9, 9, 9]
+    t = a.frame_task(obs, next_obs=next_obs, action=0, reward=-1.0, total=-1.0,
+                     terminated=False, truncated=False, info={})
+    assert t["agent"] == [1, 2]
+    assert t["goal"] == [3, 4]
 
 
 def test_cube_encoding_block_is_facelet_shaped():

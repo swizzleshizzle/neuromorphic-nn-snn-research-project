@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from neuromorphic.envs.cube import MOVE_LABELS, N_ACTIONS, apply_move
+from neuromorphic.envs.cube import MOVE_LABELS, N_ACTIONS, SOLVED, apply_move, is_solved
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "record_cube_trace.py"
 
@@ -37,10 +37,17 @@ def test_recorded_cube_trace_header_is_cube_shaped(tmp_path):
 
 
 def test_recorded_frames_carry_facelets_that_follow_the_moves(tmp_path):
-    """The strongest available check that frames describe the real episode."""
+    """The strongest available check that frames describe the real episode.
+
+    A cube frame describes the state AFTER its move (the post-move semantics
+    fix): frame b's facelets are frame a's facelets with b's own move applied,
+    not a's move. Under the pre-fix (pre-move) semantics this relation does
+    not hold, since frame a's facelets would lag one step behind a's own
+    move/solved/distance.
+    """
     mod = _load()
     out = tmp_path / "cube.jsonl"
-    mod.record(depth=2, seed=0, episodes=2, out_path=out)
+    summary = mod.record(depth=2, seed=0, episodes=2, out_path=out)
     _, frames = _read(out)
     for f in frames:
         assert len(f["task"]["facelets"]) == 24
@@ -48,10 +55,19 @@ def test_recorded_frames_carry_facelets_that_follow_the_moves(tmp_path):
         assert "goal" not in f["task"]
     assert len(frames) >= 2, "need at least two frames to compare consecutive moves"
     for a, b in zip(frames, frames[1:]):
-        expected = apply_move(tuple(a["task"]["facelets"]), a["task"]["action"])
+        expected = apply_move(tuple(a["task"]["facelets"]), b["task"]["action"])
         assert tuple(b["task"]["facelets"]) == expected, (
             "frame facelets do not follow the recorded move"
         )
+
+    # Direct regression guard for the defect: under the old pre-move semantics
+    # this was impossible to satisfy, since facelets always lagged one step
+    # behind solved/distance and the solved state was never rendered.
+    if summary["reached_goal"]:
+        last = frames[-1]["task"]
+        assert last["solved"] is True
+        assert tuple(last["facelets"]) == SOLVED
+        assert is_solved(tuple(last["facelets"]))
 
 
 def test_recorded_encoding_is_facelet_shaped(tmp_path):
