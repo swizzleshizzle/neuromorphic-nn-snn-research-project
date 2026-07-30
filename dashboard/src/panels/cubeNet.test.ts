@@ -25,6 +25,15 @@ describe("cubeNetPosition", () => {
     }
   });
 
+  it("places D in the bottom band below F", () => {
+    for (let i = 0; i < 4; i++) {
+      const f = cubeNetPosition(8 + i);
+      const d = cubeNetPosition(12 + i);
+      expect(d.col).toBe(f.col);
+      expect(d.row - f.row).toBe(2);
+    }
+  });
+
   it("orders the middle band L F R B left to right", () => {
     const col = (f: number) => cubeNetPosition(f).col;
     expect(col(16)).toBeLessThan(col(8));  // L before F
@@ -47,5 +56,7 @@ describe("cubeNetPosition", () => {
   it("rejects an out-of-range facelet", () => {
     expect(() => cubeNetPosition(-1)).toThrow();
     expect(() => cubeNetPosition(24)).toThrow();
+    expect(() => cubeNetPosition(1.5)).toThrow();
+    expect(() => cubeNetPosition(NaN)).toThrow();
   });
 });
