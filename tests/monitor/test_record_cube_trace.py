@@ -32,6 +32,8 @@ def test_recorded_cube_trace_header_is_cube_shaped(tmp_path):
     assert header["task"]["action_labels"] == list(MOVE_LABELS)
     assert header["schema_version"] == "1.1"
     assert len(frames) >= 1
+    assert frames[0]["task"]["distance"] is not None
+    assert isinstance(frames[0]["task"]["distance"], int)
 
 
 def test_recorded_frames_carry_facelets_that_follow_the_moves(tmp_path):
@@ -44,6 +46,7 @@ def test_recorded_frames_carry_facelets_that_follow_the_moves(tmp_path):
         assert len(f["task"]["facelets"]) == 24
         assert "agent" not in f["task"]
         assert "goal" not in f["task"]
+    assert len(frames) >= 2, "need at least two frames to compare consecutive moves"
     for a, b in zip(frames, frames[1:]):
         expected = apply_move(tuple(a["task"]["facelets"]), a["task"]["action"])
         assert tuple(b["task"]["facelets"]) == expected, (
