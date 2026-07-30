@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Frame } from "../contract";
-import { aggregateSensoryGrid } from "./sensory";
+import { aggregateCubeFacelets, aggregateSensoryGrid } from "./sensory";
 
 describe("aggregateSensoryGrid", () => {
   it("returns null when encoding is absent", () => {
@@ -29,4 +29,19 @@ describe("aggregateSensoryGrid", () => {
     } as unknown as Frame["encoding"];
     expect(aggregateSensoryGrid(enc)).toEqual({ agentCell: -1, goalCell: -1 });
   });
+});
+
+it("takes the argmax color per facelet", () => {
+  // 24 facelets x 6 colors = 144. Facelet f is color f % 6, spiking twice.
+  const row = new Array(144).fill(0);
+  for (let f = 0; f < 24; f++) row[f * 6 + (f % 6)] = 1;
+  const enc = { sensory_input: { spikes: [row, row], cube_n: 2, n_colors: 6, index: "" } };
+  const got = aggregateCubeFacelets(enc as never);
+  expect(got).toHaveLength(24);
+  for (let f = 0; f < 24; f++) expect(got![f]).toBe(f % 6);
+});
+
+it("returns null for a gridworld encoding", () => {
+  const enc = { sensory_input: { spikes: [[0, 1]], grid_n: 1, planes: [], index: "" } };
+  expect(aggregateCubeFacelets(enc as never)).toBeNull();
 });
