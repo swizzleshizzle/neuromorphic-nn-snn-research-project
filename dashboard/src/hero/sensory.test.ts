@@ -29,6 +29,11 @@ describe("aggregateSensoryGrid", () => {
     } as unknown as Frame["encoding"];
     expect(aggregateSensoryGrid(enc)).toEqual({ agentCell: -1, goalCell: -1 });
   });
+
+  it("returns null for a cube encoding", () => {
+    const enc = { sensory_input: { spikes: [new Array(144).fill(0)], cube_n: 2, n_colors: 6, index: "" } };
+    expect(aggregateSensoryGrid(enc as never)).toBeNull();
+  });
 });
 
 it("takes the argmax color per facelet", () => {

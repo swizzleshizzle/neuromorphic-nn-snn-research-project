@@ -36,7 +36,7 @@ function CubeSensoryView({ colors, cubeN }: { colors: number[]; cubeN: number })
   return (
     <div data-sensory-cube style={shellStyle}>
       <div style={captionStyle}>
-        SENSORY INPUT · CUBE {cubeN}x{cubeN}
+        SENSORY INPUT · CUBE {cubeN}×{cubeN}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${NET_COLS}, 10px)`, gap: 2 }}>
         {cells.map((color, idx) =>
