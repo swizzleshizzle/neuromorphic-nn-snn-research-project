@@ -50,3 +50,11 @@ it("returns null for a gridworld encoding", () => {
   const enc = { sensory_input: { spikes: [[0, 1]], grid_n: 1, planes: [], index: "" } };
   expect(aggregateCubeFacelets(enc as never)).toBeNull();
 });
+
+it("reports -1 for every facelet in an all-zero spike window, not color 0", () => {
+  const row = new Array(144).fill(0);
+  const enc = { sensory_input: { spikes: [row], cube_n: 2, n_colors: 6, index: "" } };
+  const got = aggregateCubeFacelets(enc as never);
+  expect(got).toHaveLength(24);
+  expect(got).toEqual(new Array(24).fill(-1));
+});

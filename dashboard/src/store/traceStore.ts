@@ -33,10 +33,24 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
  * The wire format carries the type once, in the header. parseTrace stamps file
  * traces, but WebSocketTraceSource hands raw frames straight to appendFrame, so
  * the store is the only point both paths share. Idempotent.
+ *
+ * Also guards against a header/frame mismatch (a cube header with a gridworld
+ * frame or vice versa), the same check parseTrace does for file traces. Without
+ * it a live run whose header and frames disagree would silently render facelet
+ * colors as grid coordinates. parseTrace's own check stays in place too: it
+ * reports the frame index, which this path cannot, so the duplication is
+ * deliberate defence in depth, not redundancy to remove.
  */
 const stamp = (frame: Frame, header?: TraceHeader): Frame => {
   const type = header?.task?.type;
   if (!type || !frame?.task) return frame;
+  const task = frame.task as unknown as Record<string, unknown>;
+  if (type === "cube" && "agent" in task) {
+    throw new Error('stamp: header declares task type "cube" but frame carries gridworld "agent"');
+  }
+  if (type === "gridworld" && "facelets" in task) {
+    throw new Error('stamp: header declares task type "gridworld" but frame carries cube "facelets"');
+  }
   return { ...frame, task: { ...frame.task, type } as Frame["task"] };
 };
 

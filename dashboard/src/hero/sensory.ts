@@ -32,7 +32,7 @@ export function aggregateSensoryGrid(
   return { agentCell: aMax > 0 ? aCell : -1, goalCell: gMax > 0 ? gCell : -1 };
 }
 
-/** Sum cube sensory spikes over the window; return the argmax color per facelet. */
+/** Sum cube sensory spikes over the window; return the argmax color per facelet, or -1 if a facelet never fired. */
 export function aggregateCubeFacelets(encoding: Frame["encoding"]): number[] | null {
   const si = encoding?.sensory_input;
   if (!si || !("cube_n" in si)) return null;
@@ -47,7 +47,15 @@ export function aggregateCubeFacelets(encoding: Frame["encoding"]): number[] | n
   }
   return sums.map((counts) => {
     let best = 0;
-    for (let c = 1; c < counts.length; c++) if (counts[c] > counts[best]) best = c;
-    return best;
+    let bestSum = counts[0];
+    for (let c = 1; c < counts.length; c++) {
+      if (counts[c] > bestSum) {
+        bestSum = counts[c];
+        best = c;
+      }
+    }
+    // No evidence for this facelet in the window: report -1, matching the
+    // gridworld convention, rather than inventing color 0 from nothing.
+    return bestSum > 0 ? best : -1;
   });
 }

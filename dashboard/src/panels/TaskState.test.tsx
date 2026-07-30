@@ -76,3 +76,28 @@ describe("TaskState cube", () => {
     expect(container.querySelector("[data-cube-net]")).toBeNull();
   });
 });
+
+const unknownHeader = {
+  schema_version: "1.1",
+  brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+  task: { type: "hanoi", action_labels: ["move"] },
+  regions: [], pathways: [],
+} as unknown as TraceHeader;
+
+const unknownFrame = {
+  episode: 0, step: 0, t: 0,
+  task: { action: 0, action_label: "move", reward: 4, return: 9, terminated: false, truncated: false },
+  regions: {}, pathways: {}, router: { gate_open: [], gate_open_t: [], utilities: [] }, field: {},
+} as unknown as Frame;
+
+describe("TaskState unknown task type", () => {
+  it("degrades to a status-only readout instead of crashing on an unrecognized task.type", () => {
+    useTraceStore.getState().load(unknownHeader, [unknownFrame]);
+    expect(() => render(<TaskState />)).not.toThrow();
+    const { container } = render(<TaskState />);
+    expect(container.querySelector("[data-cell]")).toBeNull();
+    expect(container.querySelector("[data-cube-net]")).toBeNull();
+    const reward = container.querySelector("[data-reward]") as HTMLElement;
+    expect(reward.textContent).toBe("4");
+  });
+});

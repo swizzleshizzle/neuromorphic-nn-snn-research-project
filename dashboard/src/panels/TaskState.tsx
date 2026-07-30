@@ -1,4 +1,4 @@
-import type { CubeTask, GridTask, TaskCore } from "../contract";
+import type { CubeTask, GridTask, TaskCore, TaskState as TaskStateModel } from "../contract";
 import { useTraceStore } from "../store/traceStore";
 import { cubeNetPosition, NET_COLS, NET_ROWS } from "./cubeNet";
 import { Panel } from "./Panel";
@@ -109,13 +109,28 @@ function CubeTaskView({ task }: { task: CubeTask }) {
   );
 }
 
+/** Fallback for any task.type the panel does not know: status-only, no grid, no net.
+ *
+ * A future task type must degrade instead of breaking the page (spec section 5). This
+ * mirrors the sensory overlay's unknown-encoding behavior for the task panel.
+ */
+function UnknownTaskView({ task }: { task: TaskStateModel }) {
+  return (
+    <div style={{ font: "11px monospace", color: "var(--text-dim)", display: "flex", flexDirection: "column", gap: 3 }}>
+      {task.action_label && <div>action {task.action_label}</div>}
+      <RewardReturn task={task} />
+    </div>
+  );
+}
+
 export function TaskState() {
   const header = useTraceStore((s) => s.header);
   const frame = useTraceStore((s) => s.frames[s.envStep]);
   if (!header) return null;
   const task = frame?.task;
+  const taskHeader = header.task;
 
-  if (header.task.type === "cube") {
+  if (taskHeader.type === "cube") {
     return (
       <Panel kicker="PANEL 03 · TASK" title="Task State">
         {task && <CubeTaskView task={task as CubeTask} />}
@@ -123,9 +138,17 @@ export function TaskState() {
     );
   }
 
+  if (taskHeader.type === "gridworld") {
+    return (
+      <Panel kicker="PANEL 03 · TASK" title="Task State">
+        <GridTaskView n={taskHeader.grid_n} task={task as GridTask | undefined} />
+      </Panel>
+    );
+  }
+
   return (
     <Panel kicker="PANEL 03 · TASK" title="Task State">
-      <GridTaskView n={header.task.grid_n} task={task as GridTask | undefined} />
+      {task && <UnknownTaskView task={task} />}
     </Panel>
   );
 }
