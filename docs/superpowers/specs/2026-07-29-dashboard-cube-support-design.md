@@ -163,16 +163,28 @@ Verified 2026-07-30 (Task 8, final end-to-end check on `week17-dashboard-cube`, 
    orders L F R B, and that each face is a contiguous 2x2 block. `TaskState.test.tsx`
    confirms a cube trace renders 24 `[data-facelet]` nodes inside a `[data-cube-net]`
    container (not the gridworld `[data-cell]` grid) and shows the move label and distance.
-   **Gap found:** the spec's own `test_cube_net_reflects_a_known_move` (apply `R'` to
-   `SOLVED`, assert the net cells that change are exactly the verified permutation's) was
-   never implemented; `progress.md`'s Task 6 entry names this same gap ("held DLB corner
-   highlight renders correctly but has no test asserting it lands on exactly those 3
-   cells"). What exists is shape-only (bijection, band order, contiguity) plus a fixed
-   sample facelet array in the TaskState test, not a check that a real move's colors land
-   in the geometrically correct cells. Combined with not being able to drive `npm run dev`
-   in a browser per the controller correction, "a recorded move visibly permutes the
-   correct facelets" is unverified beyond the underlying `apply_move` invariant confirmed
-   in criterion 1's trace-level check.
+   **Residual gap, and what it actually is.** This spec's section 6 named
+   `test_cube_net_reflects_a_known_move` as a dashboard test. It does not exist in
+   TypeScript, by a decision recorded in the implementation plan's self-review: the move
+   permutations live in `neuromorphic.envs.cube` and vitest cannot reach them, so the
+   move-correctness check was moved server-side, where it is stronger. Two Python tests
+   cover it against real data rather than a lookup table:
+   `test_cube_facelets_follow_the_applied_move` (`tests/monitor/test_tasks.py`) and
+   `test_recorded_frames_carry_facelets_that_follow_the_moves`
+   (`tests/monitor/test_record_cube_trace.py`), the latter asserting the invariant across
+   every consecutive pair of a real recorded episode.
+
+   So move correctness IS tested, and net geometry IS tested (bijection, U above F, D
+   below F, band order L F R B, contiguous 2x2 faces). What no test covers is the JOIN
+   between them: that a facelet moved by a real permutation lands in the geometrically
+   correct net cell. Both halves are pinned independently; their composition is not.
+   Combined with not being able to drive `npm run dev` in a browser, "a recorded move
+   visibly permutes the correct facelets" rests on those two verified halves rather than
+   on a direct check.
+
+   This is a different gap from `progress.md`'s Task 6 deferred minor (the held DLB corner
+   highlight renders on facelets 12/16/21 but no test asserts it lands on exactly those
+   three cells). Both are open; they are not the same item.
 3. **MET.** `dashboard/public/week11_dashboard_trace.jsonl` still parses under the new
    contract: header `task.type == "gridworld"` with `grid_n: 5`, `schema_version` is the
    old `"1.0"` (expected: parse-time stamping is what lets old traces load), and frames
