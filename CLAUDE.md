@@ -4,12 +4,23 @@ Standing knowledge for this repo. Session-specific state lives in `docs/handoffs
 
 ## Commands
 
-```powershell
-.venv\Scripts\python.exe -m pytest tests/ -q -m "not slow"   # fast inner loop, about 13 min
-.venv\Scripts\python.exe -m pytest tests/ -q                 # full suite incl. the slow BFS test
+Sessions moved from a Windows desktop to a Linux VPS on 2026-07-30. Use whichever applies:
+
+```bash
+.venv/bin/python -m pytest tests/ -q -m "not slow"           # Linux VPS: fast inner loop, about 13 min
+.venv/bin/python -m pytest tests/ -q                         # Linux VPS: full suite
 ```
 
-Always run python via `.venv\Scripts\python.exe`. One test is marked `slow` (it builds the full 3,674,160-state cube BFS table, about 67s). The `slow` marker is registered in `pyproject.toml` and is NOT deselected by default, deliberately: a default run stays honest.
+```powershell
+.venv\Scripts\python.exe -m pytest tests/ -q -m "not slow"   # Windows (laptop, old desktop)
+.venv\Scripts\python.exe -m pytest tests/ -q                 # Windows: full suite
+```
+
+Always run python via the venv, never a bare `python`. One test is marked `slow` (it builds the **unbounded** cube BFS table, all 3,674,160 states, about 67s). The `slow` marker is registered in `pyproject.toml` and is NOT deselected by default, deliberately: a default run stays honest.
+
+**`ExactBFSDistance(max_depth=N)` is not the slow path.** A bounded build is near free (depth 6 is 11,913 states, about 0.04s). Only `max_depth=None` costs the 67s. Do not restructure code to avoid constructing a bounded provider; that optimisation buys nothing.
+
+Full suite is 370 tests as of 2026-07-30.
 
 Ruff is configured in `pyproject.toml` but is not installed in the venv, so lint is not mechanically enforced.
 
@@ -51,23 +62,39 @@ Practical consequences:
 - **Pre-register the interpretation contract before the numbers exist**, and mark each claim confirmed or refuted afterwards. EXP-028's headline refuted its own pre-registration, which is exactly why this is worth doing.
 - **n >= 12 seeds.** n=5 lied in EXP-026 and the de-noised result flipped.
 - **Measure the chance floor, do not assume it.** On the cube it is 21% at depth 1, not 1/6, because a random walk with a `2d+3` budget can stumble into solved.
-- **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for.
+- **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for. EXP-030 is the worked example: `memory` beat the shuffle-null by 10.8 points (p 0.078) and beat the amnesic control by 1.2 (p 0.91). The primary comparison was measuring the harm of *incorrect* memory, not the benefit of correct memory. Three arms would have published a false positive.
+- **Prefer a mechanism measurement to a performance measurement.** "Memory did not help" is weak and unactionable. "Memory was on the policy path, cycles were abundant, and the revisit rate did not fall" localises the failure to the readout. Instrument the mechanism the intervention is supposed to drive, not just the score.
+- **Read real output, not only green tests.** A cube frame labelled `solved: yes` on a scrambled cube passed every unit test in the suite; two minutes reading an actual recorded trace found it. Same pattern as the filename collision that was visible in an implementer's own smoke output. Tests prove what you thought to assert; output shows what you did not.
+- **No scipy in the venv.** For n around 12, an exact paired permutation test over all `2**n` sign flips is cheap, assumption-free, and better than a normal approximation. 12 seeds is 4096 flips.
 
 ## Running long experiments on the laptop over SSH
 
-Established 2026-07-09, hard-won details as of 2026-07-27.
+**Full procedure lives in `docs/playbooks/remote-experiment-runs.md`. Read it before dispatching.**
+Established 2026-07-09, revised 2026-07-30 for the move to a VPS.
 
-```powershell
-ssh mlgbr@192.168.50.62      # SwizzlesDuo, Intel Ultra 9 185H, 22 cores. Remote shell is cmd.exe, not POSIX.
-cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project
-git pull --ff-only origin main
-New-Item -ItemType Directory -Force experiments\NNN_x\outputs | Out-Null
-.venv\Scripts\python.exe -u experiments\NNN_x\run.py --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 16 | Tee-Object -FilePath experiments\NNN_x\outputs\run.log
-```
+**Reach the laptop over Tailscale, never the LAN address.** `ssh mlgbr@swizzlesduo.tailda519d.ts.net`
+(Tailscale IPv4 `100.120.6.78`, ED25519 host key `SHA256:uKE4XW17ZJ106FoTifyv+WEahvbNkn3DhhovrXsEB6Y`).
+The old `192.168.50.62` is an RFC1918 address and is **unreachable from anywhere but the home network**.
+`SwizzlesDuo` is an Intel Ultra 9 185H, 22 cores, 31.4 GB. Its remote default shell is `cmd.exe`, not POSIX,
+so wrap everything in `powershell -NoProfile -Command`.
 
-- **RAM is the binding constraint, not cores.** Budget about 1.5 GB per worker. Check free memory first: `[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)`. A run launched with 4.7 GB free lost all 16 workers mid-flight.
+- **Budget RAM from measurement, not from a rule of thumb.** Cube workers peak around **195 MB each**
+  (1.58 GB across 8). The older "about 1.5 GB per worker" figure came from a heavier grid workload and is
+  roughly 7x too conservative for cube runs.
+- **Falling free memory is usually not a leak.** Windows `FreePhysicalMemory` excludes standby and cache,
+  so it drops steadily through a run that writes many files and recovers at the end. It fell 14 GB to
+  4.6 GB during EXP-030 while worker resident memory stayed flat. Check per-process `WorkingSet64` before
+  concluding anything.
 - **Worker processes appear as `python3.13.exe`, not `python.exe`.** `Get-Process python` misses them completely. Match on `^python` or check both names before concluding a run has died.
 - **A parent process at ~0 CPU is normal.** It only waits on workers. The real health signal is worker count against outstanding tasks, plus the record-file count climbing.
+- **An SSH drop does not kill the run.** Windows has no SIGHUP semantics. Client `exit code 255` means the
+  connection dropped, not that the job died: reconnect and probe before reacting. Always `Tee-Object` to a
+  log file so the record survives the pipe.
 - **Do not chain `if not exist X mkdir X && python ... > log` under `cmd`.** It wedges silently at 0.016 s CPU with no output. Use PowerShell, and `python -u` so the log is not fully buffered.
+- **Quoting through `cmd.exe` eats trailing backslashes and interprets `|` before PowerShell sees it.**
+  For anything non-trivial, `scp` a `.ps1` over and run it with `powershell -NoProfile -ExecutionPolicy Bypass -File`.
 - Progress is best read from the per-run JSON record count, not the log.
-- Pass `--skip-gate` for any driver with an interactive prompt; `input()` raises `EOFError` over non-interactive SSH.
+- **`ssh -n` makes an interactive gate stop cleanly** (`input()` raises `EOFError`), which is what you want
+  when a driver prints a pre-flight number you must read. Pass `--skip-gate` only after reading it.
+- **Seeded runs are byte-identical across worker scheduling.** Re-running a seed and diffing the records is
+  a free correctness check on the seeding discipline.
