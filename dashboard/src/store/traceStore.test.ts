@@ -46,4 +46,60 @@ describe("traceStore", () => {
     useTraceStore.getState().setHeroLayout("flow");
     expect(useTraceStore.getState().heroLayout).toBe("flow");
   });
+
+  it("stamps loaded frames with the header task type", () => {
+    const header = {
+      schema_version: "1.1",
+      brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+      task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+      regions: [], pathways: [],
+    } as unknown as TraceHeader;
+    const frame = { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame;
+    useTraceStore.getState().load(header, [frame]);
+    expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+  });
+
+  it("stamps appended live frames with the header task type", () => {
+    const header = {
+      schema_version: "1.1",
+      brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+      task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+      regions: [], pathways: [],
+    } as unknown as TraceHeader;
+    useTraceStore.getState().load(header, []);
+    useTraceStore.getState().appendFrame(
+      { episode: 0, step: 0, t: 0, task: { facelets: [] } } as unknown as Frame,
+    );
+    expect(useTraceStore.getState().frames[0].task.type).toBe("cube");
+  });
+
+  const cubeHeader = {
+    schema_version: "1.1",
+    brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+    task: { type: "cube", cube_n: 2, action_labels: ["U"] },
+    regions: [], pathways: [],
+  } as unknown as TraceHeader;
+
+  const gridHeader = {
+    schema_version: "1.1",
+    brain: { id: "b", config_hash: "x", seed: 0, T: 1 },
+    task: { type: "gridworld", grid_n: 5, action_labels: ["up", "right", "down", "left"] },
+    regions: [], pathways: [],
+  } as unknown as TraceHeader;
+
+  it("load() throws when a cube header carries a gridworld frame", () => {
+    const badFrame = { episode: 0, step: 0, t: 0, task: { agent: [1, 2], goal: [3, 4] } } as unknown as Frame;
+    expect(() => useTraceStore.getState().load(cubeHeader, [badFrame])).toThrow(/cube.*agent|agent.*cube/i);
+  });
+
+  it("appendFrame() throws when a cube header carries a gridworld frame", () => {
+    useTraceStore.getState().load(cubeHeader, []);
+    const badFrame = { episode: 0, step: 0, t: 0, task: { agent: [1, 2], goal: [3, 4] } } as unknown as Frame;
+    expect(() => useTraceStore.getState().appendFrame(badFrame)).toThrow(/cube.*agent|agent.*cube/i);
+  });
+
+  it("load() throws when a gridworld header carries a cube frame", () => {
+    const badFrame = { episode: 0, step: 0, t: 0, task: { facelets: new Array(24).fill(0) } } as unknown as Frame;
+    expect(() => useTraceStore.getState().load(gridHeader, [badFrame])).toThrow(/gridworld.*facelets|facelets.*gridworld/i);
+  });
 });

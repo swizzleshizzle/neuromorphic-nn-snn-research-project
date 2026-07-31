@@ -6,8 +6,9 @@ import torch
 
 from neuromorphic.monitor.frame import build_frame
 from neuromorphic.monitor.schema import REGION_OUTPUT_KEY, build_header, region_specs
+from neuromorphic.monitor.tasks import GRID_ACTION_LABELS, GridworldAdapter
 
-DEFAULT_ACTION_LABELS = ("up", "right", "down", "left")
+DEFAULT_ACTION_LABELS = GRID_ACTION_LABELS
 
 
 def record_episode(
@@ -16,17 +17,19 @@ def record_episode(
     sink,
     *,
     seed: int = 0,
-    action_labels=DEFAULT_ACTION_LABELS,
     max_steps: int | None = None,
     store_first: bool = True,
     recall: bool = True,
+    adapter=None,
     generator=None,
 ) -> dict:
     """Record one episode to ``sink`` (header + one Frame per env step).
 
     Returns a summary dict: ``steps``, ``total_reward``, ``reached_goal``.
     """
-    sink.open(build_header(brain, seed=seed, action_labels=action_labels))
+    if adapter is None:
+        adapter = GridworldAdapter(brain.grid_n)
+    sink.open(build_header(brain, seed=seed, adapter=adapter))
 
     # seed reseeds the env; the brain's Poisson stochasticity comes from `generator`.
     total_reward = 0.0
@@ -42,23 +45,17 @@ def record_episode(
         while steps < limit:
             out = brain.step(obs, store=False, recall=recall, record=True, generator=generator)
             action = int(out["action"])
-            next_obs, reward, terminated, truncated, _ = env.step(action)
+            next_obs, reward, terminated, truncated, info = env.step(action)
             brain.learn(reward)
             total_reward += float(reward)
 
-            task = {
-                "agent": [int(obs[0]), int(obs[1])],
-                "goal": [int(obs[2]), int(obs[3])],
-                "action": action,
-                "action_label": action_labels[action],
-                "reward": float(reward),
-                "return": total_reward,
-                "terminated": bool(terminated),
-                "truncated": bool(truncated),
-            }
+            task = adapter.frame_task(
+                obs, next_obs=next_obs, action=action, reward=reward, total=total_reward,
+                terminated=terminated, truncated=truncated, info=info,
+            )
             frame = build_frame(
                 out, episode=0, step=steps, t=float(steps), task=task,
-                store=False, recall=recall, grid_n=brain.grid_n,
+                store=False, recall=recall, adapter=adapter,
             )
             sink.write(frame)
 
@@ -103,10 +100,10 @@ def record_policy_episode(
     sink,
     *,
     seed: int = 0,
-    action_labels=DEFAULT_ACTION_LABELS,
     max_steps: int | None = None,
     recall: bool = False,
     policy_regions=("sensory",),
+    adapter=None,
     generator=None,
 ) -> dict:
     """Record one episode driven by the trained head (sensory concept -> action logits).
@@ -115,7 +112,9 @@ def record_policy_episode(
     records the actual trained policy. Region activity is still captured via ``record=True``;
     regions bypassed under ``recall=False`` are zero-filled so frames build without error.
     """
-    sink.open(build_header(brain, seed=seed, action_labels=action_labels, policy_regions=list(policy_regions)))
+    if adapter is None:
+        adapter = GridworldAdapter(brain.grid_n)
+    sink.open(build_header(brain, seed=seed, adapter=adapter, policy_regions=list(policy_regions)))
 
     total_reward = 0.0
     reached_goal = False
@@ -129,21 +128,15 @@ def record_policy_episode(
             concept = out["concept"].mean(dim=0)[0]  # inline (monitor must not import training)
             action = int(head(concept).argmax())
             _pad_bypassed_recordings(out, brain)
-            next_obs, reward, terminated, truncated, _ = env.step(action)
+            next_obs, reward, terminated, truncated, info = env.step(action)
             total_reward += float(reward)
 
-            task = {
-                "agent": [int(obs[0]), int(obs[1])],
-                "goal": [int(obs[2]), int(obs[3])],
-                "action": action,
-                "action_label": action_labels[action],
-                "reward": float(reward),
-                "return": total_reward,
-                "terminated": bool(terminated),
-                "truncated": bool(truncated),
-            }
+            task = adapter.frame_task(
+                obs, next_obs=next_obs, action=action, reward=reward, total=total_reward,
+                terminated=terminated, truncated=truncated, info=info,
+            )
             frame = build_frame(out, episode=0, step=steps, t=float(steps), task=task,
-                                store=False, recall=recall, grid_n=brain.grid_n)
+                                store=False, recall=recall, adapter=adapter)
             sink.write(frame)
 
             obs = next_obs
