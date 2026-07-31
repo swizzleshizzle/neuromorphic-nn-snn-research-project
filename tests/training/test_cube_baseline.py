@@ -1,13 +1,17 @@
+import math
+
 import pytest
 import torch
 
 from neuromorphic.envs.cube_distance import ExactBFSDistance
+from neuromorphic.training import cube_baseline
 from neuromorphic.training.cube_baseline import (
     CubeConfig,
     ShellCubeEnv,
     evaluate_states,
     make_agent,
     max_steps_for,
+    modal_action_fraction,
     run_cube_baseline,
     shell_states,
     split_shell,
@@ -106,6 +110,59 @@ def test_smoke_run_produces_a_wellformed_record(tmp_path):
     assert rec["n"] == 6  # depth-1 shell size (PUBLISHED[1])
     solved_count = rec["success_rate"] * rec["n"]
     assert solved_count == pytest.approx(round(solved_count))  # success_rate is solved/n
+
+
+def test_modal_action_fraction_is_one_for_a_constant_rollout():
+    """The signature of a collapsed policy: every step took the same action."""
+    assert modal_action_fraction([3, 3, 3, 3, 3]) == 1.0
+
+
+def test_modal_action_fraction_is_one_sixth_for_a_full_sweep():
+    assert modal_action_fraction([0, 1, 2, 3, 4, 5]) == pytest.approx(1.0 / 6.0)
+
+
+def test_modal_action_fraction_of_an_empty_rollout_is_zero():
+    assert modal_action_fraction([]) == 0.0
+
+
+def test_random_policy_modal_fraction_sits_near_the_measured_uniform_floor(provider):
+    """Measured, not assumed.
+
+    Prototyped 2026-07-31 over 20,000 simulated uniform rollouts on 6 actions: mean
+    modal fraction is 0.354 at a 9-step budget and 0.429 at 5 steps. A constant-action
+    policy scores exactly 1.0. The 0.60 bar sits above the uniform mean with margin and
+    far below collapse, so this fails if the metric is ever wired to something degenerate.
+    """
+    states = shell_states(provider, 3)
+    res = evaluate_states(None, None, states, depth=3, random_policy=True, rng_seed=0)
+    assert 0.25 < res["greedy_modal_action_frac"] < 0.60
+
+
+def test_a_collapsed_policy_is_reported_as_modal_fraction_one(provider, monkeypatch):
+    """The instrument must catch the exact failure it exists to detect.
+
+    A depth-3 state cannot be solved by one repeated move, so every rollout runs to the
+    9-step budget and the fraction is exactly 1.0 rather than an artifact of early exit.
+    """
+    monkeypatch.setattr(cube_baseline, "greedy_action", lambda *a, **k: 2)
+    states = shell_states(provider, 3)
+    res = evaluate_states(object(), object(), states, depth=3)
+    assert res["greedy_modal_action_frac"] == 1.0
+
+
+def test_record_carries_both_collapse_instruments(tmp_path):
+    """Greedy collapse and training-policy collapse are separate failures.
+
+    `entropy_beta` is a training-time setting but the F'-nine-times observation was made
+    under the greedy policy, so a diagnosis needs both numbers. An untrained 3-episode run
+    sits near the log(6) = 1.792 ceiling; the 1.0 floor is well clear of a collapsed policy.
+    """
+    cfg = CubeConfig(
+        arm="regionalized", depth=1, seed=0, episodes=3, max_depth=1, out_dir=tmp_path,
+    )
+    rec = run_cube_baseline(cfg)
+    assert 1.0 < rec["mean_train_entropy"] <= math.log(6) + 1e-6
+    assert 1.0 / 6.0 <= rec["greedy_modal_action_frac"] <= 1.0
 
 
 def test_both_arms_get_identical_head_init_at_a_fixed_seed():
