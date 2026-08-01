@@ -1,11 +1,17 @@
-# EXP-030 follow-up: was the memory null measured on a collapsed policy?
+# EXP-031 Results - Policy Collapse (was the EXP-030 memory null measured on a degenerate policy?)
 
-> **Provenance:** 144 records (4 arms x depths 1-3 x seeds 0-11), 600 episodes per run, 2x2 cube,
-> identical configuration to EXP-030 except for two added instrument fields. Run 2026-08-01 on the
-> laptop `SwizzlesDuo` (Intel Core Ultra 9 185H, 16 cores / 22 threads) over SSH from the VPS with
-> `--workers 16`, wall clock 3h14m (21:22:56 to 00:37:07 local). Records in
-> `experiments/030_memory_engagement/outputs_instrumented/` (gitignored). Instrument added on branch
-> `week17-collapse-instrument`, commit `0017053`. Regenerate with the command at the bottom.
+> **Why this file exists:** the standing habit adopted after the 2026-07-13 Phase-2 audit. Every
+> experiment commits a curated, in-repo results record so the authoritative numbers never live only in
+> a gitignored `outputs/` folder. **Provenance:** 144 records (4 arms x depths 1-3 x seeds 0-11), 600
+> episodes per run, 2x2 cube, **identical configuration to EXP-030** except for two added instrument
+> fields. Run 2026-08-01 on the laptop `SwizzlesDuo` (Intel Core Ultra 9 185H, 16 cores / 22 threads)
+> over SSH from the VPS with `--workers 16`, wall clock 3h14m (21:22:56 to 00:37:07 local). Records in
+> `experiments/031_policy_collapse/outputs/` (gitignored). Instrument added on branch
+> `week17-collapse-instrument`, commit `0017053`. Regenerate with the commands at the bottom.
+>
+> **This experiment has no driver of its own by design.** It reuses EXP-030's `run.py` unchanged,
+> because the whole point is that the configuration is identical and only the measurement is new. See
+> the neutrality check below.
 
 ## The question
 
@@ -140,12 +146,16 @@ not interpretable no matter how clean its statistics look.
 
 ## Regenerate
 
-```powershell
-.venv\Scripts\python.exe -u experiments\030_memory_engagement\run.py `
-    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 16 --skip-gate `
-    --out-dir experiments\030_memory_engagement\outputs_instrumented
-.venv\bin\python scripts\verify_instrument_neutrality.py `
-    experiments\030_memory_engagement\outputs experiments\030_memory_engagement\outputs_instrumented
+```bash
+# Reuses EXP-030's driver unchanged; only --out-dir differs so the originals survive.
+.venv/bin/python -u experiments/030_memory_engagement/run.py \
+    --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 16 --skip-gate \
+    --out-dir experiments/031_policy_collapse/outputs
+
+.venv/bin/python scripts/verify_instrument_neutrality.py \
+    experiments/030_memory_engagement/outputs experiments/031_policy_collapse/outputs
+
+.venv/bin/python experiments/031_policy_collapse/aggregate.py
 ```
 
 `--skip-gate` is correct for this re-run specifically: the revisit gate was already read and passed in
