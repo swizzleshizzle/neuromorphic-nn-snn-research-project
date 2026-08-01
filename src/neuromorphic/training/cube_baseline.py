@@ -228,6 +228,17 @@ def make_agent(cfg: CubeConfig):
     raise ValueError(f"unknown arm {cfg.arm!r} (expected regionalized or monolithic)")
 
 
+def record_filename(cfg) -> str:
+    """Name of the JSON record a run writes. One file per run, never a shared append.
+
+    NOTE: this encodes tag, arm, depth, seed and sigma, but NOT `entropy_beta` or
+    `normalize_advantages`. Any sweep over those two must make `tag` unique per cell or the
+    records overwrite each other silently. Exposed as a function so a sweep driver's
+    collision guard tests the real naming rather than a copy of it.
+    """
+    return f"{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json"
+
+
 def modal_action_fraction(actions) -> float:
     """Fraction of a rollout spent on its single most-common action.
 
@@ -410,6 +421,5 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
     # concurrent appends to a single file interleave and corrupt lines on Windows.
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    name = f"{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json"
-    (out_dir / name).write_text(json.dumps(record), encoding="utf-8")
+    (out_dir / record_filename(cfg)).write_text(json.dumps(record), encoding="utf-8")
     return record

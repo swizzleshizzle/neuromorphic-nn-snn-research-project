@@ -1,11 +1,12 @@
 # Session Handoff - 2026-07-31 (Fri) -> first working VPS session
 
-> **A 144-record run is IN FLIGHT on the laptop as of 20:35 ET.** It is a re-run of EXP-030
-> with a new policy-collapse instrument. If you are reading this because the session died,
-> jump to section 4 for how to recover it.
+> **RUN COMPLETE. EXP-031 concluded: the EXP-030 memory null was measured on a collapsed
+> policy.** At depth 3, seven of twelve concept seeds play ONE action for all nine steps of
+> every episode. Full numbers in `experiments/031_policy_collapse/RESULTS.md`.
 >
-> Read `CLAUDE.md` first, then `docs/playbooks/remote-experiment-runs.md`. **That playbook has
-> two errors this session found the hard way**; see section 5.
+> **Next job is section 8.** Read `CLAUDE.md` first, then
+> `docs/playbooks/remote-experiment-runs.md`. **That playbook has two errors this session found
+> the hard way**; see section 5.
 
 ## 1. The VPS is now a real dev box
 
@@ -67,7 +68,33 @@ The random-policy test bar (0.25 to 0.60) also discriminates the per-episode des
 pooled one, which would read about 0.17. That is deliberate: it fails if the metric is ever
 rewired to pool.
 
-## 3. What the run is
+## 3. What the run was, and what it found
+
+**Completed 2026-08-01 00:37 laptop local, 3h14m, 144/144 records, exit 0, zero errors.**
+
+Neutrality passed first: all 144 records reproduce EXP-030's pre-existing fields **exactly**
+(`scripts/verify_instrument_neutrality.py`, 144 identical / 0 differing), so nothing is
+attributable to the code change.
+
+Depth 3, where 99% of episodes run the full 9-step budget and the metric is clean, concept arm
+per seed:
+
+```
+0.684  0.719  0.789  0.996  0.996  1.000  1.000  1.000  1.000  1.000  1.000  1.000
+```
+
+against a 0.354 uniform floor. Training entropy is 17-30% of the log 6 ceiling across arms.
+
+**The finding was already latent in EXP-030's published numbers.** It reported 7 of 12 seeds at
+exactly 0.667 greedy revisit rate at depth 3; a quarter turn has order 4, so a 9-step rollout
+visits 10 states of which 4 are unique: `(10-4)/9 = 0.667`. Two instruments sharing no code
+identify the same seven seeds.
+
+**Depth 1 is discarded, not reported.** 83% of episodes end early and a one-move solve scores 1.0
+by construction; `corr(modal, success)` is +0.254 there versus -0.920 and -0.547 at depths 2 and 3.
+`aggregate.py` enforces this in code and marks depth 1 `DISCARD` automatically.
+
+## 3b. Original dispatch notes (kept for the recovery procedure)
 
 144 records, 4 arms x depths 1-3 x seeds 0-11, `--workers 16`, `--skip-gate`. Identical
 configuration to EXP-030 except for the two new fields.
@@ -163,10 +190,38 @@ New this session:
 8. `requirements.txt` does not install the `[server]` extra, so a fresh checkout fails
    `tests/server/` collection. One line to fix.
 
+## 8. THE JOB NEXT: sweep the collapse fix, then re-test memory on a healthy policy
+
+Full reasoning in `experiments/031_policy_collapse/RESULTS.md` under "Lead for the next
+experiment". In short:
+
+1. **Do not assume the known fix transfers.** ADR 0001 established on the GRID WORLD, with an
+   MLP head and 4 actions, that `entropy_beta=0.01` alone did nothing and that advantage
+   normalization **plus** `entropy_beta=0.05` eliminated collapse. This is the cube: 6 actions,
+   linear head. Sweep `entropy_beta` in `{0.0, 0.01, 0.05, 0.1}` with
+   `normalize_advantages=True`, depth 3, 12 seeds, concept arm only. 48 runs, about an hour at
+   `--workers 16`.
+2. **Pre-register the collapse gate before looking**: the memory arms may not launch unless the
+   depth-3 concept arm reaches `greedy_modal_action_frac < 0.60` and `mean_train_entropy > 1.2`.
+3. **Judge the sweep on the instruments, not on success rate.** The claim under test is that the
+   policy reads its input at all. Depth-3 success may stay near its current 2.2% even if collapse
+   is fixed, and that would still be progress.
+
+`CubeConfig` already carries both `entropy_beta` and `normalize_advantages`, so no production
+code change is needed to run the sweep, only a driver.
+
+**Caveat worth carrying:** depth 2 is where EXP-030's +10.8 point primary effect lives, and it is
+partially collapsed (2 to 5 of 12 seeds). Whatever the sweep finds at depth 3 should be checked at
+depth 2 before EXP-030's headline is either defended or retired.
+
 ## 7. Pointers
 
 - Standing knowledge: `CLAUDE.md`
 - Remote runs: `docs/playbooks/remote-experiment-runs.md` (see section 5 for its two errors)
+- **EXP-031 results (this session's finding): `experiments/031_policy_collapse/RESULTS.md`**
+- **The collapse fix, as actually established: `docs/adr/0001-multi-region-training-strategy.md`,
+  Amendment 2. Note EXP-025 has `run.py` and `aggregate.py` but NO committed `RESULTS.md`, so the
+  ADR is the only record. Do not cite "EXP-025" for the fix; cite the ADR.**
 - EXP-030 results: `experiments/030_memory_engagement/RESULTS.md`
 - EXP-030 design and pre-registration:
   `docs/superpowers/specs/2026-07-27-memory-engagement-design.md`
