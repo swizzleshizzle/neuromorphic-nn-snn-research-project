@@ -121,7 +121,10 @@ from a direction the confound cannot reach.
 **Established.** At depth 3 the trained policy is effectively constant-action in 9 to 12 of 12 seeds
 depending on arm. EXP-030's depth-3 results therefore say nothing about memory: a policy that ignores
 its input cannot respond to a change in its input. This is consistent with `CubeConfig`'s defaults
-(`entropy_beta=0.0`, `normalize_advantages=False`), the same collapse EXP-025 fixed once.
+(`entropy_beta=0.0`, `normalize_advantages=False`), which leave both stabilizers off. The same failure
+mode was characterised on the grid world in ADR 0001 (about half of naive MLP-head seeds collapsed to
+a zero-entropy one-hot policy); see the lead below for what actually fixed it there, and for why that
+fix cannot simply be assumed to carry over.
 
 **Depth 2 is partially affected, and that matters more.** Modal fraction is 0.825 to 0.882 with 2 to 5
 seeds fully collapsed. **Depth 2 is where EXP-030's headline +10.8 point primary effect lived**, so
@@ -138,11 +141,29 @@ the memory arm revisited slightly more than concept at every depth.
 
 ## Lead for the next experiment
 
-Re-run engagement with `entropy_beta > 0` and `normalize_advantages=True` before drawing any further
-conclusion about memory, and gate on `greedy_modal_action_frac` at depth 3 falling well below 0.95
-before the memory arms are allowed to launch. That gate is the analogue of EXP-030's revisit gate: it
-should be pre-registered as a stop condition, because a memory result measured on a collapsed policy is
-not interpretable no matter how clean its statistics look.
+**The known-good recipe is specific, and "some entropy bonus" is not it.** ADR 0001 records that on
+the grid world a modest `entropy_beta=0.01` **alone did nothing**, because the summed entropy term was
+dwarfed by un-normalized advantages. What eliminated collapse entirely (0/10 runs, policy entropy
+1.11-1.35 against a log 4 = 1.386 ceiling) was **advantage normalization plus `entropy_beta=0.05`**,
+together. Either one on its own is documented to fail.
+
+**That result does not transfer for free.** It was measured on the grid world, 4 actions, with an MLP
+head. This is the 2x2 cube, 6 actions, linear head. The value of `entropy_beta` is the thing least
+likely to carry across, so it should be swept rather than assumed: `entropy_beta` in
+`{0.0, 0.01, 0.05, 0.1}` crossed with `normalize_advantages=True`, at depth 3, 12 seeds, concept arm
+only. That is 48 runs, roughly an hour at `--workers 16`, and it is the cheapest thing that turns this
+from a guess into a measurement.
+
+**Pre-register the collapse gate as a stop condition**, the way EXP-030 pre-registered its revisit
+gate. Proposed: the memory arms may not launch unless the depth-3 concept arm reaches
+`greedy_modal_action_frac < 0.60` and `mean_train_entropy > 1.2` (67% of the log 6 = 1.792 ceiling,
+comparable to the 80-97% the grid-world fix achieved). A memory result measured on a collapsed policy
+is uninterpretable no matter how clean its statistics look, which is the entire lesson of this
+experiment.
+
+**Success rate is the wrong headline for that sweep.** Fixing collapse may or may not raise the
+depth-3 success rate above its current 2.2%. The claim being tested is that the policy starts reading
+its input, and the instruments here measure that directly.
 
 ## Regenerate
 
