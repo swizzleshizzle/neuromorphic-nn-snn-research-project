@@ -54,6 +54,11 @@ class CubeConfig:
     content: int = 64
     n_actions: int = 6
     readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" | "memory_amnesic"
+    # Depth curriculum for training (EXP-034). Empty means the shipped behaviour: train
+    # only at `depth`. When set, `episodes` is SPLIT across the listed depths rather than
+    # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
+    # Evaluation always happens at `depth`, whatever the schedule.
+    curriculum: tuple[int, ...] = ()
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -228,6 +233,25 @@ def make_agent(cfg: CubeConfig):
     raise ValueError(f"unknown arm {cfg.arm!r} (expected regionalized or monolithic)")
 
 
+def curriculum_schedule(stages: tuple[int, ...], episodes: int) -> list[tuple[int, int]]:
+    """Split `episodes` across `stages` in order, as [(depth, n_episodes), ...].
+
+    The total is CONSERVED. A curriculum that ran `episodes` at every stage would train N
+    times longer than the arm it is compared against, and any win would be attributable to
+    compute rather than to the schedule.
+
+    The remainder goes to the final stage, which is the evaluated depth.
+    """
+    if len(stages) > episodes:
+        raise ValueError(
+            f"episode budget {episodes} too small for {len(stages)} stages"
+        )
+    per = episodes // len(stages)
+    counts = [per] * len(stages)
+    counts[-1] += episodes - sum(counts)
+    return list(zip(stages, counts))
+
+
 def record_filename(cfg) -> str:
     """Name of the JSON record a run writes. One file per run, never a shared append.
 
@@ -341,7 +365,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
     torch.manual_seed(cfg.seed)
     generator = torch.Generator().manual_seed(cfg.seed)
 
-    provider = ExactBFSDistance(max_depth=max(cfg.max_depth, cfg.depth))
+    provider = ExactBFSDistance(max_depth=max(cfg.max_depth, cfg.depth, *cfg.curriculum or (0,)))
     states = shell_states(provider, cfg.depth)
     train_states, eval_states, is_heldout = split_shell(
         states, cfg.depth, seed=cfg.seed,
@@ -366,32 +390,45 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             nn.Linear(feature_width(cfg), cfg.n_actions), spec, width=feature_width(cfg)
         )
         optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
-        env = ShellCubeEnv(
-            train_states, random.Random(cfg.seed),
-            scramble_depth=cfg.depth, max_steps=max_steps_for(cfg.depth),
-        )
+        # One stage when no curriculum is set, so the environment is constructed exactly
+        # once from random.Random(cfg.seed) as before and the default path is unchanged.
+        stages = curriculum_schedule(cfg.curriculum or (cfg.depth,), cfg.episodes)
         baseline = 0.0
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         entropies = []
-        for _ in range(cfg.episodes):
-            readout.reset()
-            if use_memory:
-                agent.hippo.clear()
-            stats = train_episode(
-                agent, head, env, optimizer,
-                gamma=cfg.gamma, baseline=baseline, generator=generator,
-                max_steps=max_steps_for(cfg.depth),
-                entropy_beta=cfg.entropy_beta,
-                normalize_advantages=cfg.normalize_advantages,
-                store=use_memory, recall=use_memory, feature_fn=readout,
+        for stage_depth, stage_episodes in stages:
+            if stage_depth == cfg.depth:
+                stage_train = train_states
+            else:
+                # Shells at different distances are disjoint, so an earlier stage cannot
+                # leak the evaluated depth's held-out states.
+                stage_train, _, _ = split_shell(
+                    shell_states(provider, stage_depth), stage_depth, seed=cfg.seed,
+                    heldout_cap=cfg.heldout_cap, heldout_frac=cfg.heldout_frac,
+                )
+            env = ShellCubeEnv(
+                stage_train, random.Random(cfg.seed),
+                scramble_depth=stage_depth, max_steps=max_steps_for(stage_depth),
             )
-            baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
-            entropies.append(stats["mean_entropy"])
-            steps_total += stats["steps"]
-            revisits += len(env.visited) - len(set(env.visited))
-            stored_counts.append(agent.hippo.n_stored if use_memory else 0)
-            unshuffled_steps += readout.unshuffled_steps
+            for _ in range(stage_episodes):
+                readout.reset()
+                if use_memory:
+                    agent.hippo.clear()
+                stats = train_episode(
+                    agent, head, env, optimizer,
+                    gamma=cfg.gamma, baseline=baseline, generator=generator,
+                    max_steps=max_steps_for(stage_depth),
+                    entropy_beta=cfg.entropy_beta,
+                    normalize_advantages=cfg.normalize_advantages,
+                    store=use_memory, recall=use_memory, feature_fn=readout,
+                )
+                baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
+                entropies.append(stats["mean_entropy"])
+                steps_total += stats["steps"]
+                revisits += len(env.visited) - len(set(env.visited))
+                stored_counts.append(agent.hippo.n_stored if use_memory else 0)
+                unshuffled_steps += readout.unshuffled_steps
         result = evaluate_states(
             agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed,
             feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
