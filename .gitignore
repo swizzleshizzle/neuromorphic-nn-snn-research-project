@@ -41,6 +41,10 @@ runs/*
 !outputs/.gitkeep
 experiments/*/outputs/
 !experiments/*/outputs/.gitkeep
+# Variant output dirs (e.g. outputs_instrumented/ from a re-run that must not overwrite
+# the original records). Without this they are untracked-but-not-ignored, which is exactly
+# what a stray `git add -A` sweeps into an unrelated commit.
+experiments/*/outputs_*/
 wandb/
 *.pt
 *.pth
