@@ -190,6 +190,45 @@ New this session:
 8. `requirements.txt` does not install the `[server]` extra, so a fresh checkout fails
    `tests/server/` collection. One line to fix.
 
+## 7b. EXP-032 IS RUNNING (launched 2026-08-01 01:25 ET, ETA about 06:15 ET)
+
+192 runs on the laptop: `entropy_beta {0, 0.01, 0.05, 0.1}` x `normalize_advantages
+{False, True}` x depths `{2, 3}` x 12 seeds. Driver `experiments/032_collapse_sweep/run.py`,
+records to `experiments/032_collapse_sweep/outputs/` on the laptop.
+
+The gate is pre-registered **in the driver source**, committed before any number existed:
+`modal_frac < 0.60 AND train_entropy > 1.20`. `run.log` ends with a depth-3 table marking
+each cell PASS or fail against it.
+
+Check progress:
+
+```bash
+ssh -n swizzlesduo 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe032.ps1'
+```
+
+**24 of the 192 cells (`beta=0, normalize=False`) are EXP-030/031's exact configuration.**
+Their measured fields must reproduce the existing records; only `tag` and `out_dir` differ,
+and both are provenance. Verify with `scripts/verify_instrument_neutrality.py` before
+trusting any of the sweep, exempting `tag` as provenance.
+
+### Monitoring lesson, worth more than the run
+
+Three separate monitoring bugs this session, all the same mistake in different costumes: a
+check that cannot distinguish the states it exists to separate.
+
+| signal used | what it could not tell apart |
+|---|---|
+| process count > 0 | healthy run vs 16 orphaned workers idling at 0% CPU |
+| absolute newest-file age | fresh writes vs a previous attempt's stale leftovers |
+| `age < baseline` with `baseline = -1` | producing vs never-started, on a fresh directory |
+
+Each looked correct and each would have reported a lie. **The repo's test-strength rule is
+about assertions, but it generalises: an instrument that cannot fail cannot inform.** When
+adding a health check, state explicitly which two states it separates, then construct the
+case where it would be wrong.
+
+The experiment code was never at fault in any of the three.
+
 ## 8. THE JOB NEXT: sweep the collapse fix, then re-test memory on a healthy policy
 
 Full reasoning in `experiments/031_policy_collapse/RESULTS.md` under "Lead for the next
