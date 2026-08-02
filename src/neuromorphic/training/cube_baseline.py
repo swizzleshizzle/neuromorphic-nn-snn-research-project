@@ -59,6 +59,17 @@ class CubeConfig:
     # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
     # Evaluation always happens at `depth`, whatever the schedule.
     curriculum: tuple[int, ...] = ()
+    # `seed` alone used to drive FIVE independent things: the encoder init, the head init,
+    # the action-sampling stream, the environment's scramble stream and the train/held-out
+    # split. EXP-034 Finding 4 could therefore only bound the seed variance, never attribute
+    # it. These split it into three. Each defaults to None meaning "fall back to `seed`", so
+    # every existing config is byte-identical.
+    #   encoder_seed  the frozen brain's random initialisation
+    #   train_seed    head init, action sampling, env scramble stream, readout rng
+    #   split_seed    the train/held-out state split
+    encoder_seed: int | None = None
+    train_seed: int | None = None
+    split_seed: int | None = None
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -212,25 +223,40 @@ class MemoryReadout:
 
 
 def make_agent(cfg: CubeConfig):
-    """Build the arm's feature extractor. Both arms are frozen at random init."""
+    """Build the arm's feature extractor. Both arms are frozen at random init.
+
+    Uses `encoder_seed`, which falls back to `seed`, so holding the encoder fixed while
+    varying training is possible without also changing the brain.
+    """
+    encoder_seed = resolve_seed(cfg, "encoder")
     if cfg.arm == "regionalized":
         return Brain(
             encoder=cube_encoder(), n_obs=CUBE_N_OBS, obs_width=CUBE_OBS_WIDTH,
-            n_actions=cfg.n_actions, content=cfg.content, seed=cfg.seed,
+            n_actions=cfg.n_actions, content=cfg.content, seed=encoder_seed,
         )
     if cfg.arm == "monolithic":
         reference = Brain(
             encoder=cube_encoder(), n_obs=CUBE_N_OBS, obs_width=CUBE_OBS_WIDTH,
-            n_actions=cfg.n_actions, content=cfg.content, seed=cfg.seed,
+            n_actions=cfg.n_actions, content=cfg.content, seed=encoder_seed,
         )
         return MonolithicBrain(
             n_obs=CUBE_N_OBS, n_actions=cfg.n_actions, total_neurons=reference.n_neurons,
             content=cfg.content, obs_width=CUBE_OBS_WIDTH, encoder=cube_encoder(),
-            seed=cfg.seed,
+            seed=encoder_seed,
         )
     # "random" never reaches here: run_cube_baseline short-circuits it, since the chance
     # floor needs no feature extractor at all.
     raise ValueError(f"unknown arm {cfg.arm!r} (expected regionalized or monolithic)")
+
+
+def resolve_seed(cfg, which: str) -> int:
+    """The effective seed for one role, falling back to `cfg.seed` when unset.
+
+    `None` is the only sentinel, deliberately. A truthiness check would treat
+    `encoder_seed=0` as unset, and 0 is the most-used seed in this repo.
+    """
+    value = getattr(cfg, f"{which}_seed")
+    return cfg.seed if value is None else value
 
 
 def curriculum_schedule(stages: tuple[int, ...], episodes: int) -> list[tuple[int, int]]:
@@ -255,10 +281,13 @@ def curriculum_schedule(stages: tuple[int, ...], episodes: int) -> list[tuple[in
 def record_filename(cfg) -> str:
     """Name of the JSON record a run writes. One file per run, never a shared append.
 
-    NOTE: this encodes tag, arm, depth, seed and sigma, but NOT `entropy_beta` or
-    `normalize_advantages`. Any sweep over those two must make `tag` unique per cell or the
-    records overwrite each other silently. Exposed as a function so a sweep driver's
-    collision guard tests the real naming rather than a copy of it.
+    NOTE: this encodes tag, arm, depth, seed and sigma, and NOT `entropy_beta`,
+    `normalize_advantages`, `episodes`, `curriculum`, `encoder_seed`, `train_seed` or
+    `split_seed`. Any sweep over those must make `tag` unique per cell or the records
+    overwrite each other silently. This matters most for a seed-decomposition sweep, where
+    `seed` is held constant while `encoder_seed` and `train_seed` are crossed: every cell
+    would land in one file. Exposed as a function so a sweep driver's collision guard tests
+    the real naming rather than a copy of it.
     """
     return f"{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json"
 
@@ -362,19 +391,21 @@ def evaluate_states(
 def run_cube_baseline(cfg: CubeConfig) -> dict:
     """One (arm, depth, seed, sigma) run. Returns a JSON-safe record."""
     torch.set_num_threads(1)
-    torch.manual_seed(cfg.seed)
-    generator = torch.Generator().manual_seed(cfg.seed)
+    train_seed = resolve_seed(cfg, "train")
+    split_seed = resolve_seed(cfg, "split")
+    torch.manual_seed(train_seed)
+    generator = torch.Generator().manual_seed(train_seed)
 
     provider = ExactBFSDistance(max_depth=max(cfg.max_depth, cfg.depth, *cfg.curriculum or (0,)))
     states = shell_states(provider, cfg.depth)
     train_states, eval_states, is_heldout = split_shell(
-        states, cfg.depth, seed=cfg.seed,
+        states, cfg.depth, seed=split_seed,
         heldout_cap=cfg.heldout_cap, heldout_frac=cfg.heldout_frac,
     )
 
     if cfg.arm == "random":
         result = evaluate_states(
-            None, None, eval_states, depth=cfg.depth, random_policy=True, rng_seed=cfg.seed
+            None, None, eval_states, depth=cfg.depth, random_policy=True, rng_seed=train_seed
         )
         episodes_run = 0
         revisits, steps_total, stored_counts = 0, 0, []
@@ -382,16 +413,16 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
     else:
         agent = make_agent(cfg)
-        torch.manual_seed(cfg.seed)  # head init and sampling stream matched across arms
-        readout = MemoryReadout(cfg.readout, random.Random(cfg.seed), agent)
+        torch.manual_seed(train_seed)  # head init and sampling stream matched across arms
+        readout = MemoryReadout(cfg.readout, random.Random(train_seed), agent)
         use_memory = cfg.readout != "concept"
-        spec = AblationSpec(kind="gaussian", dose=cfg.sigma, seed=cfg.seed) if cfg.sigma else None
+        spec = AblationSpec(kind="gaussian", dose=cfg.sigma, seed=train_seed) if cfg.sigma else None
         head = AblatedConcept(
             nn.Linear(feature_width(cfg), cfg.n_actions), spec, width=feature_width(cfg)
         )
         optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
         # One stage when no curriculum is set, so the environment is constructed exactly
-        # once from random.Random(cfg.seed) as before and the default path is unchanged.
+        # once from random.Random(train_seed) as before and the default path is unchanged.
         stages = curriculum_schedule(cfg.curriculum or (cfg.depth,), cfg.episodes)
         baseline = 0.0
         revisits, steps_total, stored_counts = 0, 0, []
@@ -404,11 +435,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 # Shells at different distances are disjoint, so an earlier stage cannot
                 # leak the evaluated depth's held-out states.
                 stage_train, _, _ = split_shell(
-                    shell_states(provider, stage_depth), stage_depth, seed=cfg.seed,
+                    shell_states(provider, stage_depth), stage_depth, seed=split_seed,
                     heldout_cap=cfg.heldout_cap, heldout_frac=cfg.heldout_frac,
                 )
             env = ShellCubeEnv(
-                stage_train, random.Random(cfg.seed),
+                stage_train, random.Random(train_seed),
                 scramble_depth=stage_depth, max_steps=max_steps_for(stage_depth),
             )
             for _ in range(stage_episodes):
@@ -430,7 +461,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 stored_counts.append(agent.hippo.n_stored if use_memory else 0)
                 unshuffled_steps += readout.unshuffled_steps
         result = evaluate_states(
-            agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=cfg.seed,
+            agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=train_seed,
             feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
         )
         episodes_run = cfg.episodes
