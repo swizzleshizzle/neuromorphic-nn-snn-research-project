@@ -96,6 +96,49 @@ The best seeds land at 0.433 and 0.467, essentially **at** the supervised ceilin
 So the ceiling is attainable by reinforcement learning given the right schedule. What separates the
 arm's mean from the ceiling is now **seed variance**, not a representational limit.
 
+## Finding 4: the seed variance is optimisation luck, not a better or worse brain
+
+Added 2026-08-02 by joining this experiment's per-seed success against EXP-033's per-seed
+decodability. sd is 0.162 with one seed at 0.000 and the best at 0.467, and the mean-to-best gap
+(0.21) is larger than the mean-to-ceiling gap (0.23), so this is worth more than a footnote.
+
+Three candidate explanations, tested:
+
+| explanation | correlation with success | variance explained |
+|---|---|---|
+| encoder quality (EXP-033 depth-3 decodability at width 64) | +0.248 (permutation p = 0.435) | about 6% |
+| held-out set composition (see below) | +0.113 | about 1% |
+| everything else, i.e. optimisation stochasticity | | **over 90%** |
+
+**Encoder quality does not predict which seeds learn.** The correlation is +0.248 at 3000 episodes
+and non-significant. The rank table has decisive counterexamples in both directions: **seed 6 has
+the 3rd-best encoder of twelve and scores 0.000**, while seed 8 has the 8th-best and finishes 2nd.
+Only the extremes are consistent (seed 2 ranks 1st on decodability and 1st in both curriculum cells;
+seed 10 ranks 12th and 11th-12th).
+
+This **refutes a tempting idea**: that the EXP-033 probe could cheaply screen random encoders and
+pick good ones without running RL. It cannot.
+
+**The held-out set is a real confound, and it is small.** `cfg.seed` is passed to `split_shell`
+(`cube_baseline.py:371`), so every seed is scored on a *different* 30-state test set. Measured
+difficulty (mean fraction of optimal moves available) spans only 0.1667 to 0.1944 across seeds and
+correlates +0.113 with success. Worth knowing about; not the explanation.
+
+**Structural problem this exposed.** `cfg.seed` simultaneously controls **five** things: the encoder
+init, the head init, the action-sampling stream, the environment's scramble stream, and the
+train/held-out split. "Seed variance" is therefore an unseparated mixture, and no experiment using
+this driver can attribute it. That is the same failure the repo's own habit names: ask what a
+control holds fixed besides the thing you named.
+
+Fixing it is cheap and additive: separate `encoder_seed`, `train_seed` and `split_seed`, defaulting
+to `seed` so every existing config stays byte-identical, then cross encoder seeds against training
+seeds. That measures directly what this section can only bound.
+
+**EXP-035 partially answers it for free.** If the variance is early-training luck, the standard
+deviation should shrink at 10,000 and 30,000 episodes, and seeds like 6 that stalled at 0.000 should
+recover. If sd stays near 0.162, the failures are structural and restarts-and-select becomes the
+practical answer.
+
 ## Pre-registered contract, claim by claim
 
 1. **"Does any arm move depth-3 success materially above 0.022, fixed as reaching 0.10?" CONFIRMED.**
