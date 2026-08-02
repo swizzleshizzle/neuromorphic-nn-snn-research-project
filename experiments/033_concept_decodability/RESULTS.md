@@ -77,8 +77,14 @@ So the information needed to solve depth-3 cubes is already present in the repre
 has been reading all along, and linearly extractable by exactly the head it already has. The failure
 is that reinforcement learning never finds those weights.
 
-**This is an oracle ceiling, not an agent.** Its labels come from the distance table, so it is not a
-legitimate policy and its number is an upper bound on what the representation supports. That is
+**CORRECTION (2026-08-02, EXP-035): this is a reference point, NOT a ceiling.** Seven of twelve
+RL seeds later exceeded 0.481, topping out at 0.633. The probe was optimised for per-step
+move-optimality while the task rewards solving, and a 9-step budget on a 3-move scramble leaves slack
+for non-optimal moves. The claim this experiment actually establishes is unaffected: the frozen
+representation carries far more usable signal than v1 extracted.
+
+**This is an oracle-supervised reference, not an agent.** Its labels come from the distance table, so it is not a
+legitimate policy. It measures what a supervised readout extracts from this representation. That is
 precisely what makes it the right diagnostic: it separates "the features cannot support the task" from
 "the learning algorithm cannot find the solution."
 
@@ -118,12 +124,12 @@ depth 3 than the policy exploits.
 1. **Fix the learning signal first.** Cheapest decisive test: keep the frozen concept@64 and the linear
    head exactly as they are, and vary only how the head is trained. A curriculum (train depth 1, then
    2, then 3) and a larger episode budget are both cheap and neither requires privileged information at
-   run time. The pre-registered target is straightforward: RL success at depth 3 should move toward the
-   0.481 oracle ceiling. That ceiling is a *measured* target rather than an assumed one, which is what
-   makes it a fair bar.
+   run time. The pre-registered target is straightforward: RL success at depth 3 should move toward
+   0.481. That is a *measured* reference rather than an assumed one, which is what makes it a fair bar.
+   (EXP-035 later exceeded it; see the correction above.)
 2. **Then engage the encoder.** Finding 1 stands: the encoder does lose real information, up to 40
    points at depth 1. Once the learning signal is not the binding constraint, that gap becomes worth
-   closing, and the oracle ceiling gives a way to measure whether pretraining actually raised it.
+   closing, and this probe gives a measured way to check whether pretraining actually raised it.
 
 **Do not pursue width.** It is refuted against a bar set before the numbers existed.
 

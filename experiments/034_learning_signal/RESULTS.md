@@ -9,7 +9,7 @@
 
 ## The question
 
-EXP-033 measured an oracle ceiling: fitting the **same** frozen concept@64 and the **same**
+EXP-033 measured a supervised reference: fitting the **same** frozen concept@64 and the **same**
 `Linear(64 -> 6)` head with supervised labels solves **48.1%** of depth-3 cubes, while REINFORCE on
 those identical 390 weights solves **2.2%**. The representation already carries the signal; the
 learner does not find it.
@@ -84,17 +84,21 @@ Here the opposite. Against baseline, `curriculum/3000` has **higher success (0.0
 simultaneously more successful, less random, and less degenerate. That combination is only available
 to a policy that is genuinely reading its input.
 
-## How close to the ceiling
+## How close to the supervised reference
 
-`curriculum/3000` reaches **53.1% of the 0.481 oracle ceiling**, up from 4.6% at baseline. Per-seed:
+> **CORRECTION (2026-08-02, EXP-035):** 0.481 is a reference point, not a ceiling. Seven of twelve
+> seeds exceeded it at 30,000 episodes. Percentages of it below should be read as "relative to the
+> supervised probe", not "fraction of what is attainable".
+
+`curriculum/3000` reaches **53.1% of the 0.481 supervised reference**, up from 4.6% at baseline. Per-seed:
 
 ```
 0.000  0.067  0.067  0.100  0.233  0.267  0.300  0.333  0.400  0.400  0.433  0.467
 ```
 
-The best seeds land at 0.433 and 0.467, essentially **at** the supervised ceiling measured in EXP-033.
-So the ceiling is attainable by reinforcement learning given the right schedule. What separates the
-arm's mean from the ceiling is now **seed variance**, not a representational limit.
+The best seeds land at 0.433 and 0.467, essentially **at** the supervised reference measured in
+EXP-033. So that level is attainable by reinforcement learning given the right schedule. What separates
+the arm's mean from it is **seed variance**, not a representational limit.
 
 ## Finding 4: the seed variance is optimisation luck, not a better or worse brain
 
