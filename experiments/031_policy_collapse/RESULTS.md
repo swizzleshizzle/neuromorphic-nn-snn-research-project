@@ -141,6 +141,15 @@ the memory arm revisited slightly more than concept at every depth.
 
 ## Lead for the next experiment
 
+> [!note] RESOLVED 2026-08-01 by EXP-032. Do not re-run this.
+> The sweep proposed below was run (192 records, both stabilizers crossed) and the answer is that the
+> grid-world fix does **not** transfer usefully: advantage normalization alone is actively harmful, and
+> the best cell on every collapse metric still had depth-3 success of 0.006 against the 0.022 baseline.
+> The pre-registered gate below was never cleared. See `experiments/032_collapse_sweep/RESULTS.md`.
+>
+> The binding constraint turned out to be neither collapse nor representation but the learning signal;
+> see EXP-033 through EXP-035. Depth-3 success is now 0.500.
+
 **The known-good recipe is specific, and "some entropy bonus" is not it.** ADR 0001 records that on
 the grid world a modest `entropy_beta=0.01` **alone did nothing**, because the summed entropy term was
 dwarfed by un-normalized advantages. What eliminated collapse entirely (0/10 runs, policy entropy

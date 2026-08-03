@@ -1,5 +1,10 @@
 # Session Handoff - 2026-07-31 (Fri) -> first working VPS session
 
+> [!warning] SUPERSEDED by `SESSION-HANDOFF-2026-08-02.md`. Read that one first.
+> Section 7b below says "EXP-032 IS RUNNING". It finished on 2026-08-01. Nothing in this file is
+> in flight. It is kept for the VPS setup notes (section 1) and the two playbook corrections
+> (section 5), which are still accurate and still worth reading.
+
 > **RUN COMPLETE. EXP-031 concluded: the EXP-030 memory null was measured on a collapsed
 > policy.** At depth 3, seven of twelve concept seeds play ONE action for all nine steps of
 > every episode. Full numbers in `experiments/031_policy_collapse/RESULTS.md`.
