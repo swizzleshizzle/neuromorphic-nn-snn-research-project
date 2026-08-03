@@ -72,7 +72,11 @@ Practical consequences:
 **Full procedure lives in `docs/playbooks/remote-experiment-runs.md`. Read it before dispatching.**
 Established 2026-07-09, revised 2026-07-30 for the move to a VPS.
 
-**Reach the laptop over Tailscale, never the LAN address.** `ssh mlgbr@swizzlesduo.tailda519d.ts.net`
+**Reach the laptop over Tailscale, never the LAN address, and always via the `ssh laptop` alias.**
+Spelling the host out as `mlgbr@swizzlesduo.tailda519d.ts.net` **fails with `Permission denied
+(publickey)`**: ssh matches `Host` patterns against what you typed, not the resolved name, so the
+fully-qualified form misses the config block, never offers `id_ed25519_backup`, and falls back to
+an encrypted key that cannot sign under `BatchMode`. Verified 2026-08-03.
 (Tailscale IPv4 `100.120.6.78`, ED25519 host key `SHA256:uKE4XW17ZJ106FoTifyv+WEahvbNkn3DhhovrXsEB6Y`).
 The old `192.168.50.62` is an RFC1918 address and is **unreachable from anywhere but the home network**.
 `SwizzlesDuo` is an Intel Ultra 9 185H, 22 cores, 31.4 GB. Its remote default shell is `cmd.exe`, not POSIX,

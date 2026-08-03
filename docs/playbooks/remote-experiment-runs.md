@@ -20,6 +20,28 @@ The old recipe in `CLAUDE.md` used `ssh mlgbr@192.168.50.62`. That is an RFC1918
 
 Prefer the MagicDNS name. Use the raw `100.x` address only when DNS is not resolving.
 
+### Always `ssh laptop`, never `ssh mlgbr@swizzlesduo.tailda519d.ts.net`
+
+Corrected 2026-08-03, after the raw form failed at the start of a dispatch. Every command in
+this playbook used to spell the host out in full. **That form no longer authenticates:**
+
+```
+$ ssh mlgbr@swizzlesduo.tailda519d.ts.net 'echo ok'
+mlgbr@swizzlesduo.tailda519d.ts.net: Permission denied (publickey,password,keyboard-interactive).
+$ ssh laptop 'echo ok'
+ok
+```
+
+The VPS's `~/.ssh/config` carries a `Host swizzlesduo laptop` block pinning
+`IdentityFile ~/.ssh/id_ed25519_backup` with `IdentitiesOnly yes`. **ssh matches `Host` patterns
+against the name you typed on the command line, not against the resolved hostname**, so the
+fully-qualified form matches nothing, never offers that key, and falls back to
+`~/.ssh/id_ed25519`. That key is aes256-ctr encrypted and cannot sign under `BatchMode`, so the
+failure surfaces as a bare "Permission denied (publickey)" that reads exactly like a missing
+`authorized_keys` entry and sends you debugging the wrong machine.
+
+The alias is also what makes the ConnectTimeout and keepalive settings apply.
+
 ### First connection from a new machine
 
 The VPS will refuse to connect until it trusts the host key. Do not reach for
@@ -34,7 +56,7 @@ If it matches, trust it:
 
 ```bash
 ssh-keyscan -t ed25519 swizzlesduo.tailda519d.ts.net 100.120.6.78 >> ~/.ssh/known_hosts
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -Command "$env:COMPUTERNAME"'
+ssh -n laptop 'powershell -NoProfile -Command "$env:COMPUTERNAME"'
 # expect: SWIZZLESDUO
 ```
 
@@ -50,7 +72,7 @@ If it does not match, stop. Something is wrong with the tailnet, not with your q
 ## 1. Sync the repo on the laptop
 
 ```bash
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; git fetch --all --prune; git checkout main; git pull --ff-only origin main; git log --oneline -1; git status --short"'
+ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; git fetch --all --prune; git checkout main; git pull --ff-only origin main; git log --oneline -1; git status --short"'
 ```
 
 The laptop keeps its own clone at `C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project`.
@@ -59,7 +81,7 @@ It is a separate checkout: local branches on the VPS do not exist there until pu
 ## 2. Check headroom, then choose `--workers`
 
 ```bash
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -Command "$os=Get-CimInstance Win32_OperatingSystem; \"free_gb=\" + [math]::Round($os.FreePhysicalMemory/1MB,1); \"pyprocs=\" + (Get-Process | Where-Object { $_.Name -match \"^python\" }).Count"'
+ssh -n laptop 'powershell -NoProfile -Command "$os=Get-CimInstance Win32_OperatingSystem; \"free_gb=\" + [math]::Round($os.FreePhysicalMemory/1MB,1); \"pyprocs=\" + (Get-Process | Where-Object { $_.Name -match \"^python\" }).Count"'
 ```
 
 **Budget from measurement, not from the old 1.5 GB per worker rule of thumb.** EXP-030's cube workers
@@ -72,7 +94,7 @@ Also confirm nothing is already running (`pyprocs` should be 0), or you will be 
 ## 3. Launch
 
 ```bash
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; New-Item -ItemType Directory -Force experiments\NNN_x\outputs | Out-Null; .venv\Scripts\python.exe -u experiments\NNN_x\run.py --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 16 | Tee-Object -FilePath experiments\NNN_x\outputs\run.log"'
+ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; New-Item -ItemType Directory -Force experiments\NNN_x\outputs | Out-Null; .venv\Scripts\python.exe -u experiments\NNN_x\run.py --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 16 | Tee-Object -FilePath experiments\NNN_x\outputs\run.log"'
 ```
 
 - `-n` on ssh redirects stdin from `/dev/null`. That matters: a driver with an interactive gate calls
@@ -104,8 +126,8 @@ if (Test-Path $log) { $bad = @(Select-String -Path $log -Pattern 'Traceback|Memo
 ```
 
 ```bash
-scp probe.ps1 mlgbr@swizzlesduo.tailda519d.ts.net:C:/Users/mlgbr/probe.ps1
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe.ps1'
+scp probe.ps1 laptop:C:/Users/mlgbr/probe.ps1
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe.ps1'
 # -> "64 10 12.4 0"  = 64 records, 10 python procs, 12.4 GB free, 0 error markers
 ```
 
@@ -114,7 +136,7 @@ Healthy looks like: record count climbing, `procs` equal to `workers + 2`, error
 ## 5. Retrieve
 
 ```bash
-scp "mlgbr@swizzlesduo.tailda519d.ts.net:C:/Users/mlgbr/Desktop/Projects/neuromorphic-nn-snn-research-project/experiments/NNN_x/outputs/*.json" ./local_dir/
+scp "laptop:C:/Users/mlgbr/Desktop/Projects/neuromorphic-nn-snn-research-project/experiments/NNN_x/outputs/*.json" ./local_dir/
 ```
 
 Note the **forward slashes on the remote side of `scp`** even though it is a Windows host.
@@ -138,7 +160,7 @@ from 14 GB to 4.6 GB during EXP-030 while the workers held a flat 1.58 GB the wh
 per-process `WorkingSet64` before you panic:
 
 ```bash
-ssh -n mlgbr@swizzlesduo.tailda519d.ts.net 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Name + \" ws_mb=\" + [math]::Round($_.WorkingSet64/1MB,0) }"'
+ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Name + \" ws_mb=\" + [math]::Round($_.WorkingSet64/1MB,0) }"'
 ```
 
 **Quoting through `cmd.exe` is the main source of wasted cycles.** Three specific traps:
