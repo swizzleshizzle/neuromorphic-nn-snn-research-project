@@ -1,7 +1,14 @@
 # Session Handoff - 2026-08-03 (Mon) - Week 18 session 1
 
-> [!danger] **STATUS CHANGED AT 01:05 ET: the laptop dropped off the tailnet mid-run.**
-> **Check whether EXP-036 survived before doing anything else.** Details in section 1.5.
+> [!note] **RESOLVED 09:35 ET. The run never died; the network flapped.**
+> Boot time is `07/27/2026`, a week before launch, so there was no reboot. 18 processes alive,
+> records went 14 -> 32 straight through the outage, zero tracebacks. Tailscale is connected
+> over the **DERP relay "iad" rather than a direct link**, which flaps; that produced both the
+> "offline, last seen 5m ago" reading and later ssh timeouts while the host was fine.
+> **Retry a failed probe two or three times before concluding anything.**
+>
+> **The schedule is off by 1.8x though. Revised finish is about 17:00-17:30 ET, not 08:00.**
+> Diagnosis in section 1.6.
 
 > **EXP-036 was dispatched** 2026-08-03 at 20:09 ET, expected to take **11.8 hours**, so it was
 > due to finish around **08:00 ET on 2026-08-04**. Repo is clean at `87a965b` and pushed. The
@@ -150,6 +157,55 @@ count, record count and boot time the moment the laptop returns.
 > job is fine. That is true but **incomplete**: it does not distinguish a dropped connection from
 > a vanished host. Add "check `tailscale status` for the peer's last-seen before concluding
 > anything" to the monitoring section.
+
+## 1.6 Why it is 1.8x slow: memory, not CPU. Do NOT restart it.
+
+Measured 2026-08-04 at 09:35 ET, 13.4 h into the run:
+
+| | |
+|---|---|
+| completed | 32/96 (depth 3 and 4 trained done, depth 5 at 8/12, depth 6 and the 48 floors pending) |
+| worker CPU utilisation | **43.1%** |
+| CPU cost per step | 132 ms (fine) |
+| **wall cost per step** | **306 ms** (132 / 0.431) |
+| private per worker | **920 MB** |
+| working set per worker | **80 MB** |
+| system commit | **48.6 GB of a 50.4 GB limit (96%)** |
+| free physical | 5.8 GB of 31.4 GB |
+
+**Workers hold 920 MB private but only 80 MB resident.** Roughly 840 MB per worker is paged
+out, so they spend 57% of their time waiting on the pagefile rather than computing. Windows has
+already grown the commit limit from 43.4 GB to 50.4 GB, which is the tell. **The constraint is
+memory, not CPU.**
+
+**Why the estimate was wrong, again.** 153 ms/step came from EXP-035, but EXP-035 ran **24 tasks
+on 16 workers**, so the pool was not saturated end to end and commit stayed manageable; back out
+its numbers and it achieved about **86% utilisation**. EXP-036 runs **96 tasks on 16 workers**,
+saturating the pool for the whole run and pushing commit to 96%. Same machine, same code, half
+the throughput.
+
+> [!important] Calibrate throughput at the concurrency AND memory footprint you will actually run
+> at. A previous experiment on the same machine is not a valid reference unless its pool was
+> saturated the same way. This is the second time in one session that a number inherited from
+> elsewhere was wrong by a large factor.
+
+**Do not restart with fewer workers.** It is a wash and costs the in-flight work:
+
+```
+16 workers x 43.1% utilisation = 6.9 effective
+ 8 workers x ~85% (optimistic)  = 6.8 effective
+```
+
+Halving the workers roughly halves our 14.7 GB footprint, but our python is already the largest
+single consumer at **15.2 GB of the 48.6 GB committed** and the rest is spread thin (WSL 1.7,
+mcp-server 1.0, Podman 0.9, svchost 0.9, claude 0.8, NordVPN 0.8). There is no one process to
+close for a big win, and a restart would discard 16 runs that are each an hour or more in.
+
+**Let it finish.** The 32 completed records and their checkpoints are already safe on disk.
+
+**For the NEXT sweep**, budget from private bytes: `16 x 920 MB = 14.7 GB`, not from the
+playbook's 195 MB working-set figure. That figure understates the real footprint by about 4.7x
+and is what made 16 workers look comfortable here.
 
 ## 2.5 The one habit that earned its keep tonight
 
