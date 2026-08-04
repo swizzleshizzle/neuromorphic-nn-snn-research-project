@@ -1,8 +1,11 @@
 # Session Handoff - 2026-08-03 (Mon) - Week 18 session 1
 
-> **EXP-036 IS RUNNING ON THE LAPTOP.** Dispatched 2026-08-03 around 20:15 ET, expected to take
-> **11.8 hours**, so it should finish around **08:00 ET on 2026-08-04**. Repo is clean at
-> `87a965b` and pushed. The laptop is on the same commit.
+> [!danger] **STATUS CHANGED AT 01:05 ET: the laptop dropped off the tailnet mid-run.**
+> **Check whether EXP-036 survived before doing anything else.** Details in section 1.5.
+
+> **EXP-036 was dispatched** 2026-08-03 at 20:09 ET, expected to take **11.8 hours**, so it was
+> due to finish around **08:00 ET on 2026-08-04**. Repo is clean at `87a965b` and pushed. The
+> laptop is on the same commit.
 >
 > Read `CLAUDE.md`, then this file, then
 > `docs/superpowers/specs/2026-08-03-exp036-generalisation-gap-design.md` for the
@@ -103,6 +106,50 @@ driver prints its own verdicts. Two claims:
 **Replication gate before trusting anything:** the depth-3 cell is exactly EXP-035's 10k cell
 and must reproduce **0.397**. The driver checks this and prints MISMATCH if it is off by more
 than 0.02. If it mismatches, resolve that before reading any other row.
+
+## 1.5 The laptop went offline mid-run. Triage this first.
+
+**Timeline, all 2026-08-04 UTC:**
+
+| time | evidence |
+|---|---|
+| 00:09 ET | run launched, log header correct |
+| ~00:53 ET | last healthy probe: **18 processes, 14/96 records, 14 checkpoints, 0 tracebacks** |
+| ~01:05 ET | `ssh` returns **Connection timed out**; `tailscale status` shows `swizzlesduo ... offline, last seen 5m ago` |
+
+**This is NOT the ssh-drop case the playbook covers.** That case is "the connection died, the
+machine kept working, exit 255 means nothing". Here the **machine left the tailnet**, which the
+Tailscale peer status distinguishes and a bare ssh failure does not. The dispatch task did report
+exit 255, and reacting to that alone would have been reading the wrong signal.
+
+**Most likely cause: the laptop slept.** It went offline right around the time work stopped for
+the night, and `CLAUDE.md` already records that **Tailscale cannot wake a sleeping machine.**
+
+**What to check when it is back:**
+
+```bash
+ssh -n laptop 'powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).LastBootUpTime; (Get-Process | Where-Object { $_.Name -match \"^python\" }).Count"'
+```
+
+- **Boot time BEFORE 20:09 ET Aug 3** plus workers alive -> it only slept; the run resumed and
+  should still complete, just later than 08:00.
+- **Boot time AFTER 20:09 ET** -> it rebooted and **the run is dead**. Records already written
+  survive on disk.
+
+**Either way nothing is lost beyond time.** Records are one file per run, written on completion
+and never appended to a shared file, and each trained run's head checkpoint is written beside it.
+`aggregate.py` handles a partial set and prints `INCOMPLETE`, flagging every verdict as
+provisional. To resume, re-run the driver: completed cells rewrite identically on the same
+machine, so there is no partial-state problem.
+
+**A watcher is armed** on the VPS polling every 4 minutes for up to 7 hours; it reports process
+count, record count and boot time the moment the laptop returns.
+
+> [!note] Follow-on for the playbook, not done
+> `docs/playbooks/remote-experiment-runs.md` says exit 255 means the connection dropped and the
+> job is fine. That is true but **incomplete**: it does not distinguish a dropped connection from
+> a vanished host. Add "check `tailscale status` for the peer's last-seen before concluding
+> anything" to the monitoring section.
 
 ## 2.5 The one habit that earned its keep tonight
 
