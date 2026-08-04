@@ -110,6 +110,43 @@ def split_shell(
     return shuffled[n_eval:], shuffled[:n_eval], True
 
 
+def sample_train_eval(
+    train_states: list[tuple[int, ...]],
+    *,
+    seed: int,
+    cap: int = 200,
+) -> list[tuple[int, ...]]:
+    """A capped, deterministic subset of the train side, for measuring the train/held-out gap.
+
+    EXP-036 needs train-side success next to held-out success. Evaluating the WHOLE train
+    side is not affordable and the cap is load-bearing, not an optimisation. At 90 ms per
+    ``brain.step`` an uncapped train-side evaluation costs, per seed:
+
+        depth 3     90 states x  9 steps ->   1.2 min
+        depth 4    401 states x 11 steps ->   6.6 min
+        depth 5   2056 states x 13 steps ->  40.1 min
+        depth 6   8769 states x 15 steps -> 197.3 min
+
+    Depth 6 alone would be 3.3 h per seed, roughly 40 core-hours over twelve seeds, against
+    about 2.6 h of actual training per run. The instrument would cost more than the thing it
+    instruments.
+
+    The cap also makes the gap a FAIR comparison. ``split_shell`` already caps the held-out
+    side at ``heldout_cap``, so an uncapped train side would put a 200-state estimate against
+    an 8,769-state one and the difference in sampling noise would show up as gap. Matching
+    the cap matches the noise.
+
+    Drawn from ``split_seed`` rather than ``train_seed``: which states are evaluated is a
+    property of the split, not of the training run, so two arms sharing a split compare on
+    identical states.
+    """
+    if len(train_states) <= cap:
+        return list(train_states)
+    shuffled = list(train_states)
+    random.Random(seed).shuffle(shuffled)
+    return shuffled[:cap]
+
+
 class ShellCubeEnv(CubeEnv):
     """A ``CubeEnv`` whose ``reset()`` draws its start state from a fixed pool.
 
@@ -292,6 +329,17 @@ def record_filename(cfg) -> str:
     return f"{cfg.tag}_{cfg.arm}_d{cfg.depth}_s{cfg.seed}_sig{cfg.sigma}.json"
 
 
+def head_filename(cfg) -> str:
+    """Name of the head checkpoint a run writes, beside its JSON record.
+
+    Shares ``record_filename``'s stem so a record and its weights are trivially paired, and
+    inherits exactly the same collision warning: a sweep over anything the stem does not
+    encode must make ``tag`` unique per cell, or the checkpoints overwrite each other as
+    silently as the records do.
+    """
+    return record_filename(cfg).replace(".json", "_head.pt")
+
+
 def modal_action_fraction(actions) -> float:
     """Fraction of a rollout spent on its single most-common action.
 
@@ -403,9 +451,22 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         heldout_cap=cfg.heldout_cap, heldout_frac=cfg.heldout_frac,
     )
 
+    # Which train-side states the gap is measured on. Fixed by the split, so every arm
+    # sharing a `split_seed` is scored on identical states.
+    train_eval_states = sample_train_eval(
+        train_states, seed=split_seed, cap=cfg.heldout_cap
+    )
+
     if cfg.arm == "random":
         result = evaluate_states(
             None, None, eval_states, depth=cfg.depth, random_policy=True, rng_seed=train_seed
+        )
+        # The chance floor cannot overfit, so its gap must come out near zero. That is the
+        # control on the gap instrument itself: if the random arm shows a gap, the number is
+        # measuring the sampling difference between the two sides rather than generalisation.
+        train_result = evaluate_states(
+            None, None, train_eval_states, depth=cfg.depth,
+            random_policy=True, rng_seed=train_seed,
         )
         episodes_run = 0
         revisits, steps_total, stored_counts = 0, 0, []
@@ -464,6 +525,15 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=train_seed,
             feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
         )
+        # STRICTLY AFTER the held-out evaluation. `greedy_action` draws on `generator`, so
+        # evaluating the train side first would advance the stream and move every held-out
+        # number in this file. The byte-identity test against the EXP-030 reference values is
+        # what catches that if this order is ever swapped.
+        train_result = evaluate_states(
+            agent, head, train_eval_states, depth=cfg.depth, generator=generator,
+            rng_seed=train_seed,
+            feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
+        )
         episodes_run = cfg.episodes
 
     record = {
@@ -474,6 +544,13 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "episodes": episodes_run,
         "is_heldout": is_heldout,
         "n_train": len(train_states),
+        # EXP-036. `train_success_rate` is scored on `n_train_eval` states drawn from the
+        # train side, capped to match the held-out cap. `generalisation_gap` is the
+        # pre-registered quantity: train minus held-out, positive meaning the policy does
+        # better on states it trained on.
+        "train_success_rate": train_result["success_rate"],
+        "n_train_eval": train_result["n"],
+        "generalisation_gap": train_result["success_rate"] - result["success_rate"],
         "tag": cfg.tag,
         "readout": cfg.readout,
         "revisit_rate": (revisits / steps_total) if steps_total else 0.0,
@@ -490,4 +567,13 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / record_filename(cfg)).write_text(json.dumps(record), encoding="utf-8")
+
+    # Serialise the trained head. Until EXP-036 no weights were saved anywhere, so every
+    # question of the form "evaluate that trained policy differently" cost a full retrain:
+    # the train/held-out gap, the EXP-030 memory re-ask, any depth-transfer probe. The head
+    # is a Linear(64 -> 6), 390 parameters, so this is close to free and removes that cost
+    # permanently. Written after the record, and after both evaluations, so a failure here
+    # cannot corrupt or withhold the run's actual result.
+    if cfg.arm != "random":
+        torch.save(head.state_dict(), out_dir / head_filename(cfg))
     return record

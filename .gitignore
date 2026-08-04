@@ -39,7 +39,10 @@ checkpoints/*
 runs/*
 !runs/.gitkeep
 !outputs/.gitkeep
-experiments/*/outputs/
+# Contents, not the directory itself. `experiments/*/outputs/` excluded the DIRECTORY, and git
+# does not descend into an excluded directory, so no `!` rule underneath could ever match. The
+# .gitkeep negation below had silently never worked. Trailing /* is what makes negation possible.
+experiments/*/outputs/*
 !experiments/*/outputs/.gitkeep
 # Variant output dirs (e.g. outputs_instrumented/ from a re-run that must not overwrite
 # the original records). Without this they are untracked-but-not-ignored, which is exactly
@@ -47,6 +50,11 @@ experiments/*/outputs/
 experiments/*/outputs_*/
 wandb/
 *.pt
+# EXP-036 head checkpoints ARE tracked. A trained policy head is a Linear(64 -> 6), 390
+# parameters, about 1.6 KB, so all 48 runs of a sweep cost roughly 75 KB. Versioning them is
+# what makes "never retrain to re-evaluate" true from a fresh checkout rather than only true
+# on whichever machine happens to still hold the run. Must come after `*.pt`: last match wins.
+!experiments/*/outputs/*_head.pt
 *.pth
 results.csv
 training_curves.png
