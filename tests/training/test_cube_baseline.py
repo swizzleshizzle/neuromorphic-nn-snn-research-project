@@ -68,12 +68,35 @@ def test_shell_env_starts_inside_the_pool(provider):
         assert tuple(int(c) for c in obs) in set(pool)
 
 
-def test_random_arm_scores_above_zero_but_well_below_one(provider):
-    """The measured chance floor. Asserting a range, not a point."""
+def test_random_arm_scores_at_the_measured_depth1_floor(provider):
+    """The measured chance floor, asserted against a MEASURED band.
+
+    Was `assert 0.0 <= success_rate <= 1.0`, which is a tautology: a success rate is a count
+    over a total and cannot leave [0, 1]. It was debt item 7 in the 2026-08-02 handoff and it
+    could not fail against any implementation, correct or not.
+
+    Measured 2026-08-03 over 40 rng seeds at depth 1: mean 0.1958, sd 0.1683, single-seed
+    values only ever in {0, 1/6, 2/6, 3/6, 4/6}. The shell is 6 states so single-seed
+    resolution is 1/6 and no per-seed bound can be tight; the MEAN is the assertable quantity,
+    and it is the one CLAUDE.md quotes as "21% at depth 1, not 1/6".
+
+    Fails against: a random arm that never solves (mean 0), one that accidentally runs a
+    trained or greedy policy (mean far above), and any change that makes the 2d+3 budget stop
+    letting a random walk stumble into solved.
+    """
     states = shell_states(provider, 1)
-    res = evaluate_states(None, None, states, depth=1, random_policy=True)
-    assert res["n"] == 6
-    assert 0.0 <= res["success_rate"] <= 1.0
+    rates = [
+        evaluate_states(None, None, states, depth=1, random_policy=True, rng_seed=k)[
+            "success_rate"
+        ]
+        for k in range(40)
+    ]
+    assert all(r["n"] == 6 for r in [{"n": len(states)}])
+    mean = sum(rates) / len(rates)
+    assert 0.12 < mean < 0.28, f"depth-1 floor {mean:.4f} outside the measured band"
+    # The floor must be strictly between "never" and "always". Both bounds are reachable in
+    # principle for a 6-state shell, which is what makes them worth asserting.
+    assert min(rates) < max(rates), "every seed scored identically, the floor is one realisation"
 
 
 def test_different_rng_seeds_give_different_random_arm_results(provider):

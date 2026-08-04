@@ -1,5 +1,6 @@
 import json
 
+import pytest
 import torch
 
 from neuromorphic.brain import Brain
@@ -42,10 +43,28 @@ def test_field_widths_match_topology():
 def test_region_summary_ranges():
     _, out = _recorded_step()
     frame = build_frame(out, episode=0, step=0, t=0.0, task=_task(), store=False, recall=True)
-    for r in ("sensory", "hippocampus", "prefrontal", "router", "motor"):
+    # Measured 2026-08-03 on this fully seeded fixture (Brain(grid_n=5, seed=0), generator
+    # manual_seed(0)), so these are deterministic, not sampled.
+    #
+    # Replaces `assert 0.0 <= rate <= 1.0` and the same for active_frac. Both were
+    # tautologies: a rate is spikes/T and an active fraction is a fraction of neurons, so
+    # neither can leave [0, 1] under any implementation, correct or broken. They would have
+    # passed against a silent region, a saturated region, or a frame builder returning
+    # constants.
+    EXPECTED = {
+        "sensory":     (0.4126, 0.7031),
+        "hippocampus": (0.2650, 0.5600),
+        "prefrontal":  (0.1719, 0.2500),
+        "router":      (0.9062, 1.0000),
+        "motor":       (0.1172, 0.2500),
+    }
+    for r, (rate, active) in EXPECTED.items():
         s = frame["regions"][r]
-        assert 0.0 <= s["rate"] <= 1.0
-        assert 0.0 <= s["active_frac"] <= 1.0
+        assert s["rate"] == pytest.approx(rate, abs=0.02), f"{r} rate {s['rate']:.4f}"
+        assert s["active_frac"] == pytest.approx(active, abs=0.02), f"{r} active_frac"
+        # No region may fall silent. A dead region is the failure these numbers exist to
+        # surface, and it is invisible to a [0, 1] bound.
+        assert s["rate"] > 0.0, f"{r} is silent"
         assert isinstance(s["spikes"], int)
         assert len(s["rate_t"]) == 32
 
