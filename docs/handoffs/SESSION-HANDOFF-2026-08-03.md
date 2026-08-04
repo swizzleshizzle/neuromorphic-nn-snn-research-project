@@ -42,9 +42,23 @@ ssh -n laptop 'powershell -NoProfile -Command "$d=\"C:\Users\mlgbr\Desktop\Proje
 > perfectly. Same shape as the five monitoring bugs logged on 2026-08-02: **before trusting a
 > health check, ask what it would report about a run that is perfectly healthy.**
 >
-> The real early health signal is worker count (expect 16 plus the parent) and memory. Measured
-> 90 min in: 18 processes, about 95 MB each, 10.2 GB free. **The 195 MB per worker figure in
-> the playbook is roughly 2x conservative for these cube runs.**
+> The real early health signal is worker count (expect 16 plus the parent) and memory.
+>
+> **Report PRIVATE bytes, not working set.** Measured 1.9 h in: 16 workers at 80 to 103 MB
+> working set but **920 MB private commit each**, with system commit at **36 GB of a 43.4 GB
+> limit (83%)**. Quoting working set makes a run look 10x lighter than it is, and "10.2 GB
+> free physical" is not the constraint. The playbook's 195 MB per worker is a working-set
+> figure and carries the same blind spot.
+>
+> **Worker CPU utilisation is about 44%, and that is NORMAL here, not a fault.** 16 workers on
+> 22 logical cores each averaged 3,041 CPU-s over 6,881 s elapsed. It looks like the run is
+> starved and should take 2.3x longer than estimated. It is not, because the 153 ms/step
+> calibration was derived from EXP-035's WALL CLOCK times workers, not from CPU time, so the
+> same 44% is already inside it. Cross-check end to end instead: EXP-035 sustained 376,672
+> steps/hour aggregate, and 4,462,068 / 376,672 = 11.8 h.
+>
+> **Do not "fix" the utilisation by adding workers without re-measuring.** At 83% commit there
+> is not room, and the throughput figure that all estimates rest on was measured at 16.
 
 Fetch the results when it is done:
 
