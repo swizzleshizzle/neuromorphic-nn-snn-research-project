@@ -16,6 +16,26 @@ git status --short                                      # expect clean
 ssh -n laptop 'powershell -NoProfile -Command "(Get-Process | Where-Object { $_.Name -match \"^python\" }).Count"'
 ```
 
+## 0.5 The analysis path is already built. Do not write it in the morning.
+
+```bash
+# 1. fetch (records AND the head checkpoints, which are tracked)
+scp "laptop:C:/Users/mlgbr/Desktop/Projects/neuromorphic-nn-snn-research-project/experiments/036_generalisation_gap/outputs/*" experiments/036_generalisation_gap/outputs/
+
+# 2. apply the pre-registered rules. Re-runnable any number of times.
+.venv/bin/python experiments/036_generalisation_gap/aggregate.py
+
+# 3. confirm the code changes were neutral against EXP-035's depth-3 cell
+.venv/bin/python scripts/verify_instrument_neutrality.py \
+    experiments/035_budget_scaling/outputs experiments/036_generalisation_gap/outputs \
+    --key-by cell --new-fields train_success_rate,n_train_eval,generalisation_gap --exempt tag
+```
+
+`experiments/036_generalisation_gap/RESULTS.md` is committed as a skeleton with every claim
+already written in as an unfilled row. **Fill it in, then mark each claim CONFIRMED or REFUTED.
+Do not edit a threshold while filling it in.** If a result lands awkwardly against a bar, that
+is the finding.
+
 ## 1. First thing: check on EXP-036
 
 ```bash
@@ -84,6 +104,21 @@ driver prints its own verdicts. Two claims:
 and must reproduce **0.397**. The driver checks this and prints MISMATCH if it is off by more
 than 0.02. If it mismatches, resolve that before reading any other row.
 
+## 2.5 The one habit that earned its keep tonight
+
+**Measure the instrument on a case where the answer is already known.** Four defects, all the
+same shape - a check that cannot distinguish the states it exists to separate - and the three
+that were caught before costing anything were caught this way:
+
+| what was measured | known answer | what it exposed |
+|---|---|---|
+| the `random` arm's gap | zero, it cannot overfit | the 0.05 threshold sat below the noise floor |
+| synthetic records with a failing depth 6 | BROKEN | "2x the floor" reported it *working* |
+| derived cube corners vs the net | must share a corner | row-major is wrong on 5 of 6 faces |
+
+The fourth, the 90 ms cost figure, was caught only by cross-checking against a real run's wall
+clock. **Estimate from measured throughput, never from a latency figure.**
+
 ## 3. Three errors caught during design, each worth a run
 
 Recorded because the pattern matters more than the instances.
@@ -147,20 +182,51 @@ def steps(depth, episodes):
 1. **The vault note `road-to-a-solved-cube.md` still states the false Stage-1 premise.** It
    should be corrected to say the depth-3 policy already generalises and that the live question
    is the gap. Not done tonight.
-2. `scripts/verify_instrument_neutrality.py` still fails on zero shared filenames, so it cannot
-   compare `exp035` against `exp036` records. Needs comparison keyed on
-   (arm, depth, seed, sigma) with tag excluded. The EXP-036 driver does its own replication
-   check, so this is not blocking, but the script remains unusable across tags.
-3. Vault `experiment-log.md` is stale since 2026-07-15 and is missing EXP-029 through EXP-035
-   entirely. `weekly-notes-index.md` stale since 2026-06-23. There is no week-18 weekly note yet.
+2. ~~`verify_instrument_neutrality.py` cannot compare across tags.~~ **DONE.** It gained
+   `--key-by cell`, matching on (arm, depth, seed, sigma), plus `--new-fields` and `--exempt`,
+   with defaults preserving the EXP-030 behaviour. Eight tests, each checking it reports a
+   *different* verdict for a different input. The exact invocation for the EXP-035 replication
+   check is at the bottom of `experiments/036_generalisation_gap/RESULTS.md`.
+3. ~~Vault notes stale.~~ **DONE.** `experiment-log.md` Phase 3 section replaced (it held eight
+   March placeholder rows whose numbering never survived contact with the work - EXP-030 was
+   planned as "1-move scramble" and turned out to be the memory experiment).
+   `weekly-notes-index.md` had **dead wikilinks for weeks 13 to 25**, pointing at titles no note
+   was ever written under; relinked against the files that exist.
+   `week-18-generalisation-and-depth.md` created. `road-to-a-solved-cube.md` carries a dated
+   correction block on the Stage-1 premise, with the plan itself left intact.
 4. Phase 0 and Phase 1 checkpoints in the vault `progress-tracker` are still unticked although
    every week beneath them is done. Unverifiable from here, needs Michael.
 5. The Google Calendar milestone on 2026-08-08, "MILESTONE: First 1-Move Cube Solve Attempt",
    is stale by months and says "do not rush past 1-move scrambles until solve rate > 80%".
 
-**Carried forward from 2026-08-02, still open:** items 1 to 10 of that handoff's section 6, all
-unchanged. Notably item 7, `test_random_arm_scores_above_zero_but_well_below_one` at
-`tests/training/test_cube_baseline.py:71`, still asserts `0.0 <= x <= 1.0` and still cannot fail.
+**Closed this session, from the 2026-08-02 list:**
+
+- **Item 7 (unfalsifiable assertion) is DONE**, along with two others found by sweeping for the
+  same shape. `0.0 <= success_rate <= 1.0`, `0.0 <= rate <= 1.0` and `0 <= dist.sample() < 6`
+  were all tautologies. Replaced with measured thresholds; see commit `ad19c41` and the one
+  after it.
+- **Items 2 and 4 (cube net orientation, DLB highlight) are PINNED, not fixed.** No rendering
+  changed, because this box has no browser and nothing visual could be looked at.
+
+> [!warning] **Item 2's description was wrong and is corrected.**
+> It read "cubeNet.ts uses row-major on all six faces; B and D are probably mis-oriented".
+> **That is close to backwards.** The corner structure was derived from the pre-verified move
+> permutations (orbit of one corner under U/R/F, plus the fixed DLB corner the orbit cannot
+> reach) and validates exactly against cube geometry. Solving the five net-border constraints
+> gives 32 consistent orientation assignments, and **B is the ONLY face for which row-major
+> appears in any of them** - because this net constrains B through R alone. **U, R, F, D and L
+> are all inconsistent.**
+>
+> Worked example, the U/F border: U's F-side stickers are facelets 0 and 1 (corners UFL, UFR),
+> so they belong on U's *bottom* row; row-major puts them on the top. F's U-side stickers are
+> 10 and 11, which row-major puts on the bottom.
+>
+> `dashboard/src/panels/cubeNet.test.ts` now carries the derived corner table and a border
+> test marked `it.fails`, so the suite stays green while the defect stays pinned. **Remove the
+> `.fails` when cubeNet.ts is fixed** - it will start erroring rather than silently passing.
+
+**Carried forward from 2026-08-02, still open:** items 1, 3, 5, 6, 8, 9, 10 of that handoff's
+section 6. Item 1 (nothing seen rendering in a browser) is what blocks actually fixing item 2.
 
 ## 7. What was updated outside the repo
 
