@@ -24,11 +24,27 @@ ssh -n laptop 'powershell -NoProfile -Command "$d=\"C:\Users\mlgbr\Desktop\Proje
 
 **96 records expected** (48 trained + 48 floors), plus 48 `*_head.pt` checkpoints.
 
-> [!warning] **Zero records for the first 1.5 to 2 hours is HEALTHY, not dead.**
+> [!warning] **Zero records for the first ~3 HOURS is HEALTHY, not dead.**
 > `sweep_configs` submits all 48 trained runs before the 48 floors, so the first wave of 16
-> workers is entirely depth-3 training and nothing completes for a long time. A record-count
-> health check with a short grace period would call this run dead while it is working
-> perfectly. This is the same shape as the five monitoring bugs logged on 2026-08-02.
+> workers is entirely depth-3 training and nothing completes until a whole run finishes. A
+> depth-3 run at 10,000 episodes is 70,000 steps, which at the measured 153 ms/step is
+> **about 3.0 hours**. The cheap floors are queued LAST and produce nothing early.
+>
+> Expected first-record times, per wave of 16 on 16 workers:
+>
+> | wave | depth | steps/run | first records at |
+> |---|---|---|---|
+> | 1 | 3 | 70,000 | ~3.0 h |
+> | 2 | 4 | 80,000 | ~6.4 h |
+> | 3 | 5, 6 | 90,000 / 100,000 | ~10 h, then the floors |
+>
+> A record-count check with a short grace period would call this run dead while it is working
+> perfectly. Same shape as the five monitoring bugs logged on 2026-08-02: **before trusting a
+> health check, ask what it would report about a run that is perfectly healthy.**
+>
+> The real early health signal is worker count (expect 16 plus the parent) and memory. Measured
+> 90 min in: 18 processes, about 95 MB each, 10.2 GB free. **The 195 MB per worker figure in
+> the playbook is roughly 2x conservative for these cube runs.**
 
 Fetch the results when it is done:
 
