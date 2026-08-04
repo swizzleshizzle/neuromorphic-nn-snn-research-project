@@ -60,3 +60,104 @@ describe("cubeNetPosition", () => {
     expect(() => cubeNetPosition(NaN)).toThrow();
   });
 });
+
+/**
+ * Corner geometry, derived from the cube model rather than from the picture.
+ *
+ * The six tests above pin WHERE each face's 2x2 block sits and that it stays contiguous.
+ * None of them pins the orientation of facelets WITHIN a face, so every one of them passes
+ * whether a face is rendered upright, flipped or mirrored. That is the gap these add.
+ *
+ * CORNERS below is not hand-read off a diagram. It was derived on 2026-08-03 from the
+ * pre-verified move permutations in src/neuromorphic/envs/cube.py, by closing the orbit of
+ * one corner under the U/R/F position permutations and adding the fixed DLB corner (which no
+ * move touches, so the orbit cannot reach it). It validates exactly: the eight triples use
+ * three mutually non-opposite faces each, one sticker per face, covering all 24 facelets, and
+ * match the eight geometric corners of a cube.
+ */
+const CORNERS: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 10, 19],   // U F L
+  [1, 6, 11],    // U R F
+  [2, 18, 23],   // U L B
+  [3, 7, 22],    // U R B
+  [4, 9, 15],    // R F D
+  [5, 13, 20],   // R D B
+  [8, 14, 17],   // F D L
+  [12, 16, 21],  // D L B  <- the held corner, no move touches it
+];
+
+const cornerOf = (facelet: number): number =>
+  CORNERS.findIndex((c) => c.includes(facelet));
+
+/** Faces sharing a border in the L F R B / U / D net, as [above-or-left, below-or-right]. */
+const BORDERS: ReadonlyArray<readonly [number, number, "v" | "h"]> = [
+  [0, 2, "v"],   // U above F
+  [2, 3, "v"],   // F above D
+  [4, 2, "h"],   // L left of F
+  [2, 1, "h"],   // F left of R
+  [1, 5, "h"],   // R left of B
+];
+
+function touchingPairs(faceA: number, faceB: number, kind: "v" | "h") {
+  const pairs: Array<[number, number]> = [];
+  for (let ia = 0; ia < 4; ia++) {
+    const a = cubeNetPosition(faceA * 4 + ia);
+    for (let ib = 0; ib < 4; ib++) {
+      const b = cubeNetPosition(faceB * 4 + ib);
+      const adjacent =
+        kind === "v"
+          ? b.row - a.row === 1 && a.col === b.col
+          : b.col - a.col === 1 && a.row === b.row;
+      if (adjacent) pairs.push([faceA * 4 + ia, faceB * 4 + ib]);
+    }
+  }
+  return pairs;
+}
+
+describe("cube net corner geometry", () => {
+  it("derives eight corners covering every facelet exactly once", () => {
+    const seen = CORNERS.flatMap((c) => [...c]);
+    expect(seen.length).toBe(24);
+    expect(new Set(seen).size).toBe(24);
+    expect(CORNERS.length).toBe(8);
+  });
+
+  it("puts the held DLB corner on three different faces", () => {
+    // FIXED_FACELETS in src/neuromorphic/envs/cube.py. TaskState.tsx hardcodes the same
+    // literal to draw the held-corner highlight, so this pins the two copies together.
+    const faces = [12, 16, 21].map((f) => f >> 2);
+    expect(new Set(faces).size).toBe(3);
+    expect(cornerOf(12)).toBe(cornerOf(16));
+    expect(cornerOf(16)).toBe(cornerOf(21));
+  });
+
+  it("gives every border exactly two touching facelet pairs", () => {
+    for (const [a, b, kind] of BORDERS) {
+      expect(touchingPairs(a, b, kind).length).toBe(2);
+    }
+  });
+
+  /**
+   * THIS TEST CURRENTLY FAILS, AND THAT IS THE POINT. `it.fails` asserts it fails, so the
+   * suite stays green while the defect stays pinned. When cubeNet.ts is fixed this will start
+   * erroring ("expected test to fail") - remove the `.fails` then.
+   *
+   * On a 2x2 every facelet is a corner sticker, so two facelets touching across a net border
+   * are the same physical corner. cubeNet.ts maps every face row-major (i -> [i>>1, i&1]),
+   * which satisfies this for B alone. Worked example, the U/F border: U's F-side stickers are
+   * facelets 0 and 1 (corners UFL and UFR), so they belong on U's BOTTOM row; row-major puts
+   * them on the top. F's U-side stickers are 10 and 11, which row-major puts on the bottom.
+   *
+   * NOTE: the 2026-08-02 handoff recorded this as "B and D are probably mis-oriented". That is
+   * close to backwards. Solving the border constraints gives 32 consistent assignments; B is
+   * the ONLY face for which row-major appears in any of them, because this net constrains B
+   * through R alone. U, R, F, D and L are all inconsistent.
+   */
+  it.fails("places facelets touching across a net border on the same corner", () => {
+    for (const [a, b, kind] of BORDERS) {
+      for (const [fa, fb] of touchingPairs(a, b, kind)) {
+        expect(cornerOf(fa)).toBe(cornerOf(fb));
+      }
+    }
+  });
+});
