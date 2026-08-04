@@ -34,10 +34,20 @@ behind each threshold: docs/superpowers/specs/2026-08-03-exp036-generalisation-g
      Significance by exact paired permutation over all 2**12 = 4096 sign flips. No scipy in
      the venv, n = 12, so this is cheap, assumption-free and better than a normal approximation.
 
-  2. THE BREAK POINT. "Broken at depth d" means held-out success below TWICE the MEASURED
-     random floor at d. The floor is measured per depth via the `random` arm, never assumed:
-     on this cube it is 21% at depth 1, not 1/6, because a random walk with a 2d+3 budget can
+  2. THE BREAK POINT. "Working at depth d" requires held-out success to clear BOTH bars:
+     at least TWICE the MEASURED random floor at d, AND at least 0.10 absolute. Broken is
+     failing either. The floor is measured per depth via the `random` arm, never assumed: on
+     this cube it is 21% at depth 1, not 1/6, because a random walk with a 2d+3 budget can
      stumble into solved.
+
+     REVISED 2026-08-03 on synthetic records, before any real number existed. The rule was
+     "below twice the measured floor" alone. But the floor COLLAPSES with depth, so that bar
+     is 0.029 at depth 3 and only 0.009 at depth 6: it vanishes exactly where it has to bite,
+     and a synthetic depth-6 policy at 0.017 (plainly failing) was reported "working". Third
+     instance tonight of a check that cannot distinguish the states it exists to separate.
+
+     0.10 is one quarter of the depth-3 result at this budget (EXP-035's 0.397), and clear of
+     resolution: held-out sets are 30/133/200/200 states, so 0.10 is 3 to 20 solves.
 
      PREDICTION, recorded so it can be wrong: the curriculum breaks at DEPTH 5. From EXP-033's
      raw-facelet linear probe, which falls 0.956 / 0.766 / 0.598 at depths 3/4/5 against a
@@ -87,7 +97,8 @@ EPISODES = 10000
 EXP035_DEPTH3_AT_10K = 0.397      # the replication target
 GAP_REFUTE_BELOW = 0.05
 GAP_CONFIRM_AT = 0.15
-BREAK_MULTIPLE = 2.0              # "broken" = below this multiple of the measured floor
+BREAK_MULTIPLE = 2.0              # must clear this multiple of the MEASURED floor...
+BREAK_ABSOLUTE = 0.10             # ...AND this absolute bar. See the docstring.
 
 
 def curriculum_for(depth: int) -> tuple[int, ...]:
@@ -191,7 +202,8 @@ def main() -> None:
         gaps = [r["generalisation_gap"] for r in sub]
         floor = st.mean(r["success_rate"] for r in flo) if flo else float("nan")
         p = permutation_p(gaps) if len(gaps) > 1 else float("nan")
-        broken = st.mean(held) < BREAK_MULTIPLE * floor
+        broken = not (st.mean(held) >= BREAK_MULTIPLE * floor
+                      and st.mean(held) >= BREAK_ABSOLUTE)
         print(f"{depth:>6}{st.mean(held):>11.4f}+-{st.stdev(held) if len(held) > 1 else 0:<5.3f}"
               f"{st.mean(train):>10.4f}{st.mean(gaps):>+9.4f}{p:>9.4f}{floor:>8.4f}"
               f"{st.mean(r['greedy_modal_action_frac'] for r in sub):>8.3f}"

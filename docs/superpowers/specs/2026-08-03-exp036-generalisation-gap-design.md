@@ -74,10 +74,26 @@ than an assumed one:
 - **Report the per-seed spread, not only the mean.** EXP-034 had sd 0.162 with one seed at
   0.000 and the best at 0.467; the mean alone hid most of what was happening.
 
-**Claim 2 - the break point.** "Broken at depth d" means held-out success below **twice the
-measured random floor at depth d**. The floor is measured per depth via the `arm="random"` path,
-never assumed. The repo's own history is the reason: the floor at depth 1 is 21%, not 1/6,
-because a random walk with a `2d+3` budget can stumble into solved.
+**Claim 2 - the break point.** "Working at depth d" requires held-out success to clear **both**
+bars: at least **twice the measured random floor at depth d**, and at least **0.10 absolute**.
+Broken is failing either. The floor is measured per depth via the `arm="random"` path, never
+assumed. The repo's own history is the reason: the floor at depth 1 is 21%, not 1/6, because a
+random walk with a `2d+3` budget can stumble into solved.
+
+> **Revised 2026-08-03 on synthetic records, before any real number existed.** The rule was
+> "below twice the measured floor" alone. Running the aggregator against synthetic records
+> exposed that as unusable: **the floor collapses with depth**, because a random walk almost
+> never solves a depth-6 cube. Twice the floor is 0.029 at depth 3 but only **0.009 at depth
+> 6**, so the bar vanishes exactly where it has to bite. A synthetic depth-6 policy at 0.017,
+> which is plainly failing, was reported **"working"**.
+>
+> Third instance in one session of the same defect: a check that cannot distinguish the states
+> it exists to separate. The first was the gap threshold sitting below its own noise floor;
+> the second was the handoff's first-record timing.
+>
+> **0.10** is one quarter of the depth-3 result at this budget (EXP-035's 0.397). Below a
+> quarter of what the approach achieves where it demonstrably works, it is not working. It is
+> also clear of resolution: held-out sets are 30/133/200/200 states, so 0.10 is 3 to 20 solves.
 
 **Prediction, recorded so it can be wrong:** the curriculum breaks at **depth 5**. This comes
 from EXP-033's raw-facelet linear probe, which falls 0.956 / 0.766 / 0.598 at depths 3/4/5
