@@ -42,10 +42,37 @@ the numbers exist, and each will be marked confirmed or refuted in `RESULTS.md`.
 **Claim 1 - the gap.** Define `gap_d = train_success(d) - heldout_success(d)`, both measured on
 samples capped at 200 states so the two sides carry matched noise.
 
-- At depth 3, `gap < 0.05` **refutes coverage as a lever** and cancels the vault's Stage-1a
-  train-fraction sweep. It will not be run.
-- `gap >= 0.15` establishes overfitting and justifies the sweep.
-- Between 0.05 and 0.15 is inconclusive: report it, act on neither.
+> **Revised 2026-08-03, before dispatch, after measuring the instrument.** The first draft of
+> this claim tested a single-seed gap against a fixed 0.05 bar. **That bar sits below the
+> measurement noise floor.** Running the `random` arm - which cannot overfit, so its gap is
+> zero by construction - over seeds 0-5 produced single-seed gaps from **-0.100 to +0.011**:
+>
+> ```
+> seed 0: train=0.0111 heldout=0.0333 gap=-0.0222
+> seed 1: train=0.0000 heldout=0.1000 gap=-0.1000
+> seed 2: train=0.0222 heldout=0.0333 gap=-0.0111
+> seed 3: train=0.0000 heldout=0.0000 gap=+0.0000
+> seed 4: train=0.0000 heldout=0.0000 gap=+0.0000
+> seed 5: train=0.0111 heldout=0.0000 gap=+0.0111
+> ```
+>
+> The depth-3 held-out side is only 30 states, so its resolution is 1/30 = 0.033 and three
+> lucky solves read as a tenth of a gap. A decision rule at 0.05 on one seed would have been
+> a coin flip dressed as a threshold. This is the same failure the 2026-08-02 handoff logs
+> five times over: a check that cannot distinguish the states it exists to separate.
+
+The claim is therefore stated on the **twelve-seed mean**, against a **measured** null rather
+than an assumed one:
+
+- The `random` arm at each depth supplies the empirical null gap. It is not assumed to be zero.
+- Significance by **exact paired permutation over all 2^12 = 4096 sign flips** of the per-seed
+  gaps, the repo's standard for n = 12 and assumption-free with no scipy in the venv.
+- **Mean gap under 0.05 with p > 0.05 refutes coverage as a lever** and cancels the vault's
+  Stage-1a train-fraction sweep. It will not be run.
+- **Mean gap at or above 0.15 with p <= 0.05** establishes overfitting and justifies the sweep.
+- Anything else is inconclusive: report it, act on neither.
+- **Report the per-seed spread, not only the mean.** EXP-034 had sd 0.162 with one seed at
+  0.000 and the best at 0.467; the mean alone hid most of what was happening.
 
 **Claim 2 - the break point.** "Broken at depth d" means held-out success below **twice the
 measured random floor at depth d**. The floor is measured per depth via the `arm="random"` path,
@@ -132,7 +159,23 @@ training completes, so no RNG stream is perturbed.
    The cap also makes the gap a fair comparison: 200 against 200 carries matched noise, where
    200 against 8,769 does not.
 
-2. **Head serialisation.** Write the head's parameters next to the JSON record.
+2. **Head serialisation.** Write the head's parameters next to the JSON record, as
+   `<record stem>_head.pt`.
+
+   **These are tracked in git, unlike the records beside them.** A head is 390 parameters,
+   about 1.6 KB, so a 48-run sweep costs roughly 75 KB. Versioning them is what makes "never
+   retrain in order to re-evaluate" true from a fresh checkout, rather than true only on
+   whichever machine still happens to hold the run. Records stay gitignored: they are larger,
+   they are already summarised into `RESULTS.md`, and the standing habit is that `RESULTS.md`
+   is the committed artifact.
+
+   Two `.gitignore` rules had to change, and one of them was already broken:
+   - `experiments/*/outputs/` excluded the **directory**, and git does not descend into an
+     excluded directory, so no `!` rule underneath could ever match. The
+     `!experiments/*/outputs/.gitkeep` negation on the next line had silently never worked.
+     Corrected to `experiments/*/outputs/*`.
+   - A global `*.pt` needed `!experiments/*/outputs/*_head.pt` placed **after** it, since the
+     last matching pattern wins.
 
 3. **Tag-agnostic record comparison.** `scripts/verify_instrument_neutrality.py` fails on zero
    shared filenames, and `exp035` / `exp036` records never share a filename. The replication
@@ -162,8 +205,27 @@ Governed by the repo's test-strength rule: **an assertion that cannot fail is no
 
 ## Cost and dispatch
 
-Roughly 107 core-hours, 16 workers, about **6.7 hours wall clock**. One overnight run. The
-laptop has 13.4 GB free against roughly 3.1 GB for 16 workers at the measured 195 MB each.
+**Corrected 2026-08-03 before dispatch.** The first estimate here said 6.7 hours. It was built
+on CLAUDE.md's "`brain.step` costs about 90 ms", which is a single-step latency figure and not
+what a 16-worker run actually achieves.
+
+Calibrating instead against EXP-035's own wall clock on the same machine - 3,359,916 steps in
+8h55m across 16 workers, so 143 core-hours - the **measured throughput is 153 ms/step**, 1.7x
+the rule of thumb. EXP-036 is 4,079,436 training steps plus 382,632 evaluation steps:
+
+| | |
+|---|---|
+| total steps | 4,462,068 |
+| core-hours | 190 |
+| **wall clock, 16 workers** | **11.8 h** |
+| without depth 6 | 8.3 h |
+
+Still one overnight run, but it lands mid-morning rather than before breakfast. The laptop has
+392 GB free and 13.4 GB RAM available against roughly 3.1 GB for 16 workers at the measured
+195 MB each.
+
+**Estimate future cube runs from measured throughput, not from the 90 ms figure.** The rule of
+thumb understates a parallel run by about 70%.
 
 Dispatch follows `docs/playbooks/remote-experiment-runs.md`, with one correction the playbook
 needs: **`ssh laptop`, not `ssh mlgbr@swizzlesduo.tailda519d.ts.net`.** The raw hostname does

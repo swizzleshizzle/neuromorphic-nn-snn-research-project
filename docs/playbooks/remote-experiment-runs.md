@@ -91,6 +91,26 @@ comfortable for cube work.
 
 Also confirm nothing is already running (`pyprocs` should be 0), or you will be sharing cores silently.
 
+### Estimate wall clock from measured throughput, not from the 90 ms figure
+
+`CLAUDE.md` says `brain.step` costs about 90 ms. That is single-step latency and it **understates a
+parallel run by roughly 70%**. Calibrating against EXP-035's own wall clock - 3,359,916 steps in
+8h55m across 16 workers, so 143 core-hours - the achieved rate is **153 ms/step**. Using 90 ms put
+the first EXP-036 estimate at 6.7 h when the honest figure was 11.8 h.
+
+Count steps properly. An episode at depth `d` runs up to `2d+3` steps, and a curriculum SPLITS the
+budget across its stages rather than multiplying it, so:
+
+```python
+def steps(depth, episodes):
+    stages = list(range(1, depth + 1))
+    per = episodes // len(stages)
+    return sum(per * (2 * d + 3) for d in stages)
+```
+
+Then `wall_hours = total_steps * 0.153 / 3600 / workers`. Add the evaluations: each is
+`n_states * (2d+3)` steps, and since EXP-036 there are two of them per run (held-out and train-side).
+
 ## 3. Launch
 
 ```bash
