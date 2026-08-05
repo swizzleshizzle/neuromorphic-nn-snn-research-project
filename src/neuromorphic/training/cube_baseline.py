@@ -59,6 +59,11 @@ class CubeConfig:
     # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
     # Evaluation always happens at `depth`, whatever the schedule.
     curriculum: tuple[int, ...] = ()
+    # EXP-037. Proportional shares for the curriculum stages; empty means uniform, which is
+    # what every experiment before EXP-037 ran. Empty is a safe sentinel here, unlike the
+    # `encoder_seed=0` case that forced `None` in 12bbbf8: an empty weight tuple has no
+    # meaningful non-default reading. Must be the same length as `curriculum`.
+    curriculum_weights: tuple[int, ...] = ()
     # `seed` alone used to drive FIVE independent things: the encoder init, the head init,
     # the action-sampling stream, the environment's scramble stream and the train/held-out
     # split. EXP-034 Finding 4 could therefore only bound the seed variance, never attribute
@@ -296,7 +301,11 @@ def resolve_seed(cfg, which: str) -> int:
     return cfg.seed if value is None else value
 
 
-def curriculum_schedule(stages: tuple[int, ...], episodes: int) -> list[tuple[int, int]]:
+def curriculum_schedule(
+    stages: tuple[int, ...],
+    episodes: int,
+    weights: tuple[int, ...] | None = None,
+) -> list[tuple[int, int]]:
     """Split `episodes` across `stages` in order, as [(depth, n_episodes), ...].
 
     The total is CONSERVED. A curriculum that ran `episodes` at every stage would train N
@@ -304,13 +313,37 @@ def curriculum_schedule(stages: tuple[int, ...], episodes: int) -> list[tuple[in
     compute rather than to the schedule.
 
     The remainder goes to the final stage, which is the evaluated depth.
+
+    `weights` (EXP-037) gives the stages unequal shares, proportionally. `None` or empty
+    means uniform and produces **the identical list** the unweighted version produced: with
+    every weight 1, `episodes * 1 // n` is exactly `episodes // n`, so the default path is
+    byte-identical and every EXP-034/035/036 record remains comparable.
+
+    Why this needed a code change at all, rather than the obvious hack: weights can be
+    faked by REPEATING a depth in `stages`, since `(1, 2, 3, 4, 4, 4)` does give depth 4
+    half the budget. **That is a trap.** `run_cube_baseline` builds a fresh `ShellCubeEnv`
+    per stage with `random.Random(train_seed)`, so consecutive identical stages replay the
+    SAME start-state sequence rather than drawing new ones. It is not 5,000 fresh episodes
+    at depth 4, it is one 1,666-episode sequence looped three times with head and optimizer
+    state carrying over, and a win under that scheme would be unattributable. Real weights
+    give one continuous stage with one continuous stream.
     """
     if len(stages) > episodes:
         raise ValueError(
             f"episode budget {episodes} too small for {len(stages)} stages"
         )
-    per = episodes // len(stages)
-    counts = [per] * len(stages)
+    if not weights:
+        weights = (1,) * len(stages)
+    if len(weights) != len(stages):
+        raise ValueError(
+            f"{len(weights)} weights for {len(stages)} stages; they must match"
+        )
+    # A zero weight would silently drop a stage from the curriculum, and a negative one
+    # would steal episodes from its neighbours. Both are far easier to debug here.
+    if any(not isinstance(w, int) or w < 1 for w in weights):
+        raise ValueError(f"weights must be positive integers, got {weights}")
+    total = sum(weights)
+    counts = [episodes * w // total for w in weights]
     counts[-1] += episodes - sum(counts)
     return list(zip(stages, counts))
 
@@ -484,7 +517,9 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
         # One stage when no curriculum is set, so the environment is constructed exactly
         # once from random.Random(train_seed) as before and the default path is unchanged.
-        stages = curriculum_schedule(cfg.curriculum or (cfg.depth,), cfg.episodes)
+        stages = curriculum_schedule(
+            cfg.curriculum or (cfg.depth,), cfg.episodes, cfg.curriculum_weights or None
+        )
         baseline = 0.0
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0

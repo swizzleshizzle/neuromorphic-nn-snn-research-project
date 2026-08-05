@@ -1,3 +1,4 @@
+import json
 import math
 
 import pytest
@@ -12,6 +13,7 @@ from neuromorphic.training.cube_baseline import (
     make_agent,
     max_steps_for,
     modal_action_fraction,
+    record_filename,
     run_cube_baseline,
     shell_states,
     split_shell,
@@ -326,3 +328,117 @@ def test_random_arm_scores_near_the_floor_on_both_sides(tmp_path):
     assert r["success_rate"] < 0.15
     assert r["train_success_rate"] < 0.15
     assert r["n_train_eval"] == 90
+
+
+# --- EXP-037: curriculum stage weighting ---
+
+
+def test_uniform_weights_reproduce_the_unweighted_schedule_exactly():
+    """The whole basis for reusing EXP-034/035/036 records as comparators.
+
+    Asserts list equality across every stage count and the exact budgets EXP-037 uses, not
+    just that the totals match. A schedule that redistributed episodes while conserving the
+    total would pass a sum check and silently invalidate every prior record.
+    """
+    from neuromorphic.training.cube_baseline import curriculum_schedule
+
+    for n in range(1, 7):
+        stages = tuple(range(1, n + 1))
+        for episodes in (600, 3000, 10000, 30000):
+            unweighted = curriculum_schedule(stages, episodes)
+            assert curriculum_schedule(stages, episodes, None) == unweighted
+            assert curriculum_schedule(stages, episodes, ()) == unweighted
+            assert curriculum_schedule(stages, episodes, (1,) * n) == unweighted
+
+
+def test_weights_produce_the_exact_preregistered_schedules():
+    """Pinned to the tables in the EXP-037 spec, computed before the experiment ran.
+
+    Exact counts, not "the last stage got more". A bug that added a single episode to the
+    final stage would satisfy the weaker property and change nothing about the experiment.
+    """
+    from neuromorphic.training.cube_baseline import curriculum_schedule
+
+    d4 = (1, 2, 3, 4)
+    assert curriculum_schedule(d4, 10000, (7, 7, 7, 3)) == [
+        (1, 2916), (2, 2916), (3, 2916), (4, 1252)]      # 12.5% share
+    assert curriculum_schedule(d4, 10000, (1, 1, 1, 1)) == [
+        (1, 2500), (2, 2500), (3, 2500), (4, 2500)]      # 25%, the EXP-036 arm
+    assert curriculum_schedule(d4, 10000, (1, 1, 1, 3)) == [
+        (1, 1666), (2, 1666), (3, 1666), (4, 5002)]      # 50%
+    assert curriculum_schedule(d4, 10000, (1, 1, 1, 9)) == [
+        (1, 833), (2, 833), (3, 833), (4, 7501)]         # 75%
+    assert curriculum_schedule(tuple(range(1, 7)), 10000, (1, 1, 1, 1, 1, 5)) == [
+        (1, 1000), (2, 1000), (3, 1000), (4, 1000), (5, 1000), (6, 5000)]   # depth-6 add-on
+
+
+def test_weighting_conserves_the_total_budget():
+    """The property that makes arms comparable at all.
+
+    A proportional split with integer division loses episodes to rounding unless the
+    remainder is reassigned; this is what a naive implementation gets wrong, and it would
+    hand the arms different budgets while looking correct.
+    """
+    from neuromorphic.training.cube_baseline import curriculum_schedule
+
+    for weights in ((7, 7, 7, 3), (1, 1, 1, 3), (1, 1, 1, 9), (5, 1, 1, 1), (2, 3, 5, 7)):
+        for episodes in (600, 3000, 10000, 30000):
+            sched = curriculum_schedule((1, 2, 3, 4), episodes, weights)
+            assert sum(n for _, n in sched) == episodes, (weights, episodes)
+
+
+def test_invalid_weights_are_rejected(provider):
+    """A zero weight would silently drop a stage from the curriculum."""
+    from neuromorphic.training.cube_baseline import curriculum_schedule
+
+    with pytest.raises(ValueError, match="must match"):
+        curriculum_schedule((1, 2, 3), 1000, (1, 1))
+    with pytest.raises(ValueError, match="positive integers"):
+        curriculum_schedule((1, 2, 3), 1000, (1, 0, 1))
+    with pytest.raises(ValueError, match="positive integers"):
+        curriculum_schedule((1, 2, 3), 1000, (1, -1, 1))
+
+
+def test_explicit_uniform_weights_are_end_to_end_identical_at_depth_4(tmp_path):
+    """Licenses reusing EXP-036's depth-4 records as EXP-037's 25% comparator.
+
+    The depth-1 reference values never exercise a multi-stage curriculum, so they cannot
+    catch a weighting bug that only shows up when stages are actually split. This runs the
+    real depth-4 curriculum both ways on a small budget and compares every measured field.
+    """
+    # Depth 3, not 4: it still exercises a real multi-stage curriculum, and it evaluates
+    # 120 states at 9 steps instead of 333 at 11. `heldout_cap` shrinks BOTH the held-out and
+    # the train-side evaluation, which otherwise dominate a small-budget run entirely.
+    common = dict(depth=3, curriculum=(1, 2, 3), episodes=40, seed=0,
+                  heldout_cap=8, max_depth=3, out_dir=tmp_path)
+    a = run_cube_baseline(CubeConfig(tag="t_w_none", **common))
+    b = run_cube_baseline(CubeConfig(tag="t_w_unif", curriculum_weights=(1, 1, 1), **common))
+    for k in ("success_rate", "train_success_rate", "revisit_rate", "eval_revisit_rate",
+              "greedy_modal_action_frac", "mean_train_entropy", "optimality", "mean_steps"):
+        assert a[k] == b[k], f"{k} differs: {a[k]} vs {b[k]}"
+
+
+def test_weighting_actually_changes_the_outcome(tmp_path):
+    """If a weighted run scored identically to a uniform one, the weights are not wired in.
+
+    This is the test that fails against the pre-EXP-037 code path, where `curriculum_weights`
+    would be accepted by the dataclass and then ignored.
+    """
+    common = dict(depth=3, curriculum=(1, 2, 3), episodes=40, seed=0,
+                  heldout_cap=8, max_depth=3, out_dir=tmp_path)
+    unif = run_cube_baseline(CubeConfig(tag="t_w_u2", **common))
+    back = run_cube_baseline(
+        CubeConfig(tag="t_w_back", curriculum_weights=(1, 1, 7), **common))
+    # The RETURNED record carries `asdict(cfg)`, so weights are still a tuple here. They only
+    # become a list through the JSON round-trip, which is the form aggregate.py reads. Both
+    # are checked because a reader that guessed wrong would silently filter out every record.
+    assert unif["config"]["curriculum_weights"] == ()
+    assert back["config"]["curriculum_weights"] == (1, 1, 7)
+    on_disk = json.loads(
+        (tmp_path / record_filename(CubeConfig(tag="t_w_back", **common))).read_text()
+    )
+    assert on_disk["config"]["curriculum_weights"] == [1, 1, 7]
+
+    # Different schedules must drive the training loop differently. Identical entropy across
+    # a large reallocation of the budget would mean the weights never reached the loop.
+    assert unif["mean_train_entropy"] != back["mean_train_entropy"]
