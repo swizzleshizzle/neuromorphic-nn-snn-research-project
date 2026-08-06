@@ -114,15 +114,30 @@ EXP-036 ran **16 workers at 920 MB private each**, drove system commit to **48.6
 (96%)**, and held utilisation at a measured **43.1%** - the workers spent most of their time
 paging. EXP-037 runs **10 workers**: 914 MB each, commit **25.4 of 52.4 GB (49%)** at launch.
 
-**Prediction: effective workers should exceed EXP-036's 6.90 of 16.** If it does, worker count
-should be chosen from memory headroom rather than core count, and that belongs in the playbook.
-If it does not, the paging theory is wrong and the 43% has another cause.
+> [!success] **PREDICTION CONFIRMED, measured 2026-08-05 over a 421 s interval.**
+> ```
+> 10 workers:  7.42 effective   74.2% utilisation   commit 49%
+> 16 workers:  6.90 effective   43.1% utilisation   commit 96%
+> ```
+> **Ten workers beat sixteen outright** - 7.5% more throughput from 37.5% fewer processes. The
+> laptop is memory-bound, not core-bound, and EXP-036 paid a real penalty for oversubscription
+> despite having 22 logical cores.
+>
+> Written up as a standing rule in `docs/playbooks/remote-experiment-runs.md`: **choose the
+> worker count from memory headroom, not core count**, and budget from PRIVATE bytes (~920 MB
+> each) rather than working set (~80 MB). The playbook's old 195 MB figure is a working-set
+> number and understates by ~4.7x, which is what made 16 look safe.
+>
+> **Whether fewer than 10 is better again is unmeasured.** Two points do not fix a curve.
 
 Measure it the same way, two CPU samples over a known interval:
 
 ```bash
 ssh -n laptop 'powershell -NoProfile -Command "$p = Get-Process | Where-Object { $_.Name -eq \"python3.13\" -and $_.CPU -gt 30 }; [math]::Round((($p | Measure-Object CPU -Sum).Sum),1)"'
 ```
+
+**Revised ETA:** EXP-037 is 4.62 M steps against EXP-036's ~4.46 M, at 7.42 effective workers
+versus 6.90, so roughly **22 h** - about the same wall clock for 13% more work.
 
 ## 5. Housekeeping done this session
 

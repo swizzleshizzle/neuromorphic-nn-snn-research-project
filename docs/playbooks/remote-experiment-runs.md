@@ -91,6 +91,34 @@ comfortable for cube work.
 
 Also confirm nothing is already running (`pyprocs` should be 0), or you will be sharing cores silently.
 
+### Choose the worker count from MEMORY HEADROOM, not from core count
+
+**Measured 2026-08-05, and it inverts the obvious choice: 10 workers beat 16.**
+
+| workers | private each | system commit | utilisation | effective workers |
+|---|---|---|---|---|
+| 16 (EXP-036) | 920 MB | **48.6 / 50.4 GB (96%)** | 43.1% | 6.90 |
+| **10 (EXP-037)** | 914 MB | **25.4 / 52.4 GB (49%)** | **74.2%** | **7.42** |
+
+Ten workers deliver **more** total throughput than sixteen, from 37.5% fewer processes. At 16
+the machine is over-committed and the workers spend most of their time waiting on the pagefile
+rather than computing. `SwizzlesDuo` has 22 logical cores, so the core count says 16 is fine;
+the core count is not the constraint.
+
+**Budget from PRIVATE bytes, not working set.** These workers show ~80 MB working set and
+**~920 MB private**. The old "195 MB per worker" figure in this playbook is a working-set number
+and understates the real footprint by roughly 4.7x, which is exactly what made 16 look safe.
+
+Rule of thumb: `workers ~= (commit_limit_gb * 0.5 - baseline_commit_gb) / 0.92`. Check the
+baseline before launching, since it varies with whatever else is open:
+
+```bash
+ssh -n laptop 'powershell -NoProfile -Command "$os=Get-CimInstance Win32_OperatingSystem; \"commit_used_gb=\" + [math]::Round(($os.TotalVirtualMemorySize - $os.FreeVirtualMemory)/1MB,1) + \" / \" + [math]::Round($os.TotalVirtualMemorySize/1MB,1)"'
+```
+
+**Whether fewer than 10 is better again is unmeasured.** 10 is the only point below 16 that has
+been tested; do not extrapolate the curve from two points.
+
 ### Estimate wall clock from measured throughput, not from the 90 ms figure
 
 `CLAUDE.md` says `brain.step` costs about 90 ms. That is single-step latency and it **understates a
