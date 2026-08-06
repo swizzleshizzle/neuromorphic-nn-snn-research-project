@@ -154,7 +154,16 @@ def main() -> int:
         seeds, diffs = paired(d4_50, d4_75)
         m, p = st.mean(diffs), permutation_p(diffs)
         print(f"  50% vs 75%: {m:+.4f}, exact p {p:.4f}")
-        if m > 0:
+        # The pre-registered rule is 50% > 75%. But that rule was written expecting 50% to
+        # BEAT 25%; if it does not, "interior optimum between 50 and 100" is the wrong
+        # sentence, because the peak is then at or below 25%. Read the ordering, not just
+        # the one comparison the rule names.
+        if m50 is not None and m50 <= 0:
+            print("  The peak is at or BELOW 25%, not between 50% and 100%. Both back-loaded")
+            print("  arms score worse than the equal split, so the pre-registered wording")
+            print("  ('interior optimum') does not apply: the curve is DECLINING across the")
+            print("  whole tested range from 25% upward.")
+        elif m > 0:
             print("  INTERIOR OPTIMUM. Consistent with EXP-034's refuted 100% endpoint;")
             print("  the curve turns over between 50% and 100%.")
         else:
@@ -164,8 +173,17 @@ def main() -> int:
     print("\nCLAIM 3, the control. 12.5% must be WORSE than 25%.")
     if m125 is None:
         print("  cannot evaluate")
+    elif m125 < 0 and p125 is not None and p125 <= ALPHA:
+        print(f"  CONTROL HOLDS ({m125:+.4f}, p {p125:.4f}). Starving the evaluated depth hurt,")
+        print("  so success tracks share at the evaluated depth.")
     elif m125 < 0:
-        print(f"  CONTROL HOLDS ({m125:+.4f}). Success tracks share at the evaluated depth.")
+        # A slightly negative point estimate at p ~ 0.9 is indistinguishable from zero.
+        # Calling that "the control holds" is exactly the weak inference this repo keeps
+        # catching: the sign of a noisy estimate is not evidence.
+        print(f"  INDISTINGUISHABLE FROM 25% ({m125:+.4f}, p {p125:.4f}). HALVING the share at")
+        print("  the evaluated depth changed nothing measurable. Combined with both")
+        print("  back-loaded arms scoring worse, success does NOT track share in the way the")
+        print("  starvation hypothesis predicted. Do not report this as the control holding.")
     else:
         print(f"  CONTROL FAILED ({m125:+.4f}). Starving the evaluated depth did NOT hurt,")
         print("  so performance is not tracking share and any 50% win needs a different")
