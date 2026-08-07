@@ -1,12 +1,19 @@
 # Session Handoff - 2026-08-05 (Wed) - Week 18 session 2
 
-> **EXP-037 IS RUNNING ON THE LAPTOP.** Dispatched 2026-08-05 around 20:05 ET, roughly
-> **4.62 M env steps across 48 runs on 10 workers**. Repo is clean at `022d8b8` and pushed;
-> the laptop is on the same commit.
+> [!important] **SUPERSEDED for current state. EXP-037 has FINISHED.**
+> **Start from `docs/handoffs/SESSION-HANDOFF-2026-08-07.md` instead.**
 >
-> Read `CLAUDE.md`, then this file, then
-> `docs/superpowers/specs/2026-08-05-exp037-curriculum-weighting-design.md` for the
-> pre-registered contract this run is answering.
+> This file was written while the run was in flight, so sections 0 and 1 below describe a
+> live run and are **no longer true**. EXP-037 completed 2026-08-06 16:31 after 20.5 h,
+> 48/48 records, zero tracebacks, and is written up in
+> `experiments/037_curriculum_weighting/RESULTS.md`.
+>
+> **Sections 3, 4 and 5 are still worth reading** - the pull-conflict trap, the 10-worker
+> measurement, and the traps avoided during the build are all durable.
+
+> EXP-037 was dispatched 2026-08-05 around 20:05 ET, roughly **4.62 M env steps across 48 runs
+> on 10 workers**, at commit `022d8b8`. Pre-registered contract:
+> `docs/superpowers/specs/2026-08-05-exp037-curriculum-weighting-design.md`.
 
 ## 0. State check
 
