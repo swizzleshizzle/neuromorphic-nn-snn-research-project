@@ -71,12 +71,46 @@ If it does not match, stop. Something is wrong with the tailnet, not with your q
 
 ## 1. Sync the repo on the laptop
 
+**Use the script. A bare `git pull` here has silently failed twice.**
+
 ```bash
-ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; git fetch --all --prune; git checkout main; git pull --ff-only origin main; git log --oneline -1; git status --short"'
+scp scripts/laptop/sync_repo.ps1 laptop:C:/Users/mlgbr/sync_repo.ps1
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\sync_repo.ps1'
+# expect the last line to be exactly: SYNCED     (exit 0)
 ```
 
 The laptop keeps its own clone at `C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project`.
 It is a separate checkout: local branches on the VPS do not exist there until pushed and pulled.
+
+### Why a bare `git pull` is not enough
+
+Head checkpoints are **generated on the laptop and committed from the VPS**. `.gitignore` ignores
+`experiments/*/outputs/*` but then negates `!experiments/*/outputs/*_head.pt`, so those checkpoints are
+tracked deliberately (EXP-030's memory re-ask needs them; retraining to recover them costs 20 h).
+
+So after every run the laptop holds **untracked** copies at exactly the paths the VPS has since
+committed. Git refuses to overwrite an untracked file on merge, the pull fails, and **the checkout stays
+on an old commit while the dispatch proceeds against stale source.**
+
+- Before the EXP-037 dispatch the laptop was **12 commits behind** and `curriculum_weights` appeared
+  **zero times** in its source. Caught only by checking.
+- It recurred before EXP-038: **48 colliding files**, stuck at `022d8b8`.
+
+`sync_repo.ps1` moves aside exactly the untracked files the incoming tree contains, into a timestamped
+attic at `C:\Users\mlgbr\repo-attic\<stamp>\` (moved, never deleted - that is the undo). It deliberately
+does **not** `git clean`, which would also destroy the **gitignored `outputs/*.json` records**; those are
+often the only copy of an experiment's data, and EXP-036's records are the comparator for every EXP-037
+claim. It aborts rather than touching **modified tracked files**, which may be real work.
+
+It exits non-zero unless `git rev-list --count HEAD..origin/main` is **0**.
+
+> [!warning] Verify the symbol too, not just the exit code
+> `SYNCED` proves the commit is right. It does not prove the code does what you think. Also grep the
+> laptop's source for the **new symbol you just added**, every dispatch:
+>
+> ```bash
+> ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; (Select-String -Path src\neuromorphic\training\*.py -Pattern \"<new_symbol>\").Count"'
+> ```
 
 ## 2. Check headroom, then choose `--workers`
 
