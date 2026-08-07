@@ -107,6 +107,21 @@ curriculum. **When making a test cheap, check which phase actually dominates.**
 > **Standing consequence: committing generated artifacts creates a pull conflict on whichever
 > machine generated them.** Verify `git rev-list --count HEAD..origin/main` is 0 on the laptop
 > before every dispatch, and grep the source for the new symbol. Do not trust a silenced pull.
+>
+> **IT WILL HAPPEN AGAIN ON THE NEXT DISPATCH, and it is predictable.** EXP-037's 48 head
+> checkpoints were committed from the VPS at `034f1a8`, while the laptop still holds its own
+> untracked copies at the same paths. **The next `git pull` on the laptop will fail exactly the
+> same way.** Clear it first:
+>
+> ```bash
+> ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project; New-Item -ItemType Directory -Force C:\Users\mlgbr\exp037_heads_bak | Out-Null; Get-ChildItem experiments\037_curriculum_weighting\outputs -Filter *_head.pt | Move-Item -Destination C:\Users\mlgbr\exp037_heads_bak -Force; git pull --ff-only origin main; git rev-list --count HEAD..origin/main"'
+> ```
+>
+> Then confirm the restored files hash-match the originals, as was done for EXP-036. The EXP-036
+> backup at `C:\Users\mlgbr\exp036_heads_bak` was verified identical and can be deleted.
+>
+> **The better fix is to stop hitting this**: either have the laptop's `outputs/` be the only
+> copy and never commit from the VPS, or add a `git clean` step to the launcher. Neither is done.
 
 ## 4. The 10-worker prediction
 
