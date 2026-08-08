@@ -236,9 +236,26 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--batch-size", type=int, default=256)
     ap.add_argument("--lr", type=float, default=3e-3)
+    # ONE worker by default, deliberately. This box is 2 cores / 4 GB and `CLAUDE.md` says not
+    # to launch parallel work on it. Two workers measured 380 MB each at ~89% CPU apiece, which
+    # drove available memory to 311 MB, started swapping, and pushed load to 3.77 - the swap
+    # THRASH profile, which makes the box unresponsive WITHOUT ever tripping the OOM killer
+    # (hence nothing in the journal to find afterwards). Raise this only on the laptop.
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="skip seeds whose record already exists, so an interrupted run "
+                         "resumes instead of recomputing ~17 minutes per banked seed")
     ap.add_argument("--out-dir", type=Path, default=HERE / "outputs")
     args = ap.parse_args()
+
+    if args.skip_existing:
+        done = {s for s in args.seeds if (args.out_dir / f"exp039_s{s}.json").exists()}
+        if done:
+            print(f"  skipping {len(done)} already-recorded seed(s): {sorted(done)}")
+        args.seeds = [s for s in args.seeds if s not in done]
+        if not args.seeds:
+            print("nothing to do; every requested seed already has a record.")
+            return
 
     print(f"EXP-039: {len(args.seeds)} seeds, depths {DEPTHS}, "
           f"{args.epochs} epochs, batch {args.batch_size}, lr {args.lr}")
