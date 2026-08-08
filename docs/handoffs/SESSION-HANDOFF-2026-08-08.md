@@ -1,7 +1,13 @@
 # Session Handoff - 2026-08-08 (Sat) - Week 19 session 1
 
-> **EXP-038 is IN FLIGHT on the laptop.** Dispatched 2026-08-07 20:15:11 at commit `6416379`,
-> 48 runs, 10 workers, ~21 h, **ETA about 17:15 Saturday**. The repo is clean and pushed.
+> **TWO RUNS IN FLIGHT.**
+>
+> - **EXP-038 on the laptop.** Dispatched 2026-08-07 20:15:11 at `6416379`, 48 runs, 10
+>   workers. **Revised ETA about 00:30 Sunday**, not the 21 h first estimated - see section 0.
+> - **EXP-039 on the VPS.** 12 seeds, 2 workers, about 1.7 h, started mid-afternoon Saturday.
+>   Vault **Stage 2**, and it needs no laptop. See section 8.
+>
+> The repo is clean and pushed.
 >
 > Read `CLAUDE.md` first, then this file. Strategy is **not** in this repo: it is the vault at
 > `300 Efforts/Active/Coding/Neuromorphic Development/road-to-a-solved-cube.md`.
@@ -211,6 +217,70 @@ Not tracked:
 11. Live trace streaming during training is a spec, not built.
 12. The Aug 8 calendar milestone duplicates the recurring coding block in the same slot.
 
+## 8. EXP-039 - vault Stage 2, built and running on the VPS
+
+**The Saturday milestone was "depth-4 frontier: aim an intervention at depth 4."** The
+curriculum is closed (EXP-037), width is closed (EXP-033), volume is closed (EXP-034). What
+remains is the **encoder**, and the laptop being busy made this a build block rather than a run
+block - which suits Stage 2, because its success criterion needs no RL.
+
+**The question.** Train the sensory encoder with an **inverse model** (predict the move from a
+state pair - self-supervised, no oracle), then measure the EXP-033 linear probe. Success is
+defined by the probe, per the vault.
+
+```bash
+.venv/bin/python experiments/039_encoder_pretraining/aggregate.py
+```
+
+| bar | test |
+|---|---|
+| **1 (primary)** | depth-4 trained - frozen **>= +0.05** at p <= 0.05 (what a width doubling buys) |
+| **2 (thesis)** | depth-4 trained > the **facelets arm measured here**, paired |
+| **3** | depth profile 3-6. A gain that GROWS with depth beats a uniform shift |
+| **4** | the null is pre-committed: inverse dynamics insufficient -> redirect to a value objective |
+
+> [!important] The pre-registered risk
+> An inverse model learns **what a move did**, not **which move is good**. That transfer IS the
+> hypothesis. A null is a finding about representation learning, not a failed build.
+
+### The pipeline validates against EXP-033 on three independent arms
+
+At depth 4, measured here vs published: **facelets 0.769 / 0.766**, **frozen 0.463 / 0.459**,
+**chance 0.184 / 0.182**. Control B is satisfied - batching `SensoryCortex` measures the same
+thing as looping `brain.step`, confirmed separately by the per-unit difference shrinking as
+1/sqrt(N) (0.0202 -> 0.0054 over 12 -> 240 draws).
+
+### n=1 signal, and it is ONLY a signal
+
+The calibration seed put depth-4 **frozen 0.463 -> trained 0.784**, against a local facelet
+ceiling of 0.769. That would clear Bar 1 hugely and Bar 2 narrowly. **EXP-026's n=5 lied and
+flipped when de-noised.** Twelve seeds decide it; do not write this up from one.
+
+### Two defects the calibration caught, both of which produce plausible wrong numbers
+
+1. **Pair starvation.** `build_pairs` required successors to be inside the *probed* depths.
+   Every move changes distance by exactly +-1, so that deleted every outward move from the
+   deepest shell - **and depth 6 is 75% of the states**. Only 16,032 of 71,472 pairs survived.
+   Inverted to exclusion semantics (drop only probe-scored endpoints): **48,233 pairs**.
+2. **Bar 2's ceiling.** Fitting jointly over depths 1-6 rather than EXP-033's 1-5 pulls the fit
+   deeper: facelets reads 0.900 at depth 3 against a published 0.956. Depth 4 agreeing to 0.003
+   was luck, so Bar 2 pairs against the arm measured on the same split.
+
+### The rule worth carrying forward
+
+> **Hyperparameters are selected by the PRETRAINING OBJECTIVE, never by the probe.** Selecting
+> on the probe tunes the exact quantity the bars measure. lr 3e-3 won on the objective (0.455
+> vs 0.425 move-accuracy) and would have **lost** on the probe (0.784 vs 0.791) - precisely the
+> case the rule exists to decide.
+
+**Not saturated:** move-naming accuracy was still rising at 40 epochs. 40 is a turnaround
+budget, not a converged optimum, and that is a stated limitation.
+
+**What EXP-039 cannot say:** anything about policy success. It measures what the representation
+*supports*. EXP-033 Finding 2 is the caution - an oracle probe supported 48% at depth 3 while
+the RL policy managed 22%. **Whether a raised ceiling converts into a better policy is the
+Stage 2 follow-on, and that one needs the laptop.**
+
 ## 7. Pointers
 
 - Pre-registration: `docs/superpowers/specs/2026-08-07-exp038-depth6-collapse-design.md`
@@ -221,5 +291,12 @@ Not tracked:
 - Prior results: `experiments/03{2,6,7}_*/RESULTS.md`
 - Remote runs: `docs/playbooks/remote-experiment-runs.md` (**section 1 rewritten**)
 - Sync: `scripts/laptop/sync_repo.ps1`; health: `scripts/laptop/probe_run.ps1`
+- **EXP-039**: spec `docs/superpowers/specs/2026-08-08-exp039-encoder-pretraining-design.md`
+  (**section 5a** is the calibration and the two corrections), driver
+  `experiments/039_encoder_pretraining/`, machinery
+  `src/neuromorphic/training/encoder_pretrain.py`, tests
+  `tests/training/test_encoder_pretrain.py` (8 tests; both controls verified to fail against
+  the defect they guard)
+- Roadmap/Stage 2: vault `Neuromorphic Development/road-to-a-solved-cube.md`
 - **Strategy: vault `Neuromorphic Development/road-to-a-solved-cube.md`**
 - Previous handoff: `SESSION-HANDOFF-2026-08-07.md`

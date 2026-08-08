@@ -243,7 +243,8 @@ def main() -> None:
     print(f"EXP-039: {len(args.seeds)} seeds, depths {DEPTHS}, "
           f"{args.epochs} epochs, batch {args.batch_size}, lr {args.lr}")
     print(f"  Bar 1 (primary): depth-4 trained - frozen >= {BAR1_DELTA} at p <= 0.05")
-    print(f"  Bar 2 (thesis):  depth-4 trained > {BAR2_FACELET_CEILING} (facelet ceiling)")
+    print(f"  Bar 2 (thesis):  depth-4 trained > the facelets arm MEASURED HERE, paired "
+          f"(EXP-033 published {BAR2_FACELET_CEILING} as an external check)")
     print(f"  sanity: frozen depth-4 within {EXP033_FROZEN_D4} +- {SANITY_TOLERANCE}\n",
           flush=True)
 
