@@ -1,5 +1,17 @@
 # Session Handoff - 2026-08-07 (Fri) - Week 18 session 3
 
+> [!important] **SUPERSEDED for current state. EXP-038 is now IN FLIGHT.**
+> **Start from `docs/handoffs/SESSION-HANDOFF-2026-08-08.md` instead.**
+>
+> Section 0 says the laptop is idle and section 3 warns the pull trap will bite the next
+> dispatch. Both are **no longer true**: EXP-038 was dispatched 2026-08-07 20:15:11 at commit
+> `6416379` (~21 h, ETA ~17:15 Sat), and the pull trap was fixed structurally in `470419f` and
+> verified against the live 48-file collision.
+>
+> Section 2's open decision was resolved as **candidate 1, the depth-6 collapse fix**.
+> Candidates 2 (the EXP-030 memory re-ask) and 3 (the encoder, vault Stage 2) remain open and
+> are carried forward. **Sections 1, 4, 5 and 6 are still accurate and worth reading.**
+
 > **Nothing is in flight. The repo is clean at `ab49f91` and pushed. The laptop is idle.**
 >
 > Week 18 landed **EXP-036 and EXP-037**, and between them they **close the curriculum as a
