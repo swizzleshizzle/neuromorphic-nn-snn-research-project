@@ -20,14 +20,34 @@ frequently off the tailnet; **an ssh timeout is not a problem signal** - check
 does not kill the run (Windows has no SIGHUP semantics); `exit code 255` means the connection
 dropped, not the job.
 
-**Health signal, in order of trustworthiness:**
+**Use the probe. It is one command and it answers the question properly:**
 
-1. **Effective cores over a fixed interval** - the only reliable one. Measured 7.06 at launch.
-   ```bash
-   ssh -n laptop 'powershell -NoProfile -Command "$a=(Get-Process | Where-Object { $_.Name -match \"^python\" } | Measure-Object -Property CPU -Sum).Sum; Start-Sleep -Seconds 45; $b=(Get-Process | Where-Object { $_.Name -match \"^python\" } | Measure-Object -Property CPU -Sum).Sum; Write-Output (\"effective_cores=\" + [math]::Round(($b-$a)/45,2))"'
-   ```
-2. Record count in `outputs/`.
-3. **Worker count is NOT a health signal** - a hung pool looks identical to a working one.
+```bash
+scp scripts/laptop/probe_run.ps1 laptop:C:/Users/mlgbr/probe_run.ps1
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe_run.ps1 -OutDir "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project\experiments\038_depth6_collapse\outputs"'
+```
+
+It prints `VERDICT=HEALTHY | ORPHANED | STALLED | NO_RUN` and exits non-zero on the bad ones.
+It checks the two things that actually separate a working run from one that only looks like it:
+
+1. **Process tree.** `launch037.ps1`'s failure mode 2 kills the *script* and leaves workers
+   computing forever with nothing to collect them - and workers alone look perfect.
+   `root_parent=GONE` means kill and restart. Verified intact here:
+   `powershell.exe 22076 -> python 23448 -> driver 19840 -> 10 workers`.
+2. **Effective cores over a controlled interval**, sampled inside a single command.
+
+**Worker count alone is NOT a health signal**, and neither is record count early on: the first
+records cannot appear until a full batch of 10 finishes, roughly 4 h in.
+
+> [!note] The ssh client timing out does NOT kill the run - now verified, not assumed
+> The dispatching ssh was killed by its own client-side timeout at 50 minutes (exit 124). The
+> full process tree survived, launcher powershell included. Windows has no SIGHUP semantics and
+> `ssh -n` plus no `Start-Process` is what makes this hold. **Exit 255 or 124 on the client side
+> is not evidence about the job. Probe before reacting.**
+
+**Watch the trend, not one reading:** effective cores measured 7.06 at launch, then 6.09 and
+5.81 over the following hour. Not alarming on its own (Michael uses this laptop, and the probe
+competes for a slice), but a continued slide is worth a look, and it would push the ETA out.
 
 > [!warning] Do not compute utilisation from wall time you inferred between tool calls
 > I did exactly that mid-session and concluded the pilot was running at 15% and possibly
@@ -200,6 +220,6 @@ Not tracked:
   the saturation threshold each fails 3 of them)
 - Prior results: `experiments/03{2,6,7}_*/RESULTS.md`
 - Remote runs: `docs/playbooks/remote-experiment-runs.md` (**section 1 rewritten**)
-- Sync: `scripts/laptop/sync_repo.ps1`
+- Sync: `scripts/laptop/sync_repo.ps1`; health: `scripts/laptop/probe_run.ps1`
 - **Strategy: vault `Neuromorphic Development/road-to-a-solved-cube.md`**
 - Previous handoff: `SESSION-HANDOFF-2026-08-07.md`

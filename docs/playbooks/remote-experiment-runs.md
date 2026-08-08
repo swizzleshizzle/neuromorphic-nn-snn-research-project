@@ -191,6 +191,30 @@ ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Project
 
 ## 4. Monitor
 
+**Use `scripts/laptop/probe_run.ps1`.** One command, and it separates a healthy run from
+orphaned workers that look identical to one:
+
+```bash
+scp scripts/laptop/probe_run.ps1 laptop:C:/Users/mlgbr/probe_run.ps1
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe_run.ps1 -OutDir "<exp>\outputs"'
+```
+
+Prints `VERDICT=HEALTHY | ORPHANED | STALLED | NO_RUN`, non-zero exit on the bad ones. It checks
+the **process tree** (is the root python's powershell parent still alive, or did the script die
+and leave workers computing into the void?) and **effective cores sampled inside one command**.
+
+> [!warning] Never compute utilisation from wall time inferred between tool calls
+> An agent has no reliable clock between calls. Doing that once during EXP-038's pilot produced
+> "the run is at 15% and probably broken" when a controlled 60-second sample said 7.34 effective
+> cores, i.e. 73%, matching the documented 74.2%.
+
+> [!note] Client-side exit 124 or 255 says nothing about the job - verified 2026-08-07
+> EXP-038's dispatching ssh hit its own 50-minute client timeout (exit 124). The whole process
+> tree survived, launcher powershell included. `ssh -n` plus no `Start-Process` is what makes
+> that hold. Probe before reacting.
+
+### Manual probe (the older recipe)
+
 Record-file count is the real progress signal, not the log. Fighting shell quoting on every poll is a
 waste, so put a probe script on the laptop once:
 
