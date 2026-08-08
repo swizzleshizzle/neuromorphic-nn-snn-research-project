@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import math
 import statistics as st
 from pathlib import Path
 
@@ -33,8 +34,16 @@ D6_ALPHA = 0.017        # Bonferroni over the three depth-6 cells
 D5_MIN_DELTA = 0.02     # ~0.75 sd of EXP-036's measured 0.0272
 D5_ALPHA = 0.05
 MODAL_LEARNING_MIN = 0.45   # Claim 2: below this the policy is sampling, not selecting
-UNIFORM_MODAL = 0.354       # measured uniform floor, EXP-031
-NEAR_UNIFORM = 0.40         # "b3 reached saturation" for the instrument check
+# Uniform modal fraction is BUDGET-DEPENDENT and 0.354 is the 9-step figure. Depth 6 runs
+# 2d+3 = 15 steps and depth 5 runs 13, so neither is 0.354. These are measured directly from
+# EXP-036's random arms on this machine with these seeds.
+UNIFORM_MODAL = {5: 0.321, 6: 0.309}
+# The instrument check is ENTROPY SATURATION, not "modal reaches uniform". An entropy bonus
+# flattens the SAMPLED training policy; it does not make the GREEDY argmax vary, and pushing
+# beta higher flattens the logits toward a deterministic tie-break, i.e. back toward a constant
+# action. See spec section 5a. The pilot measured 95% of ceiling at beta=0.8.
+ENTROPY_CEILING = math.log(6)              # 1.792
+ENTROPY_SATURATED = 0.90 * ENTROPY_CEILING  # 1.613
 FLOOR = {5: 0.0000, 6: 0.0008}   # EXP-036, same machine, same seeds
 
 
@@ -185,31 +194,42 @@ def main() -> int:
         print("  policy still selecting rather than sampling.")
     elif arithmetic_only:
         print(f"  REFUTED BY CLAIM 2. beta {arithmetic_only} cleared the arithmetic but its modal")
-        print(f"  fraction is below {MODAL_LEARNING_MIN}, i.e. at the {UNIFORM_MODAL} uniform floor.")
-        print("  That is RANDOMIZATION, NOT LEARNING (EXP-032 Finding 3). Do not report a lever.")
+        print(f"  fraction is below {MODAL_LEARNING_MIN}, i.e. at the {UNIFORM_MODAL[6]} uniform")
+        print("  anchor. That is RANDOMIZATION, NOT LEARNING (EXP-032 Finding 3). Not a lever.")
     else:
         print("  REFUTED at this budget. No cell cleared the random floor by the pre-registered")
         print("  margin. Depth 6's collapse is a SYMPTOM, not the binding constraint.")
 
-    print("\nCLAIM 2 (DISCRIMINATOR), instrument check on the top beta.")
+    print("\nCLAIM 2 (DISCRIMINATOR), instrument check = ENTROPY SATURATION.")
+    print("  (Not 'modal reaches uniform': an entropy bonus flattens the SAMPLED training")
+    print("   policy, not the GREEDY argmax used at eval. Spec section 5a.)")
     if d6_cells:
         top_b, top_arm = d6_cells[-1]
         top_modal = mean_of(top_arm, "greedy_modal_action_frac")
-        top_mean = mean_of(top_arm, "success_rate")
-        print(f"  beta {top_b}: modal {top_modal:.3f} (uniform {UNIFORM_MODAL}), "
-              f"entropy {mean_of(top_arm, 'mean_train_entropy'):.3f}, mean {top_mean:.4f}")
-        if top_modal <= NEAR_UNIFORM:
-            if top_mean <= max(3 * FLOOR[6], 0.005):
-                print("  INSTRUMENT SOUND. The near-uniform cell scores the random floor, which is")
-                print("  what a policy that samples rather than selects must do.")
-            else:
-                print("  INSTRUMENT BROKEN. A near-uniform policy scored materially ABOVE the")
-                print("  random floor. NO OTHER CLAIM IN THIS EXPERIMENT MAY BE READ until this")
-                print("  is explained.")
+        top_ent = mean_of(top_arm, "mean_train_entropy")
+        print(f"  beta {top_b}: entropy {top_ent:.3f} = {100 * top_ent / ENTROPY_CEILING:.0f}% "
+              f"of the {ENTROPY_CEILING:.3f} ceiling  (need >= {ENTROPY_SATURATED:.3f} = 90%)")
+        print(f"           modal {top_modal:.3f} (uniform anchor {UNIFORM_MODAL[6]}), "
+              f"mean {mean_of(top_arm, 'success_rate'):.4f}")
+        if top_ent >= ENTROPY_SATURATED:
+            print("  DOSE AXIS SATURATED. The sweep reached the limit of what the entropy bonus")
+            print("  can do, which is what EXP-032's 'bounded too low' limitation required.")
         else:
-            print("  SPAN STILL TOO LOW. The top beta did not reach the uniform floor, so this")
-            print("  sweep repeats EXP-032's 'bounded too low' limitation and cannot say what")
-            print("  happens past it. The instrument check did not run.")
+            print("  SPAN STILL TOO LOW. The top beta did not saturate entropy, so this sweep")
+            print("  repeats EXP-032's limitation and cannot say what happens past its boundary.")
+            print("  Report that rather than a clean null.")
+
+        # Any cell at/below the uniform anchor that still scores above the floor means the
+        # measurement, not the policy, is the thing that moved.
+        for depth, cells in ((6, d6_cells), (5, [(b, by_seed(recs, 5, beta=b)) for b in d5_betas])):
+            for b, arm in cells:
+                if not arm:
+                    continue
+                if (mean_of(arm, "greedy_modal_action_frac") <= UNIFORM_MODAL[depth] + 0.01
+                        and mean_of(arm, "success_rate") > max(3 * FLOOR[depth], 0.005)):
+                    print(f"  INSTRUMENT BROKEN. d{depth} beta {b} is at the uniform anchor yet")
+                    print("  scores materially ABOVE the random floor. NO OTHER CLAIM IN THIS")
+                    print("  EXPERIMENT MAY BE READ until this is explained.")
 
     print("\nCLAIM 3, depth 5 coherence (the powered arm).")
     print(describe("EXP-036 train", d5_trained))

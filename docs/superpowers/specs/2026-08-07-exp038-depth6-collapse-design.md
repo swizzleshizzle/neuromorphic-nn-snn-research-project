@@ -4,6 +4,20 @@
 Every threshold below is fixed. If one is edited after data arrives, that edit is the finding
 and must be reported as such.
 
+> [!important] Revised 2026-08-07, AFTER the calibration pilot and BEFORE any EXP-038 run
+> The pilot is the step this spec provisioned in section 5 to choose the betas, and it
+> invalidated two things the first draft asserted. Both are corrected in place, and the
+> corrections are recorded in **section 5a** rather than quietly applied. **No EXP-038 number
+> existed when this was written**, and no EXP-038 record had been produced.
+>
+> 1. The uniform modal-fraction anchor is **0.309 at depth 6 and 0.321 at depth 5**, measured
+>    from EXP-036's random arms. The 0.354 in the first draft is the **9-step** figure; depth
+>    6 runs a 15-step budget and depth 5 a 13-step one, and modal fraction falls with budget
+>    length.
+> 2. Claim 2's instrument check ("the top beta must approach the uniform floor") is
+>    **unreachable, and probably unreachable in principle**. It is replaced by an
+>    entropy-saturation criterion. See section 5a.
+
 ## 1. The question
 
 EXP-032 swept the trainer stabilizers (`entropy_beta`, `normalize_advantages`) at depths 2 and 3
@@ -125,18 +139,32 @@ Thresholds:
 
 ### Claim 2 (THE DISCRIMINATOR) - is a gain learning, or just randomness?
 
-> A success gain in a cell whose **modal action fraction has fallen to the uniform floor (0.354)**
-> is **randomization, not learning**, and MUST be reported as refuting the lever regardless of
-> whether Claim 1's arithmetic passes.
+> A success gain in a cell whose **modal action fraction has fallen to the measured uniform
+> anchor** (0.309 at depth 6, 0.321 at depth 5) is **randomization, not learning**, and MUST be
+> reported as refuting the lever regardless of whether Claim 1's arithmetic passes.
 
-This encodes EXP-032 Finding 3 as a rule rather than as a lesson to be remembered. The
-operational bar: a CONFIRMED cell must hold **modal fraction >= 0.45**, comfortably above the
-0.354 uniform floor, so the policy is still selecting rather than sampling.
+Operational bar: a CONFIRMED cell must hold **modal fraction >= 0.45**, comfortably above the
+anchor, so the policy is still selecting rather than sampling.
 
-The highest beta `b3` is chosen (section 5) so that it **does** reach near-uniform. That makes it
-a **built-in instrument check**: a near-uniform policy must score the random floor, ~0.0008. If
-`b3` lands near-uniform and scores materially above the floor, **the measurement is broken and no
-other claim in this experiment may be read.**
+> [!note] Honest accounting: on pilot evidence this gate is unlikely to bind
+> The lowest modal fraction any piloted cell reached is **0.675**, so a 0.45 bar will probably
+> not be the thing that decides anything. It is retained as a **tail-risk guard**, not
+> advertised as the active check, because a gate that cannot bind is documentation rather than
+> a test. The **active** instrument check is entropy saturation, below.
+>
+> It is retained rather than deleted because the cost is zero and the failure it guards against
+> - reporting a degenerate policy as a lever - is the exact failure EXP-032 Finding 3 describes.
+
+**The instrument check is entropy saturation.** `b3` must drive `mean_train_entropy` to
+**>= 90% of the log 6 = 1.792 ceiling** (i.e. >= 1.613). That demonstrates the dose axis reached
+the limit of what the entropy bonus can do, which is what closes EXP-032's "bounded too low"
+limitation. The pilot measured **95%** at `beta=0.8`.
+
+If `b3` does **not** saturate, the sweep repeats EXP-032's limitation, cannot say what happens
+past its boundary, and must say so rather than reporting a clean null.
+
+**Additionally**: if any cell lands at or below the measured uniform anchor **and** scores
+materially above the random floor, the measurement is broken and no other claim may be read.
 
 ### Claim 3 - depth 5 coherence
 
@@ -188,14 +216,81 @@ measured 0.975 **is** the under-convergence offset, and the dose axis is read re
 
 Selection rule, fixed in advance:
 
-- **b3** is the smallest piloted beta whose modal fraction approaches the uniform floor (0.354),
-  so the top of the sweep demonstrably saturates and Claim 2's instrument check has teeth.
+- **b3** is the smallest piloted beta that **saturates the dose axis** (see 5a for why this is
+  stated in entropy rather than modal fraction).
 - **b1** is near the bottom of the range that moves modal fraction measurably off the
   `(0.0, True)` anchor.
 - **b2** sits between them, and is the value the depth-5 coherence arm uses.
 
-If **no piloted beta approaches uniform**, the span is still too low and must be raised before
-dispatch. The pilot has then done its job by saying so before 21 hours were spent.
+## 5a. What the pilot returned, and the two things it corrected
+
+Run 2026-08-07 19:31:44 to 20:09:00 on `SwizzlesDuo`, 37 min, 10 workers, exit 0, zero
+tracebacks. Records at `C:\Users\mlgbr\exp038_pilot_out` (outside the repo, by design).
+
+| beta | normalize | modal | entropy | success | entropy % of ceiling |
+|---|---|---|---|---|---|
+| 0.0 | False | 1.000 | 0.436 | 0.0000 | 24% |
+| 0.0 | True | 1.000 | 0.211 | 0.0000 | 12% |
+| 0.05 | True | 0.848 | 0.602 | 0.0000 | 34% |
+| 0.2 | True | 0.776 | 1.365 | 0.0000 | 76% |
+| 0.8 | True | **0.675** | **1.698** | 0.0000 | **95%** |
+
+**Chosen: b1 = 0.05, b2 = 0.2, b3 = 0.8.** These are the piloted values themselves.
+
+### Correction 1: the uniform anchor is budget-dependent, and 0.354 was the wrong number
+
+`modal_action_fraction`'s own docstring says a uniform policy averages **0.354 over a 9-step
+budget and 0.429 over 5 steps** - it falls as the budget lengthens. Depth 6 runs `2d+3 = 15`
+steps and depth 5 runs 13, so neither is 0.354. EXP-036's random arms measure it directly:
+
+| depth | uniform modal (measured) | uniform success |
+|---|---|---|
+| 5 | **0.321** | 0.0000 |
+| 6 | **0.309** | 0.0008 |
+
+Using 0.354 would have compared depth-6 policies against a depth-3 constant. This is the same
+shape as the six instrument bugs of week 18: **a reference value that does not apply to the case
+it is being applied to.**
+
+### Correction 2: entropy saturates while greedy modal fraction does not, so the original instrument check was unreachable
+
+At `beta=0.8` training entropy is at **95% of its ceiling** while modal fraction has only fallen
+to **0.675**, still far above the 0.309 anchor. There is 5% of entropy headroom left, so raising
+beta cannot buy much more.
+
+**The two are not the same axis, and the reason is structural:** `mean_train_entropy` describes
+the **stochastic sampled policy during training**, while `greedy_modal_action_frac` describes the
+**deterministic argmax policy at evaluation** (`evaluate_states` does greedy rollouts). An
+entropy bonus flattens the sampled distribution; it does not make the argmax vary.
+
+Worse, pushing beta far higher would likely drive modal fraction **back up**: as the entropy term
+dominates, the logits flatten toward zero, and a flat-logit argmax is a deterministic tie-break,
+which is a **constant action**. So modal fraction is not monotone in beta and "raise beta until
+modal reaches uniform" is probably unachievable **in principle**, not merely unreached here.
+
+Hence the instrument check is restated as entropy saturation, which is both reachable and
+measured. **This is the pilot doing its job**: the alternative was discovering it in the
+aggregator after 21 hours, against a rule that could never fire.
+
+### A third observation, recorded because it contradicts what this spec predicted
+
+The first draft argued the pilot's short budget would make the policy **less** collapsed, so
+modal fractions would read low. **The opposite happened**: the pilot's `(0.0, False)` cell reads
+**1.000** against EXP-036's **0.975** at 10,000 episodes. Fewer episodes left the policy *more*
+degenerate, not less.
+
+Consequence: pilot modal fractions are an **upper bound** on what the sweep will show, so the
+real cells should sit at or below 0.675, further from the anchor and further from the 0.45 gate.
+
+This also adds a third pattern to the entropy/modal relationship the project keeps re-measuring:
+
+| source | pattern |
+|---|---|
+| EXP-035 | collapse = low entropy **with** high modal fraction |
+| EXP-037 | both rose **together** across the back-loaded arms |
+| **EXP-038 pilot** | entropy rises to its ceiling while modal fraction **plateaus** |
+
+**Read both, always.** No single one of these three is the general rule.
 
 ## 6. Cost
 

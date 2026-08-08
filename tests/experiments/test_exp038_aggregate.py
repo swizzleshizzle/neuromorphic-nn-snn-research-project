@@ -29,7 +29,10 @@ REPO = Path(__file__).resolve().parents[2]
 AGG = REPO / "experiments" / "038_depth6_collapse" / "aggregate.py"
 SEEDS = list(range(12))
 
-UNIFORM_MODAL = 0.354
+# Measured from EXP-036's random arms. NOT 0.354, which is the 9-step figure; depth 6 runs a
+# 15-step budget and depth 5 a 13-step one, and modal fraction falls with budget length.
+UNIFORM_MODAL = {5: 0.321, 6: 0.309}
+ENTROPY_SATURATED = 1.613   # 90% of log 6
 
 
 def _rec(depth, seed, beta, success, modal, entropy, arm="regionalized"):
@@ -56,43 +59,46 @@ def _comparators():
     """
     out = []
     for s in SEEDS:
-        out.append(_rec(6, s, 0.0, 0.001 if s < 2 else 0.0, 0.354, 1.79, arm="random"))
+        out.append(_rec(6, s, 0.0, 0.001 if s < 2 else 0.0, UNIFORM_MODAL[6], 0.0, arm="random"))
         out.append(_rec(6, s, 0.0, 0.0, 0.975, 0.204))
-        out.append(_rec(5, s, 0.0, 0.0, 0.354, 1.79, arm="random"))
+        out.append(_rec(5, s, 0.0, 0.0, UNIFORM_MODAL[5], 0.0, arm="random"))
         out.append(_rec(5, s, 0.0, 0.0396 + (s % 3 - 1) * 0.005, 0.779, 0.236))
     return out
 
 
+# (beta, success, modal, entropy)
 WORLDS = {
-    # beta -> (success, modal). Middle beta wins WHILE still selecting; top beta saturates to
-    # uniform and correctly scores the floor.
-    "lever": [(0.05, 0.001, 0.90), (0.2, 0.055, 0.60), (0.8, 0.0008, 0.36)],
-    # The trap: the ONLY cell that "succeeds" is the one that has gone uniform.
-    "randomization": [(0.05, 0.001, 0.90), (0.2, 0.002, 0.70), (0.8, 0.055, 0.35)],
-    # Nothing moves and nothing saturates: bounded too low, exactly as EXP-032 was.
-    "null": [(0.05, 0.0, 0.95), (0.2, 0.0, 0.92), (0.8, 0.0, 0.88)],
+    # A real lever: the middle beta succeeds WHILE still selecting (modal 0.60), and the top
+    # beta saturates entropy, which is what the dose axis has to demonstrate.
+    "lever": [(0.05, 0.001, 0.90, 0.60), (0.2, 0.055, 0.60, 1.36), (0.8, 0.0008, 0.68, 1.70)],
+    # The trap EXP-032 Finding 3 describes: the ONLY cell that "succeeds" has fallen to the
+    # uniform anchor, so its success cannot be learning.
+    "randomization": [(0.05, 0.001, 0.90, 0.60), (0.2, 0.002, 0.70, 1.36),
+                      (0.8, 0.055, 0.31, 1.70)],
+    # Nothing moves and entropy never saturates: bounded too low, exactly as EXP-032 was.
+    "null": [(0.05, 0.0, 0.95, 0.50), (0.2, 0.0, 0.92, 0.80), (0.8, 0.0, 0.88, 1.10)],
 }
 
 EXPECT = {
-    "lever": ["LEVER ESTABLISHED", "INSTRUMENT SOUND"],
+    "lever": ["LEVER ESTABLISHED", "DOSE AXIS SATURATED"],
     "randomization": ["REFUTED BY CLAIM 2", "INSTRUMENT BROKEN"],
     "null": ["REFUTED at this budget", "SPAN STILL TOO LOW"],
 }
 
 FORBIDDEN = {
     "randomization": ["LEVER ESTABLISHED"],
-    "null": ["LEVER ESTABLISHED"],
-    "lever": ["REFUTED BY CLAIM 2"],
+    "null": ["LEVER ESTABLISHED", "DOSE AXIS SATURATED"],
+    "lever": ["REFUTED BY CLAIM 2", "SPAN STILL TOO LOW", "INSTRUMENT BROKEN"],
 }
 
 
 def _run_world(tmp_path: Path, world: str) -> str:
     exp038 = []
-    for beta, succ, modal in WORLDS[world]:
+    for beta, succ, modal, entropy in WORLDS[world]:
         for s in SEEDS:
             # Per-seed jitter so the permutation test is not fed 12 identical values.
             exp038.append(_rec(6, s, beta, max(0.0, succ + (s % 3 - 1) * succ * 0.15),
-                               modal, 0.3 + beta))
+                               modal, entropy))
     for s in SEEDS:
         # depth-5 coherence arm, deliberately flat against the 0.0396 comparator
         exp038.append(_rec(5, s, 0.2, 0.040 + (s % 3 - 1) * 0.004, 0.75, 0.5))
@@ -131,9 +137,29 @@ def test_randomization_world_would_pass_a_naive_bar(tmp_path):
     success would call it a lever. Only its modal fraction at the uniform floor gives it away.
     Without this, Claim 2 could be deleted and the suite would stay green.
     """
-    beta, succ, modal = WORLDS["randomization"][-1]
+    beta, succ, modal, entropy = WORLDS["randomization"][-1]
     assert succ >= 0.02, "the trap cell must clear the naive success bar"
-    assert modal <= UNIFORM_MODAL + 0.01, "the trap cell must be at the uniform floor"
+    assert modal <= UNIFORM_MODAL[6] + 0.01, "the trap cell must be at the uniform anchor"
 
     out = _run_world(tmp_path, "randomization")
     assert "REFUTED BY CLAIM 2" in out, "the modal-fraction rule is what catches it"
+
+
+def test_entropy_saturation_is_what_the_instrument_check_measures(tmp_path):
+    """The correction the pilot forced, pinned so it cannot silently regress.
+
+    The first draft checked that the top beta drove modal fraction to the uniform anchor. The
+    pilot measured entropy at 95% of ceiling with modal stalled at 0.675, because entropy
+    describes the SAMPLED training policy while modal describes the GREEDY argmax at eval.
+    That check could never have fired. The saturation criterion is entropy, and these two
+    worlds differ ONLY in the top cell's entropy.
+    """
+    assert WORLDS["lever"][-1][3] >= ENTROPY_SATURATED
+    assert WORLDS["null"][-1][3] < ENTROPY_SATURATED
+    # ...and their top-cell modal fractions are both far above the anchor, so a modal-based
+    # rule could not tell them apart at all.
+    assert WORLDS["lever"][-1][2] > UNIFORM_MODAL[6] + 0.3
+    assert WORLDS["null"][-1][2] > UNIFORM_MODAL[6] + 0.3
+
+    assert "DOSE AXIS SATURATED" in _run_world(tmp_path, "lever")
+    assert "SPAN STILL TOO LOW" in _run_world(tmp_path, "null")
