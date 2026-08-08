@@ -230,9 +230,12 @@ def run_one(seed: int, cfg: PretrainConfig, out_dir: Path, *, quiet: bool = Fals
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(12)))
-    ap.add_argument("--epochs", type=int, default=30)
+    # Calibrated 2026-08-08 on seed 0, not guessed. lr chosen by the PRETRAINING OBJECTIVE
+    # (move-naming accuracy 0.455 at 3e-3 against 0.425 at 1e-3), never by the probe - which
+    # would have picked the other one (0.784 vs 0.791) and tuned the outcome metric. Spec 6a.
+    ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--batch-size", type=int, default=256)
-    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--lr", type=float, default=3e-3)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out-dir", type=Path, default=HERE / "outputs")
     args = ap.parse_args()

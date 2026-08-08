@@ -190,7 +190,38 @@ neighbour falls outside the table.
   number in EXP-033 becomes non-comparable.
 - **No assertion that cannot fail.** Every test added must fail against the pre-change code.
 - Pretraining hyperparameters (epochs, batch size, lr) are **calibrated by a smoke run** and
-  recorded, not guessed - the EXP-038 pilot's lesson.
+  recorded, not guessed - the EXP-038 pilot's lesson. See section 6a.
+
+## 6a. Calibration, run 2026-08-08 before the real run
+
+Seed 0, depths 1-6, 48,233 pairs, batch 256, 40 epochs, ~1,015 s per run on the VPS.
+
+| lr | move-acc @0 | @20 | @39 | depth-4 frozen -> trained |
+|---|---|---|---|---|
+| 1e-3 | 0.198 | 0.394 | 0.425 | 0.463 -> 0.791 |
+| **3e-3** | 0.237 | 0.432 | **0.455** | 0.463 -> 0.784 |
+
+**Selected: lr 3e-3, 40 epochs.**
+
+> [!important] The selection rule, and why it is not "whichever scored higher"
+> **Hyperparameters are chosen by the PRETRAINING OBJECTIVE (move-naming accuracy), never by
+> the probe.** Selecting on the probe would tune the outcome metric on the very quantity the
+> pre-registered bars are about, and every bar below would then be reporting a choice rather
+> than a finding.
+>
+> On that rule lr 3e-3 wins: 0.455 against 0.425 move-accuracy in the same budget. Note it
+> would have LOST on the probe (0.784 against 0.791), which is exactly the situation the rule
+> exists to decide, and a reminder that the two metrics are not the same axis.
+
+**Move-naming accuracy has not saturated at 40 epochs** (0.447 -> 0.456 -> 0.455 over the last
+ten). 40 is a budget chosen for turnaround, not a converged optimum, and that is a stated
+limitation: a longer budget is untested and might move every arm.
+
+**n=1 signal, recorded so the real run cannot be described as confirming a prediction it never
+made:** the calibration seed put trained depth-4 at 0.784-0.791 against a frozen 0.463 and a
+locally-measured facelet ceiling of 0.769. If that holds at n=12 it clears Bar 1 by a wide
+margin and clears Bar 2 by a narrow one. **One seed is not a result** - EXP-026's n=5 lied and
+the de-noised result flipped.
 
 ## 7. What this experiment cannot say
 
