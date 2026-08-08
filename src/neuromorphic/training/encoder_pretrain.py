@@ -118,28 +118,36 @@ class InverseModel(nn.Module):
         return self.head(torch.cat([rates[:b], rates[b:]], dim=1))  # [B, 2*content]
 
 
-def build_pairs(states, allowed=None) -> list[tuple[tuple, int, tuple]]:
-    """Every `(s, a, apply_move(s, a))` with BOTH endpoints inside `allowed`.
+def build_pairs(states, forbidden=None) -> list[tuple[tuple, int, tuple]]:
+    """Every `(s, a, apply_move(s, a))` for `s` in `states`, dropping pairs that touch
+    `forbidden` at EITHER endpoint.
 
-    `allowed` exists for the contamination control. If the encoder pretrains on the states the
-    probe scores, "held-out" probe accuracy measures an encoder that has already seen them.
-    The inverse model never sees distance labels so it cannot memorise optimality directly, but
-    it can memorise state-specific structure, and that is enough to inflate the number.
+    `forbidden` is the contamination control: pass the probe's held-out states. If the encoder
+    pretrains on the states the probe scores, "held-out" probe accuracy measures an encoder
+    that has already seen them. The inverse model never sees distance labels so it cannot
+    memorise optimality directly, but it can memorise state-specific structure, and that is
+    enough to inflate the number.
 
     BOTH endpoints are checked, not just `s`: `s'` is pushed through the same encoder and its
     facelets are seen just as directly.
 
-    Accepted cost, recorded in the spec: this biases the pair distribution toward the interior
-    of the training set. Correctness beats coverage.
+    > EXCLUSION, NOT INCLUSION, AND THE DIFFERENCE IS LARGE. An earlier version required the
+    > successor to be inside an ALLOWED set drawn from the probed depths. Because every cube
+    > move changes distance-to-solved by exactly +-1, that silently deleted every outward move
+    > from the deepest probed shell - and the deepest shell is most of the data. Measured
+    > 2026-08-08 on depths 1-6: 16,032 surviving pairs out of 71,472, i.e. 22%, with depth-6
+    > states contributing almost nothing. Excluding only what the probe scores keeps the
+    > successor free to be a depth-0 or depth-7 state, which needs no label because pretraining
+    > is self-supervised.
     """
-    allowed_set = None if allowed is None else set(allowed)
+    forbidden_set = set() if forbidden is None else set(forbidden)
     pairs = []
     for s in states:
-        if allowed_set is not None and s not in allowed_set:
+        if s in forbidden_set:
             continue
         for a in range(N_ACTIONS):
             nxt = apply_move(s, a)
-            if allowed_set is not None and nxt not in allowed_set:
+            if nxt in forbidden_set:
                 continue
             pairs.append((s, a, nxt))
     return pairs

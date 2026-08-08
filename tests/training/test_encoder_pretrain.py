@@ -112,40 +112,64 @@ def test_build_pairs_excludes_a_pair_when_EITHER_endpoint_is_disallowed():
     """
     states = _states_upto(3)
     # Hold out every fourth state, spread across depths, mimicking the probe's split.
-    allowed = set(s for i, s in enumerate(states) if i % 4 != 0)
-    pairs = build_pairs(states, allowed)
+    forbidden = {s for i, s in enumerate(states) if i % 4 == 0}
+    kept = [s for s in states if s not in forbidden]
+    pairs = build_pairs(states, forbidden=forbidden)
 
-    assert pairs, "sanity: the allowed set must still yield some pairs"
+    assert pairs, "sanity: the split must still yield some pairs"
     for s, a, nxt in pairs:
-        assert s in allowed
-        assert nxt in allowed, "a successor outside the allowed set leaked into pretraining"
+        assert s not in forbidden
+        assert nxt not in forbidden, "a held-out state leaked in as a successor"
 
     # The control must actually BIND: with this split there really are pairs whose source is
-    # allowed but whose successor is not. Without this, the loop above could pass vacuously.
+    # kept but whose successor is held out. Without this, the loop above could pass vacuously.
     leaky = [
-        (s, a) for s in allowed for a in range(N_ACTIONS)
-        if apply_move(s, a) not in allowed
+        (s, a) for s in kept for a in range(N_ACTIONS)
+        if apply_move(s, a) in forbidden
     ]
     assert leaky, "test is vacuous unless some pair would leak under an s-only filter"
-    assert len(pairs) < len(allowed) * N_ACTIONS
     # An s-only filter would have produced exactly these extra pairs. Naming the count makes
     # the regression obvious rather than a silent shift in dataset size.
-    assert len(pairs) + len(leaky) == len(allowed) * N_ACTIONS
+    assert len(pairs) + len(leaky) == len(kept) * N_ACTIONS
 
 
-def test_every_move_changes_depth_so_a_single_shell_yields_no_pairs():
-    """Why the allowed set must span contiguous depths - pinned, because it is unobvious.
+def test_successors_outside_the_probed_depths_are_KEPT():
+    """The fix for a defect the EXP-039 pilot exposed, pinned so it cannot come back.
 
-    Every cube move changes distance-to-solved by exactly +-1. So an allowed set drawn from a
-    SINGLE shell produces zero pairs, and a pretraining run configured that way would train on
-    an empty dataset and report a pristine, meaningless result.
+    An earlier version required the successor to be inside an ALLOWED set drawn from the probed
+    depths. Because every move changes distance by exactly +-1, that silently deleted every
+    outward move from the DEEPEST probed shell - and the deepest shell is most of the data.
+    Measured on depths 1-6: 16,032 pairs survived out of 71,472 (22%), starving the encoder
+    exactly where Wall 1 bites hardest.
+
+    Pretraining is self-supervised, so a successor needs no label and may lie outside the
+    probed range entirely. With NOTHING forbidden, every state must contribute all six moves.
     """
-    shell = _states(2)
-    assert build_pairs(shell, shell) == [], "single-shell allowed set must yield no pairs"
+    deepest = 3
+    states = _states_upto(deepest)
+    pairs = build_pairs(states)
+    assert len(pairs) == len(states) * N_ACTIONS, "every state must keep all six moves"
 
+    # And the depletion is real: some successors genuinely fall outside the probed universe,
+    # so an inclusion-based filter would have dropped them.
+    universe = set(states)
+    escaping = [(s, a) for s in states for a in range(N_ACTIONS)
+                if apply_move(s, a) not in universe]
+    assert escaping, "test is vacuous unless some successor escapes the probed depths"
+    kept_under_inclusion_filter = len(states) * N_ACTIONS - len(escaping)
+    assert kept_under_inclusion_filter < len(pairs), (
+        "an inclusion filter must lose pairs that the exclusion filter keeps")
+
+
+def test_every_move_changes_depth_by_exactly_one():
+    """The structural fact behind both pair-construction rules, pinned because it is unobvious.
+
+    Every cube move changes distance-to-solved by exactly +-1 - never 0. That is why an
+    inclusion filter over a single shell yields ZERO pairs, and why an inclusion filter over a
+    depth RANGE still silently starves the deepest shell.
+    """
     prov = ExactBFSDistance(max_depth=4)
-    d = {s: 2 for s in prov.states_at_distance(2)}
-    for s in list(d)[:20]:
+    for s in prov.states_at_distance(2)[:30]:
         for a in range(N_ACTIONS):
             nd = prov.distance(apply_move(s, a))
             assert nd in (1, 3), f"a move from depth 2 reached depth {nd}, not 1 or 3"
