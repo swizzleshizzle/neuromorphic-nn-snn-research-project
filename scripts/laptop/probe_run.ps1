@@ -53,20 +53,31 @@ foreach ($r in $roots) {
 
 # Worker count alone proves nothing; measure that they are actually advancing.
 $a = ($procs | Measure-Object -Property WorkingSetSize -Sum).Sum
+$log = if ($OutDir -ne '') { Join-Path $OutDir 'run.log' } else { '' }
+$hasLog = ($log -ne '' -and (Test-Path $log))
+$l1 = if ($hasLog) { (Get-Item $log).Length } else { 0 }
+
 $c1 = (Get-Process | Where-Object { $_.Name -match '^python' } | Measure-Object -Property CPU -Sum).Sum
 Start-Sleep -Seconds $SampleSeconds
 $c2 = (Get-Process | Where-Object { $_.Name -match '^python' } | Measure-Object -Property CPU -Sum).Sum
 $cores = [math]::Round(($c2 - $c1) / $SampleSeconds, 2)
 Write-Output ("effective_cores=" + $cores)
+
+# Working set, NOT private bytes. Expect ~80 MB/worker once the run settles and Windows trims
+# the set; budget the POOL SIZE from private bytes (~920 MB/worker) instead. A working set
+# that has fallen since launch is normal and is not evidence of anything.
 Write-Output ("working_set_gb=" + [math]::Round($a / 1GB, 2))
 
-if ($OutDir -ne '' -and (Test-Path $OutDir)) {
+if ($hasLog) {
     Write-Output ("records=" + (Get-ChildItem $OutDir -Filter *.json).Count)
-    $log = Join-Path $OutDir 'run.log'
-    if (Test-Path $log) {
-        Write-Output ("tracebacks=" + (Select-String -Path $log -Pattern 'Traceback').Count)
-        Write-Output ("log_age_min=" + [math]::Round(((Get-Date) - (Get-Item $log).LastWriteTime).TotalMinutes, 1))
-    }
+    Write-Output ("tracebacks=" + (Select-String -Path $log -Pattern 'Traceback').Count)
+    # LastWriteTime is NOT usable here. Windows does not flush it to the directory entry while
+    # the writer holds the file open, so a healthy run reads as hours stale - EXP-038 showed
+    # log_age_min=191 with the last line "30/48" written seconds earlier. Measure GROWTH over
+    # the sample window instead, which cannot lie about whether output is still being produced.
+    $l2 = (Get-Item $log).Length
+    Write-Output ("log_bytes=" + $l2 + " log_growth_bytes=" + ($l2 - $l1))
+    Write-Output ("last_progress=" + ((Get-Content $log -Tail 1) -replace '\s+', ' '))
 }
 
 if ($orphaned) {
