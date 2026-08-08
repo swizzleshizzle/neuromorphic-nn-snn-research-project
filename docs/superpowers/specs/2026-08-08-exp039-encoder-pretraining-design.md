@@ -135,7 +135,19 @@ intervention that costs no extra width at all.
 
 ### Bar 2 (THE THESIS BAR) - does the encoder supply nonlinearity?
 
-> **CLEARED** if trained concept@64 at depth 4 exceeds **0.766**, the raw-facelet linear ceiling.
+> **CLEARED** if trained concept@64 at depth 4 exceeds the **facelets arm measured here**,
+> paired per seed. EXP-033's published **0.766** is an external check, not the comparator.
+
+> [!note] Revised 2026-08-08 after the calibration pilot, before any EXP-039 result
+> The first draft tested against the published 0.766. The pilot showed why that is wrong for
+> the same reason Control B exists: this experiment fits the probe jointly over depths **1-6**
+> where EXP-033 used **1-5**, and depth 6 is 75% of the states, so the joint fit sits deeper
+> and shallow depths shift. Measured: facelets reads **0.769** at depth 4 (against 0.766, fine)
+> but **0.900** at depth 3 (against 0.956). Depth 4 happens to agree; depth 3 does not, and
+> relying on that coincidence would be luck rather than method.
+>
+> The pilot also confirmed the pipeline reproduces all three reference arms at depth 4:
+> facelets 0.769 vs 0.766, frozen 0.463 vs 0.459, chance 0.184 vs 0.182.
 
 This is the claim that matters for the project. A linear probe on the trained concept beating
 *any* linear map on the observation means the encoder is contributing genuine nonlinear

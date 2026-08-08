@@ -137,10 +137,24 @@ def main() -> int:
             print("  leaving the stage open-ended.")
 
     # ---- Bar 2 ----
-    print(f"\nBAR 2 (THESIS), depth-4 trained > {BAR2_CEILING}, the raw-facelet linear ceiling.")
-    if tra4:
-        print(f"  trained {st.mean(tra4):.3f} vs ceiling {BAR2_CEILING}")
-        if st.mean(tra4) > BAR2_CEILING:
+    # Tested against the facelets arm MEASURED HERE, paired per seed, for the same reason
+    # Control B re-measures the frozen arm. This experiment fits the probe jointly over depths
+    # 1-6 where EXP-033 used 1-5, and depth 6 is 75% of the states, so the joint fit sits
+    # deeper and shallow depths shift: measured 2026-08-08, facelets reads 0.769 at depth 4
+    # (vs 0.766 published, fine) but 0.900 at depth 3 (vs 0.956). The published number is an
+    # external check; the internal comparator is the arm measured on the same split.
+    fac4 = series(recs, "facelets", PRIMARY_DEPTH)
+    print(f"\nBAR 2 (THESIS), depth-4 trained > the raw-facelet linear ceiling.")
+    if tra4 and fac4:
+        fdiffs = [t - f for t, f in zip(tra4, fac4)]
+        pf = permutation_p(fdiffs)
+        print(f"  trained {st.mean(tra4):.3f} vs facelets measured here {st.mean(fac4):.3f} "
+              f"({st.mean(fdiffs):+.4f}, exact p {pf:.4f})")
+        print(f"  external check: EXP-033 published {BAR2_CEILING} for facelets at depth 4")
+        if abs(st.mean(fac4) - BAR2_CEILING) > SANITY_TOLERANCE:
+            print(f"  WARNING: the facelets arm is outside {BAR2_CEILING} +-{SANITY_TOLERANCE}."
+                  f" Explain that before reading this bar.")
+        if st.mean(tra4) > st.mean(fac4):
             print("  CLEARED. A linear probe on the TRAINED concept beats any linear map on")
             print("  the observation, so the encoder is supplying genuine nonlinear structure.")
             print("  This is the first moment the SNN earns its place, and width provably")
