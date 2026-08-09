@@ -153,6 +153,31 @@ def build_pairs(states, forbidden=None) -> list[tuple[tuple, int, tuple]]:
     return pairs
 
 
+def save_encoder(sensory: SensoryCortex, path) -> None:
+    """Serialise a pretrained encoder.
+
+    EXP-039 did not do this, and its 3.1 h of compute produced probe numbers but **no reusable
+    artifact**. Pretraining is deterministic given a seed WITHIN a machine, but seeded runs are
+    not reproducible across platforms (CLAUDE.md), so an encoder trained on the VPS cannot be
+    regenerated on the laptop. Save it.
+    """
+    torch.save(sensory.state_dict(), str(path))
+
+
+def load_encoder(path, *, seed: int = 0, content: int = DEFAULT_CONTENT,
+                 num_steps: int = DEFAULT_T) -> SensoryCortex:
+    """Rebuild a `SensoryCortex` and load saved weights into it.
+
+    `seed` only shapes the throwaway random init that is immediately overwritten; it does not
+    affect the result. `strict=True` is the point of the call - a silently partial load would
+    leave half a random encoder in place and every downstream number would describe something
+    nobody chose.
+    """
+    sensory = make_sensory(seed, content=content, num_steps=num_steps)
+    sensory.load_state_dict(torch.load(str(path), map_location="cpu"), strict=True)
+    return sensory
+
+
 @dataclass
 class PretrainConfig:
     seed: int = 0

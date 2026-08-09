@@ -75,6 +75,15 @@ class CubeConfig:
     encoder_seed: int | None = None
     train_seed: int | None = None
     split_seed: int | None = None
+    # EXP-040 (vault Stage 2). Path to a serialised `SensoryCortex` state dict to load into the
+    # brain's sensory region after construction, replacing its random initialisation. The
+    # encoder remains FROZEN during RL either way, so this changes WHICH weights the frozen
+    # encoder holds and nothing else: the trainable parameter count stays at 390.
+    #
+    # `None` is the shipped behaviour and must reproduce every prior cube record byte-for-byte.
+    # Verified against a baseline captured before this field existed; see
+    # tests/training/test_encoder_seam.py.
+    encoder_state_path: str | None = None
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -272,11 +281,23 @@ def make_agent(cfg: CubeConfig):
     """
     encoder_seed = resolve_seed(cfg, "encoder")
     if cfg.arm == "regionalized":
-        return Brain(
+        brain = Brain(
             encoder=cube_encoder(), n_obs=CUBE_N_OBS, obs_width=CUBE_OBS_WIDTH,
             n_actions=cfg.n_actions, content=cfg.content, seed=encoder_seed,
         )
+        if cfg.encoder_state_path:
+            # EXP-040. `strict=True` deliberately: a silently partial load would leave half a
+            # random encoder in place, and every downstream number would then describe an
+            # architecture nobody chose. The region stays frozen; only its weights differ.
+            brain.sensory.load_state_dict(
+                torch.load(cfg.encoder_state_path, map_location="cpu"), strict=True
+            )
+        return brain
     if cfg.arm == "monolithic":
+        if cfg.encoder_state_path:
+            # The monolithic arm has no `sensory` region to load into. Refusing beats loading
+            # nothing and reporting a "pretrained" number that is a random encoder.
+            raise ValueError("encoder_state_path is only supported for arm='regionalized'")
         reference = Brain(
             encoder=cube_encoder(), n_obs=CUBE_N_OBS, obs_width=CUBE_OBS_WIDTH,
             n_actions=cfg.n_actions, content=cfg.content, seed=encoder_seed,
