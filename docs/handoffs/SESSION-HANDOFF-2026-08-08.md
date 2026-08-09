@@ -1,5 +1,18 @@
 # Session Handoff - 2026-08-08 (Sat) - Week 19 session 1
 
+> [!important] **SUPERSEDED for current state. Both runs below have FINISHED.**
+> **Start from `docs/handoffs/SESSION-HANDOFF-2026-08-10.md` instead.**
+>
+> - **EXP-038 finished** 2026-08-08 19:02 after 22 h 47 m, 48/48, zero tracebacks. Both claims
+>   **refuted**; the trainer stabilizers are closed. Written up in
+>   `experiments/038_depth6_collapse/RESULTS.md`.
+> - **EXP-039 finished** 2026-08-08, 12/12 seeds. **Both bars cleared.** Written up in
+>   `experiments/039_encoder_pretraining/RESULTS.md`.
+> - **EXP-040 was dispatched** 2026-08-09 14:40 and is the run now in flight.
+>
+> Sections 3 (the pilot's two corrections), 4 (launcher failure modes) and 5 are still accurate
+> and worth reading. Section 0's ETA arithmetic was **wrong** - see the 08-10 handoff, section 4.
+
 > **TWO RUNS IN FLIGHT.**
 >
 > - **EXP-038 on the laptop.** Dispatched 2026-08-07 20:15:11 at `6416379`, 48 runs, 10
