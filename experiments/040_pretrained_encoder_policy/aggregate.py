@@ -166,13 +166,26 @@ def main() -> int:
 
     print("\nCLAIM 2, does the break point move?")
     print(f"  EXP-036's 'working' rule: >= {BREAK_MULTIPLE}x floor AND >= {BREAK_ABSOLUTE}")
+    # The margin in STANDARD ERRORS is printed alongside the verdict. This adds precision to the
+    # report; it does NOT change the pre-registered rule, which remains "mean >= bar". A rule
+    # that fires on a margin inside its own noise is true-but-misleading, and EXP-037 logged
+    # exactly that failure. Read the margin, not only the word.
     for d in (5, 6):
         if d not in stats:
             continue
         mean_pre = stats[d][2]
+        arm = stats[d][3]
+        vals = [r["success_rate"] for r in arm.values()]
+        se = (sd(vals) / len(vals) ** 0.5) if len(vals) > 1 else float("nan")
         bar = max(BREAK_MULTIPLE * FLOOR[d], BREAK_ABSOLUTE)
         verdict = "WORKING" if mean_pre >= bar else "still BROKEN"
-        print(f"  depth {d}: {mean_pre:.4f} vs bar {bar:.4f} -> {verdict}")
+        margin_se = (mean_pre - bar) / se if se and se == se else float("nan")
+        above = sum(1 for v in vals if v >= bar)
+        print(f"  depth {d}: {mean_pre:.4f} +-{se:.4f} vs bar {bar:.4f} -> {verdict}"
+              f"   margin {margin_se:+.2f} SE, {above}/{len(vals)} seeds above bar")
+        if verdict == "WORKING" and margin_se < 1.0:
+            print(f"    CAUTION: clears by {margin_se:+.2f} SE. The rule fires, but the margin")
+            print(f"    is inside the noise. Do NOT report depth {d} as solidly working.")
     if 5 in stats and stats[5][2] >= max(BREAK_MULTIPLE * FLOOR[5], BREAK_ABSOLUTE):
         print("  THE BREAK POINT MOVES. Depth 5 has been broken since EXP-036 and nothing has")
         print("  shifted it until now. This is the most consequential cube result to date.")
