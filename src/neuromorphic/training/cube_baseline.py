@@ -545,6 +545,12 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         entropies = []
+        # Per-stage telemetry (week 19 diagnosis). `mean_train_entropy` is one number for the
+        # whole run, which cannot say WHEN a policy collapsed - and EXP-040 produced two seeds
+        # that ended at entropy 0.04 with modal 1.000 while their encoders measured completely
+        # normal. This records the trajectory so the stage at which entropy dies is visible.
+        # ADDITIVE ONLY: a new record key, no existing field or code path changes.
+        stage_trace = []
         for stage_depth, stage_episodes in stages:
             if stage_depth == cfg.depth:
                 stage_train = train_states
@@ -559,6 +565,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 stage_train, random.Random(train_seed),
                 scramble_depth=stage_depth, max_steps=max_steps_for(stage_depth),
             )
+            stage_ents: list[float] = []
+            stage_solved = 0
             for _ in range(stage_episodes):
                 readout.reset()
                 if use_memory:
@@ -573,10 +581,22 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 )
                 baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
                 entropies.append(stats["mean_entropy"])
+                stage_ents.append(stats["mean_entropy"])
+                stage_solved += int(stats["reached_goal"])
                 steps_total += stats["steps"]
                 revisits += len(env.visited) - len(set(env.visited))
                 stored_counts.append(agent.hippo.n_stored if use_memory else 0)
                 unshuffled_steps += readout.unshuffled_steps
+            if stage_ents:
+                tenth = max(1, len(stage_ents) // 10)
+                stage_trace.append({
+                    "depth": stage_depth,
+                    "episodes": stage_episodes,
+                    "entropy_first_10pct": sum(stage_ents[:tenth]) / tenth,
+                    "entropy_last_10pct": sum(stage_ents[-tenth:]) / tenth,
+                    "entropy_min": min(stage_ents),
+                    "train_solved_frac": stage_solved / len(stage_ents),
+                })
         result = evaluate_states(
             agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=train_seed,
             feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
@@ -611,6 +631,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "readout": cfg.readout,
         "revisit_rate": (revisits / steps_total) if steps_total else 0.0,
         "mean_train_entropy": (sum(entropies) / len(entropies)) if entropies else 0.0,
+        "stage_trace": stage_trace,
         "mean_n_stored": (sum(stored_counts) / len(stored_counts)) if stored_counts else 0.0,
         "unshuffled_steps": unshuffled_steps,
         "unshuffled_frac": (unshuffled_steps / steps_total) if steps_total else 0.0,
