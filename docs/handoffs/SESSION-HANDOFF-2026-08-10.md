@@ -1,4 +1,12 @@
-# Session Handoff - 2026-08-10 (Mon) - Week 19 session 2
+# Session Handoff - 2026-08-10 (Mon) - Week 19 session 1
+
+> [!note] Week boundaries, corrected 2026-08-10
+> **Week 18 is Mon 2026-08-03 to Sun 2026-08-09**, per the week-18 vault note's own frontmatter
+> and the recurring Sunday 10:00 Weekly Review. EXP-038, EXP-039 and EXP-040 were all designed
+> and dispatched inside week 18; only EXP-040's landing (02:09 Mon) falls in week 19.
+>
+> The 08-08 handoff was mislabelled "Week 19 session 1" and is now **week 18 session 4**. This
+> file is the genuine start of week 19.
 
 > **EXP-040 is IN FLIGHT on the laptop.** Dispatched 2026-08-09 14:40 at commit `bb2b3e5`.
 > Phase 1 (12 pretrained encoders) is **done**; phase 2 is 36 policy runs, ~3.24M env steps,
