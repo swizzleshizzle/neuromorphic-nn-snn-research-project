@@ -1,0 +1,154 @@
+{
+  "2": {
+    "success": 0.0,
+    "modal": 1.0,
+    "stage_trace": [
+      {
+        "depth": 1,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.6163423464894294,
+        "entropy_last_10pct": 0.0053955249027349056,
+        "entropy_min": 0.0005380529328249395,
+        "train_solved_frac": 0.3312
+      },
+      {
+        "depth": 2,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.0008812332253437489,
+        "entropy_last_10pct": 0.0007999586090445518,
+        "entropy_min": 3.937032670364715e-05,
+        "train_solved_frac": 0.0332
+      },
+      {
+        "depth": 3,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.0010318077672272922,
+        "entropy_last_10pct": 0.00017360513806488598,
+        "entropy_min": 5.504261935129762e-06,
+        "train_solved_frac": 0.0
+      },
+      {
+        "depth": 4,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.00021646894895275182,
+        "entropy_last_10pct": 6.249838597383928e-06,
+        "entropy_min": 2.3496811607515156e-08,
+        "train_solved_frac": 0.0
+      }
+    ]
+  },
+  "4": {
+    "success": 0.0,
+    "modal": 1.0,
+    "stage_trace": [
+      {
+        "depth": 1,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.7508031385689974,
+        "entropy_last_10pct": 0.006364512567874044,
+        "entropy_min": 0.0011934360954910517,
+        "train_solved_frac": 0.3224
+      },
+      {
+        "depth": 2,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.0026571296153124423,
+        "entropy_last_10pct": 0.0013207532372325659,
+        "entropy_min": 0.00023102037084754556,
+        "train_solved_frac": 0.0324
+      },
+      {
+        "depth": 3,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.00176519487274345,
+        "entropy_last_10pct": 0.001419875146872073,
+        "entropy_min": 1.364712261420209e-05,
+        "train_solved_frac": 0.0004
+      },
+      {
+        "depth": 4,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.001172821127336647,
+        "entropy_last_10pct": 4.365101627286094e-05,
+        "entropy_min": 2.3676993521348777e-07,
+        "train_solved_frac": 0.0
+      }
+    ]
+  },
+  "0": {
+    "success": 0.49624060150375937,
+    "modal": 0.5405958077010709,
+    "stage_trace": [
+      {
+        "depth": 1,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.9933531150817871,
+        "entropy_last_10pct": 0.08952033755648882,
+        "entropy_min": 0.0004173267516307533,
+        "train_solved_frac": 0.6096
+      },
+      {
+        "depth": 2,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.3989761097729206,
+        "entropy_last_10pct": 0.32102318002283575,
+        "entropy_min": 0.00274772010743618,
+        "train_solved_frac": 0.6632
+      },
+      {
+        "depth": 3,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.3651579065658152,
+        "entropy_last_10pct": 0.2562461292333901,
+        "entropy_min": 0.004735174588859081,
+        "train_solved_frac": 0.562
+      },
+      {
+        "depth": 4,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.4123469141945243,
+        "entropy_last_10pct": 0.3784820607826114,
+        "entropy_min": 0.0012610612902790308,
+        "train_solved_frac": 0.3964
+      }
+    ]
+  },
+  "1": {
+    "success": 0.49624060150375937,
+    "modal": 0.5117053998632947,
+    "stage_trace": [
+      {
+        "depth": 1,
+        "episodes": 2500,
+        "entropy_first_10pct": 1.1905765139460565,
+        "entropy_last_10pct": 0.22748233977751806,
+        "entropy_min": 0.0004675858945120126,
+        "train_solved_frac": 0.7396
+      },
+      {
+        "depth": 2,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.3936030266676098,
+        "entropy_last_10pct": 0.266331687964499,
+        "entropy_min": 0.0017720547039061785,
+        "train_solved_frac": 0.726
+      },
+      {
+        "depth": 3,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.3671149603212252,
+        "entropy_last_10pct": 0.3832190653495491,
+        "entropy_min": 0.0011715955333784223,
+        "train_solved_frac": 0.6616
+      },
+      {
+        "depth": 4,
+        "episodes": 2500,
+        "entropy_first_10pct": 0.48901294293254616,
+        "entropy_last_10pct": 0.4283087906688452,
+        "entropy_min": 0.004495591856539249,
+        "train_solved_frac": 0.4784
+      }
+    ]
+  }
+}
