@@ -219,7 +219,35 @@ EXP-038, EXP-039 and EXP-040 were all week-18 work and were missing. Now added, 
 close-out section, and the title changed to reflect the actual arc (the curriculum closes, the
 trainer closes, the encoder opens). Handoff week labels corrected at `52d7c3f`.
 
-### The diagnosis, RUNNING ON THE VPS overnight
+### THE DIAGNOSIS LANDED - root cause found. See `experiments/041_seed_collapse_diagnosis/RESULTS.md`
+
+> [!success] Curriculum stage 1 pays 33% for the worst possible policy
+> EXP-040's two dead seeds die in **stage 1 (depth 1)** and never recover: entropy 0.005 and
+> flat, where working seeds end stage 1 at 0.09-0.23 and **rebound to ~0.4** in stage 2.
+>
+> They solve **0.331 / 0.322** of depth-1 episodes - which is 1/3, which is exactly what a
+> constant-action policy scores. Verified by enumeration: all six constant policies solve 2/6.
+> A face move has **order 4**, so from a 1-move scramble any repeated move either inverts it
+> (1 step) or cycles back to solved (3 steps), and the `2d+3 = 5` budget covers both.
+>
+> | depth | budget | constant-action | uniform-random |
+> |---|---|---|---|
+> | **1** | 5 | **0.3333** | 0.2208 |
+> | 2 | 7 | 0.0370 | 0.0509 |
+> | 3 | 9 | 0.0000 | 0.0104 |
+>
+> **Depth 1 is the ONLY stage where degeneracy beats exploring.** The trap predates the encoder -
+> it did not fire with a frozen random encoder because learning was slow enough for entropy to
+> survive stage 1. A pretrained encoder sharpens the gradient and reaches an attractor sooner,
+> which is **one mechanism producing both of EXP-040's tails**: the tripled mean and the 2/12
+> failures.
+>
+> **No fix applied.** Four candidates with trade-offs are in the RESULTS. The cleanest incentive
+> flip - a depth-1 budget of 2, dropping constant-action to 0.167, below random - touches
+> `max_steps_for`, which every cube experiment depends on. That is a comparability decision to
+> take deliberately. **Whichever is chosen needs a pre-registered arm against the 2/12 rate.**
+
+### The diagnosis run (completed), for reference
 
 **Deliberately not on the laptop** - it is offline (last seen 17 h ago) and Michael wanted it to
 stay off. Everything needed was already fetched here, so the run is self-contained.
@@ -259,11 +287,23 @@ hypothesis is premature convergence - a pretrained encoder makes depths 1-2 triv
 the policy locks onto a constant action, and nothing is left to explore with by depth 4.
 **That hypothesis is NOT yet tested; it is what the trace is for.**
 
+### Also built: the visual story (`viz/manim/`)
+
+A three-act arc from EXP-029's 2.2% to EXP-040 moving the break point, for talks and video.
+`viz/manim/story.md` is the plan; `data.py` reads the committed records so a scene cannot drift
+from its experiment; four scenes drafted needing no LaTeX. **Never rendered** - written while
+the VPS was busy, so layout is unverified.
+
+Use **ManimCE** (`pip install manim`), not `3b1b/manim`, which is Grant's unsupported personal
+codebase. Records absent locally for EXP-027/029/030; their published means cover every scene,
+and they would only be needed for per-seed scatter.
+
+**Content Day is Sat Aug 16**, and both drafted titles for Video 8 are now out of date in the
+project's favour.
+
 ### Still queued for week 19
 
-Nothing else was started tonight, deliberately. In rough priority:
-
-1. finish the seed diagnosis and fix the root cause
+1. **Choose and pre-register a fix for the depth-1 trap** (root cause now known)
 2. fine-tune the encoder during RL (frozen already works)
 3. longer pretraining - the objective had not saturated at 40 epochs
 4. push past depth 7 and find where the break point now sits
