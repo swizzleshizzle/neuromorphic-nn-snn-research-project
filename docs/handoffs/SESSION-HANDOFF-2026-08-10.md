@@ -212,6 +212,65 @@ Not tracked:
 13. The Aug 8 calendar milestone duplicates the recurring coding block in the same slot, and its
     description still says "next up: curriculum tuning", which EXP-037 refuted.
 
+## 9. Week 19 session 1 (Mon night) - what happened, and what is running
+
+**Week 18 was wrapped first.** Its vault note covered only EXP-036/037 and stopped on Aug 7;
+EXP-038, EXP-039 and EXP-040 were all week-18 work and were missing. Now added, with a
+close-out section, and the title changed to reflect the actual arc (the curriculum closes, the
+trainer closes, the encoder opens). Handoff week labels corrected at `52d7c3f`.
+
+### The diagnosis, RUNNING ON THE VPS overnight
+
+**Deliberately not on the laptop** - it is offline (last seen 17 h ago) and Michael wanted it to
+stay off. Everything needed was already fetched here, so the run is self-contained.
+
+```bash
+# progress
+grep -c "done:" /tmp/.../scratchpad/diag.log     # 4 seeds expected, ~2 h each, sequential
+# the payload
+cat /tmp/.../scratchpad/diag_out/diag_summary.json
+```
+
+Seeds **2, 4** (fail) and **0, 1** (work) at depth 4, EXP-040's exact configuration, 1 worker,
+`nice 10`, ~248 MB. Started ~23:55, so **done around 08:00**.
+
+> [!important] Phase 1 already eliminated the two obvious explanations
+> - **The encoders are fine.** From the serialised weights, seeds 2 and 4 sit mid-pack on mean
+>   rate, dead units and weight scale, and **seed 2 has the HIGHEST across-state discrimination
+>   of all twelve** (0.207). Encoder quality does not even correlate with policy success: seed 8,
+>   the best performer, has the *lowest* across-state sd.
+> - **The initial policy is fine.** Before any training every seed sits at **96-99% of the log-6
+>   entropy ceiling**, failing seeds included.
+> - **It fails on the TRAIN side too** (train_success 0.000), so it is not generalisation.
+>
+> So the collapse **develops during training**, and `mean_train_entropy` - one number per run -
+> structurally cannot say when. Hence the new `stage_trace` telemetry (`8a640b1`), which is
+> additive and passed the encoder-seam neutrality check unchanged.
+
+**What to read when it lands:** the reproduction check first. Each seed should reproduce its
+EXP-040 value **exactly** - that equality proves the telemetry perturbed nothing and that the
+failure is deterministic rather than a fluke. **If seed 2 comes back non-zero, that is a
+different and more interesting problem** and the per-stage trace should be ignored until it is
+explained.
+
+Then the per-stage entropy trace: **at which curriculum stage does entropy die, and does the
+failing seed solve its early stages *more* successfully than the working ones?** The live
+hypothesis is premature convergence - a pretrained encoder makes depths 1-2 trivially learnable,
+the policy locks onto a constant action, and nothing is left to explore with by depth 4.
+**That hypothesis is NOT yet tested; it is what the trace is for.**
+
+### Still queued for week 19
+
+Nothing else was started tonight, deliberately. In rough priority:
+
+1. finish the seed diagnosis and fix the root cause
+2. fine-tune the encoder during RL (frozen already works)
+3. longer pretraining - the objective had not saturated at 40 epochs
+4. push past depth 7 and find where the break point now sits
+5. `^bbd0` audit the wrong-budget 0.354 modal anchor
+6. `^7741` the EXP-030 memory re-ask - now 192 serialised heads
+7. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in `progress-tracker`
+
 ## 6. Pointers
 
 - Results: `experiments/03{8,9}_*/RESULTS.md`
