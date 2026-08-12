@@ -16,7 +16,12 @@ from pathlib import Path
 import pytest
 import torch
 
-from neuromorphic.training.cube_baseline import CubeConfig, make_agent, run_cube_baseline
+from neuromorphic.training.cube_baseline import (
+    CubeConfig,
+    make_agent,
+    max_steps_for,
+    run_cube_baseline,
+)
 from neuromorphic.training.encoder_pretrain import load_encoder, make_sensory, save_encoder
 
 # Captured 2026-08-09 from the commit immediately before `encoder_state_path` was added, by
@@ -129,3 +134,76 @@ def test_encoder_state_path_appears_in_the_record_config(tmp_path):
     assert rec["config"]["encoder_state_path"] == str(path)
     written = json.loads((tmp_path / [p.name for p in tmp_path.glob("*.json")][0]).read_text())
     assert written["config"]["encoder_state_path"] == str(path)
+
+
+# --------------------------------------------------------------------------- EXP-042 seam
+
+def test_max_steps_override_is_empty_by_default():
+    """Empty must mean the shipped `2d+3`, or every prior cube record stops being comparable."""
+    assert CubeConfig().max_steps_by_depth == ()
+
+
+def test_depth1_cap_removes_the_constant_action_exploit():
+    """The whole point of the EXP-042 seam, verified by enumeration rather than argued.
+
+    EXP-041: a face move has order 4, so from a one-move scramble any repeated move either
+    inverts it (1 step) or cycles back to solved (3 steps). With the shipped budget of 5 a
+    CONSTANT-ACTION policy scores 1/3 at depth 1 - above a random policy's 0.221 - and
+    curriculum stage 1 therefore selects for the worst possible policy.
+
+    Capping depth 1 at 2 steps admits the inverse and not the cycle. This fails if the cap is
+    ever raised to 3, which is exactly the value that would silently restore the exploit.
+    """
+    from neuromorphic.envs.cube import MOVES, apply_move
+    from neuromorphic.envs.cube_distance import ExactBFSDistance
+
+    prov = ExactBFSDistance(max_depth=2)
+    shell = prov.states_at_distance(1)
+
+    def const_policy_rate(budget: int) -> float:
+        solved = 0
+        for a in range(len(MOVES)):
+            for s in shell:
+                cur = s
+                for _ in range(budget):
+                    cur = apply_move(cur, a)
+                    if prov.distance(cur) == 0:
+                        solved += 1
+                        break
+        return solved / (len(MOVES) * len(shell))
+
+    shipped = const_policy_rate(max_steps_for(1))          # budget 5
+    capped = const_policy_rate(2)                          # the EXP-042 arm
+
+    assert shipped == pytest.approx(1 / 3, abs=1e-6), "the trap must still be present at 2d+3"
+    assert capped == pytest.approx(1 / 6, abs=1e-6), "a 2-step cap must halve the exploit"
+    # The bar that matters: below a uniform-random policy's measured 0.2208.
+    assert capped < 0.2208, "capping must make degeneracy WORSE than exploring"
+    assert shipped > 0.2208, "and the shipped budget must make it better - that is the bug"
+
+
+def test_override_changes_training_budget_but_not_evaluation(tmp_path):
+    """An override must never change how an arm is SCORED.
+
+    Evaluation runs at `max_steps_for(cfg.depth)` regardless. Overriding a depth the run does
+    not evaluate at must leave the held-out result reachable by the same yardstick; this fails
+    against an implementation that threads the override into `evaluate_states`.
+    """
+    from neuromorphic.training.cube_baseline import run_cube_baseline
+
+    base = _cfg(0, tmp_path, depth=2, curriculum=(1, 2), episodes=8, max_depth=3)
+    over = _cfg(0, tmp_path / "b", depth=2, curriculum=(1, 2), episodes=8, max_depth=3,
+                max_steps_by_depth=((1, 2),))
+    (tmp_path / "b").mkdir(exist_ok=True)
+
+    r_base = run_cube_baseline(base)
+    r_over = run_cube_baseline(over)
+
+    # Same evaluated depth, so the same eval budget and the same held-out set size.
+    assert r_base["n"] == r_over["n"]
+    # In-memory the record keeps tuples (`asdict`); JSON turns them into lists on the way out.
+    assert r_base["config"]["max_steps_by_depth"] == ()
+    assert r_over["config"]["max_steps_by_depth"] == ((1, 2),)
+
+    written = json.loads(next((tmp_path / "b").glob("*.json")).read_text())
+    assert written["config"]["max_steps_by_depth"] == [[1, 2]], "provenance must survive to disk"

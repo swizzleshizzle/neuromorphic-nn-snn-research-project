@@ -84,6 +84,19 @@ class CubeConfig:
     # Verified against a baseline captured before this field existed; see
     # tests/training/test_encoder_seam.py.
     encoder_state_path: str | None = None
+    # EXP-042. Per-depth TRAINING step-budget overrides as ((depth, steps), ...).
+    #
+    # EXP-041 found the trap this exists to close: `max_steps_for(d) = 2d+3` gives depth 1 a
+    # budget of 5 where optimal is 1, and a face move has ORDER 4 - so from a one-move scramble
+    # any repeated move either inverts it (1 step) or cycles back to solved (3 steps). Both fit.
+    # A constant-action policy therefore scores 0.3333 at depth 1 against a random policy's
+    # 0.2208, and curriculum stage 1 positively selects for the worst possible policy.
+    # Capping depth 1 at 2 steps admits the inverse but not the cycle: 0.1667, below random.
+    #
+    # TRAINING ONLY. Evaluation always uses `max_steps_for(cfg.depth)`, so an override cannot
+    # change how any arm is scored - otherwise the comparison would measure the yardstick.
+    # Empty is the shipped behaviour and must reproduce every prior cube record byte-for-byte.
+    max_steps_by_depth: tuple[tuple[int, int], ...] = ()
     max_depth: int = 6          # BFS table bound
     heldout_cap: int = 200
     heldout_frac: float = 0.25
@@ -561,9 +574,14 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     shell_states(provider, stage_depth), stage_depth, seed=split_seed,
                     heldout_cap=cfg.heldout_cap, heldout_frac=cfg.heldout_frac,
                 )
+            # EXP-042 seam. TRAINING budget only; evaluation below always uses
+            # max_steps_for(cfg.depth), so an override cannot change how an arm is scored.
+            stage_limit = dict(cfg.max_steps_by_depth).get(
+                stage_depth, max_steps_for(stage_depth)
+            )
             env = ShellCubeEnv(
                 stage_train, random.Random(train_seed),
-                scramble_depth=stage_depth, max_steps=max_steps_for(stage_depth),
+                scramble_depth=stage_depth, max_steps=stage_limit,
             )
             stage_ents: list[float] = []
             stage_solved = 0
@@ -574,7 +592,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 stats = train_episode(
                     agent, head, env, optimizer,
                     gamma=cfg.gamma, baseline=baseline, generator=generator,
-                    max_steps=max_steps_for(stage_depth),
+                    max_steps=stage_limit,
                     entropy_beta=cfg.entropy_beta,
                     normalize_advantages=cfg.normalize_advantages,
                     store=use_memory, recall=use_memory, feature_fn=readout,
