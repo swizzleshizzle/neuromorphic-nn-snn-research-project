@@ -311,6 +311,70 @@ project's favour.
 6. `^7741` the EXP-030 memory re-ask - now 192 serialised heads
 7. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in `progress-tracker`
 
+## 10. Week 19 session 2 (Wed night) - EXP-042 IN FLIGHT, and the render pass failed
+
+### EXP-042, running on the laptop
+
+Dispatched 2026-08-12 18:55 at `9c8e286`. 36 runs, ~2.91M env steps, **~18 h, landing around
+13:00 Thursday**. Healthy at 7.4-7.5 effective cores, zero tracebacks.
+
+```bash
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe_run.ps1 -OutDir "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project\experiments\042_depth1_trap\outputs"'
+.venv/bin/python experiments/042_depth1_trap/aggregate.py    # NOT WRITTEN YET - see below
+```
+
+Three arms on EXP-040's pretrained encoders, closing the EXP-041 trap:
+
+| arm | change | depth-1 constant-action reward |
+|---|---|---|
+| baseline | none | 0.3333 |
+| **capped** | `max_steps_by_depth=((1,2),)` | **0.1667** (below random's 0.2208) |
+| skipped | `curriculum=(2,3,4)` | n/a |
+
+> [!important] Read the spec's section 3 BEFORE reading any result
+> The effect is **2 of 12 seeds**. A paired permutation test where two seeds carry the whole
+> difference gives **p about 0.5 BY CONSTRUCTION**; Fisher's exact on 2/12 against 0/12 gives
+> 0.48. **No arrangement of 12 seeds can prove the failures were eliminated.**
+>
+> So the PRIMARY claim is **entropy entering the final stage** - a per-seed mechanism measure
+> that varies across all twelve - and the failure count is reported with **no p-value at all**.
+> A Claim 1 refutation whose effect is confined to the two previously-failing seeds **must** be
+> reported as *underpowered by construction*, not as "the fix does not work".
+
+**`aggregate.py` was not written.** The block ran out on the manim attempt. It needs to apply
+the four claims in `docs/superpowers/specs/2026-08-12-exp042-depth1-trap-design.md`, reading
+`stage_trace[-1]["entropy_first_10pct"]` as the primary. **Write it before reading the records**,
+so the rules are on disk before the numbers - the standing habit.
+
+### The manim render pass FAILED, and the attempts are recorded
+
+`viz/manim/README.md` now leads with the blocker. **Do not repeat these:** plain install,
+`--no-binary` source build, and cython with `--no-build-isolation` all leave
+`site-packages/manimpango/` holding Cython sources and **no compiled `.so`**.
+
+Fixed along the way and worth keeping: **`libcairo2-dev`, `libpango1.0-dev`, `pkg-config` are
+now installed**, so `pycairo` - the original blocker - builds.
+
+> [!warning] The manim venv is isolated ON PURPOSE
+> `/root/scratch/manim-venv`, not the project venv. Manim's dependency tree pulls **scipy**, and
+> this repo deliberately has none - which is **why the exact permutation tests exist**.
+> Installing into `.venv` would silently remove the constraint the methodology rests on.
+> Verified after installing: `import scipy` in `.venv` still fails, as it should.
+
+**Shortest path is probably the laptop**, which is the intended final-render box anyway and more
+likely to have matching prebuilt wheels. This VPS blocker may not be worth solving.
+
+**Content Day is Sat Aug 16 and the scenes remain unrendered and unverified.** That is the
+standing risk.
+
+### serverlocal is not a good render target
+
+Probed: GPU genuinely idle (378 MiB of 8192, 0% util) - but **manim's default renderer is
+CPU-only cairo**, so the GPU goes unused, and that box's **FX-8350 / DDR3** is far behind both
+the laptop and this VPS per core. It also serves Jellyfin/Ollama to other people and runs the
+QuantConnect live pipeline. Its GPU would only help for NVENC encoding, which is not the
+bottleneck.
+
 ## 6. Pointers
 
 - Results: `experiments/03{8,9}_*/RESULTS.md`
