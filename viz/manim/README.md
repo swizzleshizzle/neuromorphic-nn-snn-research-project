@@ -19,6 +19,38 @@ same API lineage.
 .venv/bin/pip install manim
 ```
 
+## BLOCKED on this box: `manimpango` will not build (2026-08-12)
+
+**Manim installs; importing it fails.** Do not repeat these three attempts.
+
+```
+ModuleNotFoundError: No module named 'manimpango._register_font'
+```
+
+`site-packages/manimpango/` contains only Cython **sources** (`_register_font.pyx`, `.pxd`) and
+**no compiled `.so`** - the build backend produced a wheel without cythonising the extensions.
+
+Tried and did **not** work:
+
+1. plain `uv pip install manim` - pulled the manimpango wheel, same missing module
+2. `--reinstall --no-cache --no-binary manimpango` - "Built manimpango==0.6.1", still no `.so`
+3. adding `cython`/`setuptools`/`wheel` and `--no-build-isolation` - unchanged
+
+What **was** fixed along the way, and is now in place:
+
+- `libcairo2-dev`, `libpango1.0-dev`, `pkg-config` installed system-wide (cairo 1.16.0,
+  pango 1.50.6). `pycairo` builds fine now; it was the original blocker.
+- The manim venv is **isolated at `/root/scratch/manim-venv`** (python 3.11), deliberately
+  **not** the project venv - manim's dependency tree would drag **scipy** in, and this repo has
+  none on purpose, which is why the exact permutation tests exist. Verified after installing:
+  `import scipy` in `.venv` still fails, as it should.
+
+**Untried next steps**, in order of likely payoff: install manimpango from the distro
+(`apt install python3-manimpango`) if packaged; pin an older manimpango with working cp311
+wheels; build in a container; or **just render on the laptop/desktop**, where prebuilt wheels are
+more likely to match. Given the laptop is the intended final-render box anyway, that may be the
+shortest path and this VPS blocker may not be worth solving at all.
+
 ## Dependencies on this box
 
 Checked 2026-08-11:
