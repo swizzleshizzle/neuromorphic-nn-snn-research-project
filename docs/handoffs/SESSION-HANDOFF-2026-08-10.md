@@ -1,5 +1,9 @@
 # Session Handoff - 2026-08-10 (Mon) - Week 19 session 1
 
+> [!important] **SUPERSEDED. Start from `docs/handoffs/SESSION-HANDOFF-2026-08-13.md`.**
+> EXP-042 finished and is written up; EXP-043 is now the run in flight. Sections 4 and 10 of
+> this file (operational lessons, the manim blocker) are still accurate.
+
 > [!note] Week boundaries, corrected 2026-08-10
 > **Week 18 is Mon 2026-08-03 to Sun 2026-08-09**, per the week-18 vault note's own frontmatter
 > and the recurring Sunday 10:00 Weekly Review. EXP-038, EXP-039 and EXP-040 were all designed
