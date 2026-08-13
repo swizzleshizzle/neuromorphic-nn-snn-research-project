@@ -143,21 +143,33 @@ def main() -> int:
         m, p = st.mean(diffs), permutation_p(diffs)
         # How much of the effect is carried by the two seeds that failed in EXP-040? If it is
         # nearly all of it, the test is underpowered BY CONSTRUCTION and must be reported so.
+        #
+        # FIXED 2026-08-13, after the first run printed "354%". Dividing by `abs(sum(diffs))`
+        # is unbounded: when the arm's net effect is near zero because seeds cancel, a modest
+        # contribution divides by a tiny denominator and exceeds 100%, which is meaningless.
+        # A share must be a share. Denominator is now the total absolute movement, so it is
+        # bounded by 1. NO THRESHOLD CHANGED - this is a broken diagnostic, not a moved bar.
         idx = {s: i for i, s in enumerate(seeds)}
-        from_failed = sum(diffs[idx[s]] for s in EXP040_ZEROS if s in idx)
-        share = abs(from_failed) / abs(sum(diffs)) if sum(diffs) else 0.0
+        from_failed = sum(abs(diffs[idx[s]]) for s in EXP040_ZEROS if s in idx)
+        total_abs = sum(abs(d) for d in diffs)
+        share = (from_failed / total_abs) if total_abs else 0.0
+        # The directly interpretable quantity: does the effect survive dropping those seeds?
+        rest = [diffs[idx[s]] for s in seeds if s not in EXP040_ZEROS]
+        mean_rest = st.mean(rest) if rest else 0.0
         nonzero = sum(1 for d in diffs if abs(d) > 0.01)
         print(f"  {a:<9} {m:+.4f}  exact p {p:.4f}  (n={len(diffs)}, "
-              f"{nonzero} seeds moved >0.01)")
+              f"{nonzero} seeds moved >0.01, {100 * share:.0f}% of total movement from "
+              f"seeds {EXP040_ZEROS}, mean excluding them {mean_rest:+.4f})")
         if m >= CLAIM1_DELTA and p <= ALPHA:
             print("            CONFIRMED. The fix keeps exploration alive into the final stage.")
         elif share > 0.8:
-            print(f"            UNDERPOWERED BY CONSTRUCTION. {100 * share:.0f}% of the effect")
+            print(f"            UNDERPOWERED BY CONSTRUCTION. {100 * share:.0f}% of the movement")
             print(f"            comes from seeds {EXP040_ZEROS}, and a 2-of-12 effect cannot")
             print("            reach significance in a paired test. This is NOT 'the fix does")
             print("            not work' - read Claim 2's descriptive result instead.")
         else:
-            print(f"            REFUTED ({m:+.4f}, p {p:.4f}). The effect is spread across seeds")
+            print(f"            REFUTED ({m:+.4f}, p {p:.4f}). The effect is SPREAD across seeds")
+            print(f"            ({nonzero}/12 moved, {mean_rest:+.4f} excluding the failed two)")
             print("            and still did not clear the bar, so this IS a real refutation.")
 
     print("\nCLAIM 2 (SECONDARY, DESCRIPTIVE - no p-value, by design)")
