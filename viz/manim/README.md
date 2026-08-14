@@ -13,10 +13,11 @@ made with - but it is explicitly not supported for outside use, has sparse docs,
 without notice. **ManimCE is the maintained fork**: versioned pip releases, real documentation,
 same API lineage.
 
-**You do not clone it.** It is a normal package:
+**You do not clone it.** It is a normal package - but **never into the project venv**, because its
+dependency tree pulls scipy:
 
 ```bash
-.venv/bin/pip install manim
+python -m venv ~/manim-venv && ~/manim-venv/bin/pip install manim
 ```
 
 ## BLOCKED on this box: `manimpango` will not build (2026-08-12)
@@ -45,11 +46,10 @@ What **was** fixed along the way, and is now in place:
   none on purpose, which is why the exact permutation tests exist. Verified after installing:
   `import scipy` in `.venv` still fails, as it should.
 
-**Untried next steps**, in order of likely payoff: install manimpango from the distro
-(`apt install python3-manimpango`) if packaged; pin an older manimpango with working cp311
-wheels; build in a container; or **just render on the laptop/desktop**, where prebuilt wheels are
-more likely to match. Given the laptop is the intended final-render box anyway, that may be the
-shortest path and this VPS blocker may not be worth solving at all.
+**CLOSED as won't-fix, 2026-08-14.** The laptop route was taken instead and worked first time:
+`pip install manim` there pulled a working `manimpango` 0.6.1 cp313 wheel. `python3-manimpango`
+is **not** packaged for Ubuntu 22.04 (`apt-cache policy` returns nothing), so the one untried
+idea with real odds is gone too. Do not spend more time on this box; render on the laptop.
 
 ## Dependencies on this box
 
@@ -66,27 +66,47 @@ Checked 2026-08-11:
 **LaTeX is not needed.** These scenes use `Text` (Pango) and never `MathTex`/`Tex`. Installing
 texlive costs 1-4 GB; only do it if a scene genuinely needs typeset formulas.
 
-## Rendering
+## Rendering - do it on the laptop
+
+**All four scenes render on `swizzlesduo`, verified 2026-08-14** at `-ql` and `-qh`. The VPS
+cannot render at any quality (see the manimpango section above); it can still run
+`data.py`, which is the useful half of the sanity check.
+
+The laptop was set up on 2026-08-14 and does not need setting up again:
+
+| | |
+|---|---|
+| manim | **0.21.0** in `C:\Users\mlgbr\manim-venv` (python 3.13) |
+| ffmpeg | **9.0**, `winget install --id Gyan.FFmpeg --scope user` |
+| media output | `C:\Users\mlgbr\manim-media` (outside the repo, so nothing lands in git) |
+| stills | `C:\Users\mlgbr\manim-frames` |
+
+**That venv is deliberately not the project venv.** It contains scipy, pulled in by manim's
+dependency tree; the project venv must stay scipy-free, which is why the exact permutation tests
+exist. Verify with `.venv\Scripts\python.exe -c "import scipy"` still failing.
 
 ```bash
-cd viz/manim
-../../.venv/bin/python data.py                              # sanity: print the real numbers first
-manim -ql scenes/story_scenes.py TheBreakPointMoves         # 480p, fast, iterate
-manim -qh scenes/story_scenes.py TheBreakPointMoves         # 1080p
-manim -qk scenes/story_scenes.py TheBreakPointMoves         # 4K, final only
+# from the VPS. sync first: the laptop's checkout blocks on untracked head checkpoints.
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\sync_repo.ps1'
+ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project\scripts\laptop\render_story.ps1 -Quality qh'
+scp 'laptop:C:/Users/mlgbr/manim-frames/*.png' ./frames/     # then LOOK at them
 ```
+
+`render_story.ps1` renders and then pulls stills out of each mp4, because **manim reports success
+on a scene whose caption is sitting on top of a label.** Green logs are not a rendered video; the
+stills are the actual check. `-Quality ql|qm|qh|qk`, `-Scenes A,B,C`, `-Frames N`.
 
 Scenes: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`.
 
-> [!warning] Where to render
-> **Not on this VPS beyond `-ql`.** It is 2 cores / 4 GB, and one worker is the standing limit -
-> two parallel Python workers once drove it into swap thrash, which makes the box unresponsive
-> *without* ever tripping the OOM killer. Final renders belong on the laptop (22 cores, 31 GB)
-> or the desktop.
-
-> [!important] These scenes have never been rendered
-> They were written while the VPS was busy with the seed diagnosis, so layout is unverified.
-> Positioning is the part you cannot get right by reading - expect a first-render fixup pass.
+> [!important] What the first render actually broke
+> Three defects, none of which are visible by reading the code:
+> - **Nested `arrange()` cannot build a table.** Row labels differ in width, so each row is
+>   centred on its own width and the columns drift apart. Use fixed column x and row y.
+> - **`next_to()` chained off a left-hanging label runs off the frame**, because the inheriting
+>   line is wider than the label it takes its x from.
+> - **The default Pango face uses old-style figures** - 4, 7, 9 descend and 0, 1, 8 do not - and
+>   manim centres on the bounding box, so a row of numbers visibly steps. Numeric cells use
+>   `Consolas`; prose keeps the default face.
 
 ## The rule that keeps this honest
 

@@ -7,12 +7,20 @@ DELIBERATELY CONSERVATIVE API USE: only `Text`, `Rectangle`, `Line`, `VGroup` an
 animations, all stable across ManimCE releases. No `MathTex`/`Tex`, so **no LaTeX install is
 required**. No `BarChart`, whose signature has moved between versions.
 
-    manim -ql scenes/story_scenes.py TheBreakPointMoves    # 480p, iterate anywhere
+    manim -ql scenes/story_scenes.py TheBreakPointMoves    # 480p, iterate
     manim -qh scenes/story_scenes.py TheBreakPointMoves    # 1080p, wants real cores
 
-> [!warning] These have NOT been rendered yet
-> Written before manim was installed, because the VPS was busy with the seed diagnosis. Expect
-> to fix layout on first render - positioning is the part you cannot get right by reading.
+**Rendered on the laptop, 2026-08-14.** Not on the VPS: `manimpango` will not build there. Use
+`scripts/laptop/render_story.ps1`, which also extracts stills - manim reports success on a scene
+whose caption is sitting on top of a label, so the only way to check layout from a headless
+session is to look at frames.
+
+Two layout rules learned from that first render, both of which produced visible defects:
+
+1. **Place table cells at fixed x and y, not with nested `arrange()`.** Row labels differ in
+   width, so an arranged table centres each row on its own width and the columns drift.
+2. **Do not chain `next_to()` off a left-hanging label.** The inheriting line is wider than the
+   label, so it overflows the frame edge.
 """
 
 from __future__ import annotations

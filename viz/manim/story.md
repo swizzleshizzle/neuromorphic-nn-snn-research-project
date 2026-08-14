@@ -177,5 +177,12 @@ These keep the video credible, and they are all in the write-ups:
 | `TheEncoderLearns` | grouped bars | EXP-039 records (local) | third |
 | `WhereWeStarted` | table morph | EXP-029 published + EXP-040 | last |
 
-**Hardware:** iterate at `-ql` (480p) anywhere; final renders at `-qh`/`-qk` want the laptop's 22
-cores or the desktop. **Not this VPS** — 2 cores, 4 GB, and one worker is the standing limit.
+**Hardware:** everything renders on the laptop, at any quality. **Not this VPS at all**: manim
+cannot import there. `scripts/laptop/render_story.ps1` drives it and pulls stills; `README.md` has
+the setup, which is already done.
+
+**Status 2026-08-14:** four scenes are built, rendered at 1080p, and layout-checked against real
+frames: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, and `CollapseIsASymptom`, which is
+Scene 3's evidence as a chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a
+cube renderer that does not exist yet. Still story-only: `TheCurriculumUnlock`, `PolicyCollapse`,
+`TheEncoderLearns`, `WhereWeStarted`.
