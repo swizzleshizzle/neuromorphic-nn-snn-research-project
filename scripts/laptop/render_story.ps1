@@ -35,6 +35,11 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# `powershell -File script.ps1 -Scenes A,B,C` hands the whole thing over as ONE string, unlike
+# -Command. Unsplit, manim gets a scene name that matches nothing and drops into its interactive
+# scene picker, which under `ssh -n` reads EOF and exits looking like a render failure.
+$Scenes = $Scenes | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' }
+
 $python = Join-Path $Venv 'Scripts\python.exe'
 $sceneDir = Join-Path $Repo 'viz\manim'
 foreach ($p in @($python, $sceneDir)) {
