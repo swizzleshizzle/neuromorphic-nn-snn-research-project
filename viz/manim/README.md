@@ -97,7 +97,51 @@ on a scene whose caption is sitting on top of a label.** Green logs are not a re
 stills are the actual check. `-Quality ql|qm|qh|qk`, `-Scenes A,B,C`, `-Frames N`.
 
 Scenes: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`,
-`TheCurriculumUnlock`, `TheEncoderLearns`.
+`TheCurriculumUnlock`, `TheEncoderLearns`, `WhereWeStarted`, and `FullStory`.
+
+## Assembling the whole arc
+
+**`FullStory` does it in manim, and that is the right tool for this part.** It plays all seven
+scenes in `story.md` order with act cards and a fade between each: **2 minutes 21 seconds** at
+1080p60.
+
+```bash
+ssh -n laptop 'powershell ... render_story.ps1 -Quality qh -Full'
+# or directly:  manim -qh --save_sections scenes/story_scenes.py FullStory
+```
+
+It calls each scene's own `construct`, so there is **one definition of every shot** - fix a
+layout once and the assembled cut gets it too. `--save_sections` writes the pieces as well as
+the continuous cut:
+
+```
+videos/story_scenes/1080p60/FullStory.mp4                    the whole arc
+videos/story_scenes/1080p60/sections/FullStory_0003_TheCurriculumUnlock.mp4   ...and each part
+```
+
+**If you only want the existing clips glued together**, ffmpeg concatenates without re-encoding,
+because every scene is already the same codec, resolution and frame rate. Hard cuts only:
+
+```bash
+printf "file '%s'\n" *.mp4 > list.txt
+ffmpeg -f concat -safe 0 -i list.txt -c copy out.mp4      # instant, no quality loss
+```
+
+Crossfades need the `xfade` filter and therefore a re-encode, at which point `FullStory` is
+better: its transitions are real animations rather than an effect laid over two frozen frames.
+
+### What still belongs in DaVinci
+
+Manim assembles **video**; it is not an editor. Take it into DaVinci for:
+
+- **narration, music, and audio** of any kind. Nothing here has a sound track;
+- **retiming against a voice track.** This is the big one. Every `wait()` is baked in at render
+  time, and a beat that reads well silently is usually too fast under narration. Retiming in
+  manim means editing the scene and re-rendering; in an editor it is a drag;
+- **B-roll**, screen capture, talking head, thumbnails, titles in your own template.
+
+The practical workflow is both: render `FullStory` for the assembled cut to work against, and
+drop the **section files** on the timeline as the editing units.
 
 > [!important] What the first render actually broke
 > Three defects, none of which are visible by reading the code:

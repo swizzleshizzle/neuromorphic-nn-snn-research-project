@@ -175,8 +175,9 @@ These keep the video credible, and they are all in the write-ups:
 | `TheWall` | table | EXP-033, published | **rendered** |
 | `TheEncoderLearns` | line chart | EXP-039 records | **rendered** |
 | `CollapseIsASymptom` | table | EXP-036 + 038 records | **rendered** |
+| `WhereWeStarted` | table morph | EXP-029 published + today | **rendered** |
+| `FullStory` | all of the above, in order | - | **rendered, 2:21** |
 | `PolicyCollapse` | two cubes, animated | EXP-031/032/038 records | needs a cube renderer |
-| `WhereWeStarted` | table morph | EXP-029 published + today | not built |
 
 Three of the six are charts and three are tables, which is deliberate: the two levers and the
 curriculum climb are **trends**, so they are lines and bars, while the probe ceiling and the
@@ -187,11 +188,12 @@ read as one slide.
 cannot import there. `scripts/laptop/render_story.ps1` drives it and pulls stills; `README.md` has
 the setup, which is already done.
 
-**Status 2026-08-14:** six scenes are built, rendered at 1080p, and layout-checked against real
-frames: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`,
-`TheCurriculumUnlock`, and `TheEncoderLearns`. `CollapseIsASymptom` is Scene 3's evidence as a
-chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a cube renderer that does
-not exist yet. Still story-only: `PolicyCollapse` and `WhereWeStarted`.
+**Status 2026-08-14:** seven scenes are built, rendered at 1080p, and layout-checked against real
+frames, and **`FullStory` assembles them into one 2:21 cut** with act cards and fades - see
+`README.md` for how that composes and what still belongs in an editor. `CollapseIsASymptom` is
+Scene 3's evidence as a chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a
+cube renderer that does not exist yet. `PolicyCollapse` is the only scene still story-only, and
+it is the most visceral shot in the deck.
 
 **Records do not travel with the repo.** They are gitignored, so each machine holds only what it
 ran, and a scene whose experiment is missing now fails by name rather than as a `NoneType` deep

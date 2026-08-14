@@ -1,8 +1,9 @@
 # Session Handoff - 2026-08-14 (Fri) - Week 19 session 5 - THE RENDER IS DONE
 
-> **Nothing is in flight. Both machines are idle. The repo is clean and pushed at `3eaad93`.**
+> **Nothing is in flight. Both machines are idle. The repo is clean and pushed.**
 >
-> **All six built scenes are rendered at 1080p on the laptop and checked against real frames.**
+> **All seven built scenes are rendered at 1080p, and `FullStory` assembles them into one
+> 2:21 cut** with act cards and fades. Checked against real frames, on the laptop.
 > Content Day (Sat 2026-08-16) has video assets. This file is the shorter one: the previous
 > handoff (`SESSION-HANDOFF-2026-08-14.md`) still describes the science correctly and nothing in
 > it was refuted today.
@@ -37,6 +38,14 @@ screen rather than quietly dropped.
 - **`TheEncoderLearns`** - the probe against depth, three series, with the margin over the raw
   observation drawn as the gap itself: **+0.003, +0.044, +0.042, +0.087**. At depth 3 the gap is
   a stub, which is the honest picture; the encoder only pulls ahead where the pixels fail.
+- **`WhereWeStarted`** - the closer. EXP-029's opening column morphs into today's, in place,
+  because these are the same rows: same head, same 390 parameters, same observation. Depths 5
+  and 6 get a dash rather than a zero, since EXP-029 stopped at depth 4. **Its depth-3 "now" cell
+  is not on today's recipe** (EXP-035, frozen encoder, 30,000 episodes) and says so on screen; an
+  unmarked column would have folded two encoders and a 3x budget into one word.
+- **`FullStory`** - all seven in `story.md` order, three act cards, a fade between each, **2:21**.
+  It calls each scene's own `construct` rather than copying it, so one definition of every shot
+  survives. `--save_sections` writes the pieces alongside the cut, which is what an editor wants.
 
 `curriculum_climb()` replaced the transcribed `PUBLISHED_CURRICULUM`, which was already off in
 its last digit (0.256 against a measured 0.2556). Records were local the whole time.
@@ -69,8 +78,9 @@ Ubuntu 22.04, and the laptop route worked on the first attempt. Do not spend mor
 ## 3. Two rendering lessons worth keeping
 
 > [!important] manim reports success on a scene whose caption sits on top of a label
-> The four scenes rendered green on the first attempt and had **three** layout defects. Stills are
-> the check, not the log. `render_story.ps1` extracts them for exactly this reason.
+> The first four scenes rendered green on the first attempt and had **three** layout defects
+> between them, and the two plot scenes each had another. Stills are the check, not the log.
+> `render_story.ps1` extracts them for exactly this reason.
 
 The defects, all invisible by reading the code:
 
@@ -86,6 +96,18 @@ The defects, all invisible by reading the code:
 Also: `powershell -File script.ps1 -Scenes A,B,C` passes the whole list as **one string**. manim
 then matches no scene, opens its interactive picker, reads EOF from `ssh -n`, and the whole thing
 looks exactly like a render failure. The script splits it now.
+
+### Assembling it, and where DaVinci starts
+
+`FullStory` is the manim answer and it is the one to use: real animated transitions, one
+definition of every shot, and `--save_sections` writes the pieces alongside the 2:21 cut. Plain
+`ffmpeg -f concat -c copy` also works for hard cuts with no re-encode, since every clip is
+already the same codec, resolution and frame rate; crossfades would need `xfade` and a re-encode.
+
+**What manim cannot do is audio or retiming.** Every `wait()` is baked in at render time, and
+pacing that reads well silently is usually too fast under narration - changing it means editing
+the scene and re-rendering. Narration, music, B-roll and retiming belong in an editor, with the
+section files as the timeline units. `viz/manim/README.md` has this in full.
 
 ## 4. Depth 7 pre-flight - MEASURED, and the handoff's estimate was wrong
 
@@ -116,9 +138,9 @@ it grows only with episode length, so a depth-7 eval is about 17/15 of a depth-6
    since EXP-036, so this is the interesting one.
 2. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1. It is the clearest case in the
    project where 12 seeds is the binding constraint rather than the effect.
-3. **Two scenes are still story-only.** `WhereWeStarted` is a cheap table morph. `PolicyCollapse`
-   needs a cube renderer that does not exist yet, and it is the most visceral shot in the deck:
-   two cubes side by side, one playing the same move forever.
+3. **One scene is still story-only:** `PolicyCollapse`, which needs a cube renderer that does not
+   exist yet. It is the most visceral shot in the deck - two cubes side by side, one playing the
+   same move forever - and it is the only thing the video is missing.
 4. **Fine-tune the encoder during RL** - still untested, and the frozen version now carries four
    working depths.
 5. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in the vault `progress-tracker`.
