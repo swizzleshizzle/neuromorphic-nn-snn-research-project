@@ -17,6 +17,9 @@
 #     ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File `
 #         C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project\scripts\laptop\render_story.ps1 -Quality ql'
 #
+# Add -Full for the assembled two-and-a-half-minute arc instead of the individual scenes. Its
+# per-section files land in <MediaDir>\videos\story_scenes\<res>\sections\.
+#
 # Then pull the stills:
 #     scp 'laptop:C:/Users/mlgbr/manim-frames/*.png' <local dir>
 #
@@ -31,7 +34,8 @@ param(
     [string]  $Quality  = 'ql',
     [int]     $Frames   = 3,
     [string[]]$Scenes   = @('TheBreakPointMoves', 'TheWall', 'ScaleOfTheCube', 'CollapseIsASymptom',
-                            'TheCurriculumUnlock', 'TheEncoderLearns')
+                            'TheCurriculumUnlock', 'TheEncoderLearns', 'WhereWeStarted'),
+    [switch]  $Full
 )
 
 $ErrorActionPreference = 'Continue'
@@ -40,6 +44,10 @@ $ErrorActionPreference = 'Continue'
 # -Command. Unsplit, manim gets a scene name that matches nothing and drops into its interactive
 # scene picker, which under `ssh -n` reads EOF and exits looking like a render failure.
 $Scenes = $Scenes | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' }
+
+# -Full renders the assembled arc INSTEAD of the parts. It replays every scene, so it costs about
+# what all of them cost together; there is no point doing both in one pass while iterating.
+if ($Full) { $Scenes = @('FullStory') }
 
 $python = Join-Path $Venv 'Scripts\python.exe'
 $sceneDir = Join-Path $Repo 'viz\manim'
@@ -58,7 +66,11 @@ New-Item -ItemType Directory -Force -Path $FramesDir | Out-Null
 $failed = @()
 foreach ($scene in $Scenes) {
     $log = Join-Path $env:TEMP "manim_$scene.log"
-    & $python -m manim "-$Quality" --media_dir $MediaDir scenes/story_scenes.py $scene *> $log
+    # FullStory always writes its sections: an editor wants the pieces as well as the cut, and
+    # they cost nothing extra because manim has already rendered them.
+    $extra = @()
+    if ($scene -eq 'FullStory') { $extra += '--save_sections' }
+    & $python -m manim "-$Quality" @extra --media_dir $MediaDir scenes/story_scenes.py $scene *> $log
     $code = $LASTEXITCODE
 
     $video = Join-Path $MediaDir "videos\story_scenes\$resDir\$scene.mp4"
