@@ -44,6 +44,24 @@ def _load(exp_dir: str) -> list[dict]:
     return recs
 
 
+def _require(recs: list[dict], exp: str, what: str) -> list[dict]:
+    """Fail with the machine's name for the problem, not a TypeError three frames deep.
+
+    Records are gitignored, so each machine has only the experiments it ran. The VPS has no
+    EXP-029/030; the laptop had no EXP-039 until 2026-08-14. A missing set used to surface as
+    `unsupported operand type(s) for -: 'NoneType' and 'float'` inside a scene's coordinate
+    function, which says nothing about which experiment to go and fetch.
+    """
+    if not recs:
+        raise RuntimeError(
+            f"{what} needs {exp}'s records and this machine has none at "
+            f"{OUT / exp / 'outputs'}. They are gitignored, so they live on whichever machine "
+            f"ran them - copy them across, do NOT transcribe. `python data.py` prints what is "
+            f"present here."
+        )
+    return recs
+
+
 def _cell(recs, *, depth=None, arm="regionalized", tag_has=None, **cfg_eq):
     """Records matching a cell. `cfg_eq` filters on `config` keys."""
     out = []
@@ -151,8 +169,10 @@ def depth_curve() -> dict:
     +0.1108 misses its pre-registered 0.05 at p 0.0815 and is REFUTED, and any caption that shows
     that bar has to say so.
     """
-    before = _load("036_generalisation_gap")
-    pretrained = _load("040_pretrained_encoder_policy")
+    before = _require(_load("036_generalisation_gap"), "036_generalisation_gap",
+                      "TheBreakPointMoves")
+    pretrained = _require(_load("040_pretrained_encoder_policy"),
+                          "040_pretrained_encoder_policy", "TheBreakPointMoves")
     out = {}
     for d in (4, 5, 6):
         exp, tag = CAPPED_SOURCE[d]
@@ -206,7 +226,8 @@ def curriculum_climb() -> dict:
     EXP-029's baseline and chance floor at depth 3 stay PUBLISHED; those records were never
     fetched here.
     """
-    recs = _load("034_learning_signal") + _load("035_budget_scaling")
+    recs = _require(_load("034_learning_signal") + _load("035_budget_scaling"),
+                    "EXP-034/035", "TheCurriculumUnlock")
 
     def at(tag):
         return _mean(_cell(recs, depth=3, tag_has=tag))
@@ -225,7 +246,8 @@ def curriculum_climb() -> dict:
 
 def encoder_probe() -> dict:
     """EXP-039: frozen vs trained concept vs the facelet ceiling, measured here."""
-    recs = _load("039_encoder_pretraining")
+    recs = _require(_load("039_encoder_pretraining"), "039_encoder_pretraining",
+                    "TheEncoderLearns")
     out = {}
     for d in ("3", "4", "5", "6"):
         row = {}
@@ -243,7 +265,8 @@ def collapse_evidence() -> dict:
     EXP-038's depth-6 dose axis, measured here. The entropy bonus drove modal fraction from
     0.975 down to 0.631 and success stayed at the floor.
     """
-    recs = _load("038_depth6_collapse")
+    recs = _require(_load("038_depth6_collapse"), "038_depth6_collapse",
+                    "CollapseIsASymptom")
     base = _cell(_load("036_generalisation_gap"), depth=6)
     out = {"baseline": {"modal": _mean(base, "greedy_modal_action_frac"),
                         "success": _mean(base, "success_rate")}}
