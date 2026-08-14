@@ -60,8 +60,10 @@ class TheBreakPointMoves(Scene):
         curve = data.depth_curve()
         w6 = data.working_bar(6)
         depths = [4, 5, 6]
-        # Headroom above the tallest bar so its value label is not against the legend.
-        max_v = max(curve[d]["after"] for d in depths) * 1.15
+        # Headroom above the tallest bar so its value label is not against the legend. 1.12 and
+        # a 4.0 height were set by looking at the 480p render: 1.15/3.0 left a dead band roughly
+        # a bar's width high between the tallest bar and the legend.
+        max_v = max(curve[d]["after"] for d in depths) * 1.12
 
         arms = [("before", GREY, "frozen encoder"),
                 ("pretrained", BLUE, "+ trained encoder"),
@@ -86,7 +88,7 @@ class TheBreakPointMoves(Scene):
         # final position rather than an intermediate one.
         groups, labels = VGroup(), []
         for d in depths:
-            trio = VGroup(*[_bar(curve[d][key], max_v, color, height=3.0)
+            trio = VGroup(*[_bar(curve[d][key], max_v, color, height=4.0)
                             for key, color, _ in arms])
             trio.arrange(RIGHT, buff=0.12, aligned_edge=DOWN)
             groups.add(trio)
@@ -134,13 +136,16 @@ class TheBreakPointMoves(Scene):
 
         # The honest close. Depth 6 clears the pre-registered rule with room; depth 5 has the
         # LARGER effect and still misses on p, and is reported REFUTED.
+        # Two lines, so it sits at the caption line rather than above it - at CAPTION_Y + 0.15 the
+        # first line crowded the depth labels.
         honest = VGroup(
-            Text(f"depth 6 works: {w6['seeds_above']} of {w6['n']} seeds above the bar, "
-                 f"+{w6['se_margin']:.1f} SE.", font_size=SMALL, color=YELLOW),
-            Text(f"depth 5's +{curve[5]['after'] - curve[5]['pretrained']:.2f} is larger and "
-                 f"still misses p<=0.05 (p={curve[5]['after_p']:.3f}).",
+            Text(f"depth 6 works: {w6['seeds_above']} of {w6['n']} seeds above "
+                 f"{data.WORKING_BAR:.2f}, +{w6['se_margin']:.1f} SE.",
                  font_size=SMALL, color=YELLOW),
-        ).arrange(DOWN, buff=0.22).move_to(UP * (CAPTION_Y + 0.15))
+            Text(f"depth 5's +{curve[5]['after'] - curve[5]['pretrained']:.2f} is larger and "
+                 f"still misses its 0.05 bar (p = {curve[5]['after_p']:.3f}).",
+                 font_size=SMALL, color=YELLOW),
+        ).arrange(DOWN, buff=0.2).move_to(UP * CAPTION_Y)
         self.play(FadeIn(honest))
         self.wait(2.5)
 
@@ -164,28 +169,29 @@ class TheWall(Scene):
             ("chance", data.PUBLISHED_PROBE_CHANCE, YELLOW),
         ]
 
-        table = VGroup()
-        header = VGroup(*[Text(f"d{d}", font_size=LABEL) for d in depths])
-        header.arrange(RIGHT, buff=0.9)
-        table.add(header)
+        # Fixed column x and row y, NOT nested arrange(). The row labels differ in width, so an
+        # arrange-based table centres each row on its own width and the columns drift apart.
+        col_x = [-1.5 + 1.3 * i for i in range(len(depths))]
+        label_right = -2.5
+        row_y = [1.5 - 0.75 * i for i in range(len(rows) + 1)]
 
-        for label, series, color in rows:
+        header = VGroup(*[Text(f"d{d}", font_size=LABEL).move_to([x, row_y[0], 0])
+                          for d, x in zip(depths, col_x)])
+        self.play(FadeIn(header))
+
+        table = VGroup(header)
+        for (label, series, color), y in zip(rows, row_y[1:]):
             cells = VGroup(*[Text(f"{series[d]:.3f}", font_size=LABEL, color=color)
-                             for d in depths])
-            cells.arrange(RIGHT, buff=0.7)
-            name = Text(label, font_size=SMALL, color=color).next_to(cells, LEFT, buff=0.8)
-            table.add(VGroup(cells, name))
-
-        table.arrange(DOWN, buff=0.55)
-        table.shift(DOWN * 0.3)
-
-        self.play(FadeIn(table[0]))
-        for row in table[1:]:
+                             .move_to([x, y, 0]) for d, x in zip(depths, col_x)])
+            name = Text(label, font_size=SMALL, color=color)
+            name.move_to([label_right - name.width / 2, y, 0])
+            row = VGroup(name, cells)
+            table.add(row)
             self.play(FadeIn(row), run_time=0.6)
         self.wait(1)
 
         punch = Text("A linear head cannot solve deep cubes, however good the encoder.",
-                     font_size=LABEL, color=WHITE).next_to(table, DOWN, buff=0.7)
+                     font_size=LABEL, color=WHITE).move_to([0, row_y[-1] - 0.9, 0])
         self.play(Write(punch))
         self.wait(2)
 
@@ -248,28 +254,34 @@ class CollapseIsASymptom(Scene):
         self.play(Write(title))
 
         order = ["baseline", "beta 0.05", "beta 0.2", "beta 0.8"]
+        # Same reason as `TheWall`: the names have different widths, so the columns are placed at
+        # fixed x rather than arranged inside each row.
+        col_x = [-5.6, -3.4, 3.2]
         rows = VGroup()
-        for key in order:
-            if key not in ev:
-                continue
+        for i, key in enumerate([k for k in order if k in ev]):
             modal, succ = ev[key]["modal"], ev[key]["success"]
-            name = Text(key, font_size=SMALL, color=GREY)
-            m = Text(f"one action {modal * 100:.0f}% of the time", font_size=SMALL, color=BLUE)
-            s = Text(f"solved {succ:.4f}", font_size=SMALL, color=RED)
-            row = VGroup(name, m, s).arrange(RIGHT, buff=0.8)
-            rows.add(row)
-        rows.arrange(DOWN, buff=0.5, aligned_edge=LEFT)
-        rows.shift(DOWN * 0.2)
+            y = 1.2 - 0.8 * i
+            cells = [Text(key, font_size=SMALL, color=GREY),
+                     Text(f"one action {modal * 100:.0f}% of the time",
+                          font_size=SMALL, color=BLUE),
+                     Text(f"solved {succ:.4f}", font_size=SMALL, color=RED)]
+            for cell, x in zip(cells, col_x):
+                cell.move_to([x, y, 0], aligned_edge=LEFT)
+            rows.add(VGroup(*cells))
 
         for row in rows:
             self.play(FadeIn(row), run_time=0.6)
         self.wait(1)
 
-        punch = Text("Collapse fell from 97% to 63%. Success stayed at zero.",
-                     font_size=LABEL, color=YELLOW).next_to(rows, DOWN, buff=0.8)
+        # Read the two ends off the records: a transcribed "97% to 63%" rounds differently from
+        # the row above it (0.975 prints as 98%), and that reads as an error on screen.
+        lowest = min(ev[k]["modal"] for k in ev if k != "baseline")
+        punch = Text(f"Collapse fell from {ev['baseline']['modal'] * 100:.0f}% to "
+                     f"{lowest * 100:.0f}%. Success stayed at zero.",
+                     font_size=LABEL, color=YELLOW).move_to([0, -2.1, 0])
         self.play(Write(punch))
         self.wait(1)
         punch2 = Text("It was a symptom, not the cause.",
-                      font_size=LABEL, color=WHITE).next_to(punch, DOWN, buff=0.4)
+                      font_size=LABEL, color=WHITE).move_to([0, -2.9, 0])
         self.play(Write(punch2))
         self.wait(2)
