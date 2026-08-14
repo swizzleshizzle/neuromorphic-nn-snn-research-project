@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import itertools
 import json
 import statistics as st
 from pathlib import Path
@@ -113,20 +114,92 @@ UNIFORM_MODAL_9STEP = 0.354      # budget-dependent; 0.309 at depth 6's 15 steps
 
 # --------------------------------------------------------------------------- the story
 
+def _exact_paired_p(diffs: list[float]) -> float:
+    """Two-sided exact paired permutation over all 2**n sign flips.
+
+    Same method as `experiments/043_cap_at_depth_5_6/aggregate.py`, which is the authority; it
+    is repeated here so a caption is computed from the records rather than transcribed. No
+    scipy in this repo, by design.
+    """
+    n = len(diffs)
+    if not 1 <= n <= 20:
+        raise ValueError(f"exact permutation needs 1 <= n <= 20, got {n}")
+    observed = abs(sum(diffs))
+    hits = sum(1 for signs in itertools.product((1, -1), repeat=n)
+               if abs(sum(s * d for s, d in zip(signs, diffs))) >= observed - 1e-12)
+    return hits / 2 ** n
+
+
+# EXP-043's pre-registered "working" rule, restated from EXP-036. Quoted so a caption can say
+# what the bar WAS rather than describing a result against a bar invented afterwards.
+WORKING_BAR = 0.10
+WORKING_MIN_SEEDS = 8        # of 12, each individually above the bar
+WORKING_MIN_SE = 1.0         # margin, because EXP-040 cleared the bare rule by 0.11 SE
+
+# Which record set carries the current "after" arm at each depth. The depth-1 training cap
+# (`max_steps_by_depth=((1,2),)`) is the only change from the pretrained arm.
+CAPPED_SOURCE = {
+    4: ("042_depth1_trap", "exp042_capped"),
+    5: ("043_cap_at_depth_5_6", "exp043_capped"),
+    6: ("043_cap_at_depth_5_6", "exp043_capped"),
+}
+
+
 def depth_curve() -> dict:
-    """Act 3's payoff: EXP-036 (frozen) vs EXP-040 (pretrained), measured here."""
-    before, after = _load("036_generalisation_gap"), _load("040_pretrained_encoder_policy")
+    """Act 3's payoff, THREE arms, all measured here. The two levers compound; neither alone
+    reaches depth 6.
+
+        before      EXP-036 - frozen randomly-initialised encoder
+        pretrained  EXP-040 - encoder trained self-supervised (EXP-039), depth-1 trap still in
+        after       EXP-042 (d4) / EXP-043 (d5,d6) - same encoder, depth-1 training budget capped
+
+    `after_p` is the paired permutation p of after-vs-pretrained. It is NOT decoration: depth 5's
+    +0.1108 misses its pre-registered 0.05 at p 0.0815 and is REFUTED, and any caption that shows
+    that bar has to say so.
+    """
+    before = _load("036_generalisation_gap")
+    pretrained = _load("040_pretrained_encoder_policy")
     out = {}
     for d in (4, 5, 6):
-        b, a = _cell(before, depth=d), _cell(after, depth=d)
+        exp, tag = CAPPED_SOURCE[d]
+        b = _cell(before, depth=d)
+        m = _cell(pretrained, depth=d)
+        a = _cell(_load(exp), depth=d, tag_has=tag)
+        paired = dict(_series(m))
+        diffs = [v - paired[s] for s, v in _series(a) if s in paired]
         out[d] = {
             "before": _mean(b),
+            "pretrained": _mean(m),
             "after": _mean(a),
             "before_seeds": _series(b),
+            "pretrained_seeds": _series(m),
             "after_seeds": _series(a),
+            "after_p": _exact_paired_p(diffs) if diffs else None,
             "floor": _mean(_cell(before, depth=d, arm="random")),
         }
     return out
+
+
+def working_bar(depth: int = 6) -> dict:
+    """Is a depth WORKING by the pre-registered rule, measured from the records?
+
+    EXP-040's depth 6 satisfied the bare `mean >= 0.10` on noise - 0.1037, 0.11 SE of margin,
+    5 of 12 seeds above it. The margin and seed-count conditions exist because of that, so a
+    caption that claims "working" should carry them.
+    """
+    seeds = depth_curve()[depth]["after_seeds"]
+    vals = [v for _, v in seeds]
+    mean = st.mean(vals)
+    se = st.stdev(vals) / len(vals) ** 0.5 if len(vals) > 1 else 0.0
+    above = sum(1 for v in vals if v > WORKING_BAR)
+    return {
+        "mean": mean,
+        "se_margin": (mean - WORKING_BAR) / se if se else None,
+        "seeds_above": above,
+        "n": len(vals),
+        "working": (mean >= WORKING_BAR and se and (mean - WORKING_BAR) / se >= WORKING_MIN_SE
+                    and above >= WORKING_MIN_SEEDS),
+    }
 
 
 def encoder_probe() -> dict:
@@ -177,7 +250,7 @@ def availability() -> dict:
     wanted = ["029_cube_baseline", "030_memory_engagement", "031_policy_collapse",
               "033_concept_decodability", "034_learning_signal", "035_budget_scaling",
               "036_generalisation_gap", "038_depth6_collapse", "039_encoder_pretraining",
-              "040_pretrained_encoder_policy"]
+              "040_pretrained_encoder_policy", "042_depth1_trap", "043_cap_at_depth_5_6"]
     return {e: len(_load(e)) for e in wanted}
 
 
@@ -185,9 +258,14 @@ if __name__ == "__main__":
     print("record availability (0 = published numbers only):")
     for exp, n in availability().items():
         print(f"  {exp:<34} {n:>4}")
-    print("\ndepth curve, EXP-036 -> EXP-040:")
+    print("\ndepth curve, EXP-036 -> EXP-040 -> EXP-042/043 (cap):")
     for d, row in depth_curve().items():
-        print(f"  depth {d}: {row['before']:.4f} -> {row['after']:.4f}  (floor {row['floor']:.4f})")
+        print(f"  depth {d}: {row['before']:.4f} -> {row['pretrained']:.4f} -> {row['after']:.4f}"
+              f"  (floor {row['floor']:.4f}, cap-vs-pretrained p {row['after_p']:.4f})")
+    w = working_bar(6)
+    print(f"\ndepth 6 against the pre-registered bar: mean {w['mean']:.4f}, "
+          f"{w['se_margin']:.2f} SE of margin, {w['seeds_above']}/{w['n']} seeds above "
+          f"{WORKING_BAR} -> {'WORKING' if w['working'] else 'NOT working'}")
     print("\nencoder probe, EXP-039:")
     for d, row in encoder_probe().items():
         print(f"  depth {d}: frozen {row['frozen']:.3f}  trained {row['trained']:.3f}  "

@@ -23,7 +23,7 @@ from pathlib import Path
 from manim import (
     BLUE, GREEN, GREY, RED, WHITE, YELLOW,
     DOWN, LEFT, RIGHT, UP,
-    Create, FadeIn, FadeOut, Rectangle, Scene, Text, Transform, VGroup, Write,
+    Create, FadeIn, FadeOut, Line, Rectangle, Scene, Text, Transform, VGroup, Write,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -42,60 +42,107 @@ def _bar(value: float, max_value: float, color, width: float = 0.8, height: floa
     return Rectangle(width=width, height=h, color=color, fill_color=color, fill_opacity=0.85)
 
 
+BASELINE_Y = -2.1          # where every bar stands, so the three reveals share one axis
+CAPTION_Y = -3.35
+
+
 class TheBreakPointMoves(Scene):
-    """Act 3's payoff. EXP-036 (frozen encoder) against EXP-040 (pretrained), same 390-parameter
-    head, one variable changed. Depth 5 had been broken since it was first measured."""
+    """Act 3's payoff, and THREE bars rather than two.
+
+    The story is no longer "one variable changed". Two levers moved the break point and they
+    compound: the self-supervised encoder (EXP-039/040) and capping the depth-1 training budget
+    (EXP-041/042/043). Neither alone reaches depth 6, so a two-bar version of this shot would
+    credit the wrong thing.
+
+    The head is the same `Linear(64 -> 6)`, 390 trainable parameters, throughout."""
 
     def construct(self):
         curve = data.depth_curve()
+        w6 = data.working_bar(6)
         depths = [4, 5, 6]
-        max_v = 0.40
+        # Headroom above the tallest bar so its value label is not against the legend.
+        max_v = max(curve[d]["after"] for d in depths) * 1.15
 
-        title = Text("Same 390 parameters. Different encoder.", font_size=TITLE)
-        title.to_edge(UP)
+        arms = [("before", GREY, "frozen encoder"),
+                ("pretrained", BLUE, "+ trained encoder"),
+                ("after", GREEN, "+ depth-1 cap")]
+
+        title = Text("Two levers. The same 390 parameters.", font_size=TITLE).to_edge(UP)
         self.play(Write(title))
 
-        groups = VGroup()
-        for i, d in enumerate(depths):
-            before = curve[d]["before"]
-            after = curve[d]["after"]
+        legend = VGroup()
+        for _, color, label in arms:
+            swatch = Rectangle(width=0.3, height=0.3, color=color,
+                               fill_color=color, fill_opacity=0.85)
+            legend.add(VGroup(swatch, Text(label, font_size=SMALL, color=color)
+                              ).arrange(RIGHT, buff=0.2))
+        legend.arrange(RIGHT, buff=0.9)
+        legend.next_to(title, DOWN, buff=0.35)
 
-            b_bar = _bar(before, max_v, GREY)
-            a_bar = _bar(after, max_v, GREEN)
-            b_bar.next_to(a_bar, LEFT, buff=0.15)
-            pair = VGroup(b_bar, a_bar)
-            pair.arrange(RIGHT, buff=0.15, aligned_edge=DOWN)
+        axis = Line(LEFT * 6.2, RIGHT * 6.2).shift(UP * BASELINE_Y).set_stroke(GREY, 2)
+        self.play(Create(axis), run_time=0.5)
 
-            b_val = Text(f"{before:.3f}", font_size=SMALL, color=GREY).next_to(b_bar, UP, buff=0.1)
-            a_val = Text(f"{after:.3f}", font_size=SMALL, color=GREEN).next_to(a_bar, UP, buff=0.1)
-            depth_label = Text(f"depth {d}", font_size=LABEL).next_to(pair, DOWN, buff=0.3)
+        # Bars first, positioned on the shared axis; labels attach afterwards so they follow the
+        # final position rather than an intermediate one.
+        groups, labels = VGroup(), []
+        for d in depths:
+            trio = VGroup(*[_bar(curve[d][key], max_v, color, height=3.0)
+                            for key, color, _ in arms])
+            trio.arrange(RIGHT, buff=0.12, aligned_edge=DOWN)
+            groups.add(trio)
+        groups.arrange(RIGHT, buff=1.3, aligned_edge=DOWN)
+        groups.next_to(axis, UP, buff=0.0)
 
-            groups.add(VGroup(pair, b_val, a_val, depth_label))
+        for d, trio in zip(depths, groups):
+            vals = [Text(f"{curve[d][key]:.3f}", font_size=SMALL, color=color)
+                    .next_to(bar, UP, buff=0.12)
+                    for bar, (key, color, _) in zip(trio, arms)]
+            depth_label = Text(f"depth {d}", font_size=LABEL).next_to(trio, DOWN, buff=0.25)
+            labels.append((vals, depth_label))
 
-        groups.arrange(RIGHT, buff=1.2, aligned_edge=DOWN)
-        groups.shift(DOWN * 0.5)
+        def caption(text, color):
+            return Text(text, font_size=SMALL, color=color).move_to(UP * CAPTION_Y)
 
-        # Reveal the "before" state first, so the audience sits with the failure for a beat.
-        for g in groups:
-            self.play(Create(g[0][0]), FadeIn(g[1]), FadeIn(g[3]), run_time=0.4)
-        self.wait(0.8)
-
-        broken = Text("depth 5: broken.   depth 6: zero on all 12 seeds.",
-                      font_size=LABEL, color=RED).next_to(groups, DOWN, buff=0.6)
+        # Beat 1: sit with the failure. Depth 6 was 0.0000 on every seed.
+        self.play(FadeIn(legend[0]))
+        for trio, (vals, depth_label) in zip(groups, labels):
+            self.play(Create(trio[0]), FadeIn(vals[0]), FadeIn(depth_label), run_time=0.4)
+        broken = caption("depth 5 broken. depth 6: 0.0000 on all twelve seeds.", RED)
         self.play(FadeIn(broken))
-        self.wait(1.2)
+        self.wait(1.5)
         self.play(FadeOut(broken))
 
-        for g in groups:
-            self.play(Create(g[0][1]), FadeIn(g[2]), run_time=0.5)
-        self.wait(0.5)
+        # Beat 2: lever one. Train the encoder to predict the move between two states.
+        self.play(FadeIn(legend[1]))
+        for trio, (vals, _) in zip(groups, labels):
+            self.play(Create(trio[1]), FadeIn(vals[1]), run_time=0.45)
+        lever1 = caption("Lever 1: train the encoder, self-supervised. No labels, no oracle.",
+                         BLUE)
+        self.play(FadeIn(lever1))
+        self.wait(1.5)
+        self.play(FadeOut(lever1))
 
-        # The honest caveat stays on screen. Depth 6 clears its bar by 0.11 SE with 5/12 seeds
-        # above it, so it is "off the floor", not "working".
-        caption = Text("depth 5 now works. depth 6 is off the floor, not yet working.",
-                       font_size=SMALL, color=YELLOW).next_to(groups, DOWN, buff=0.6)
-        self.play(FadeIn(caption))
-        self.wait(2)
+        # Beat 3: lever two. Depth 1 was paying 0.3333 for a constant action, above random's
+        # 0.2208, because a cube face has order 4.
+        self.play(FadeIn(legend[2]))
+        for trio, (vals, _) in zip(groups, labels):
+            self.play(Create(trio[2]), FadeIn(vals[2]), run_time=0.45)
+        lever2 = caption("Lever 2: stop paying depth 1 for a repeated move.", GREEN)
+        self.play(FadeIn(lever2))
+        self.wait(1.5)
+        self.play(FadeOut(lever2))
+
+        # The honest close. Depth 6 clears the pre-registered rule with room; depth 5 has the
+        # LARGER effect and still misses on p, and is reported REFUTED.
+        honest = VGroup(
+            Text(f"depth 6 works: {w6['seeds_above']} of {w6['n']} seeds above the bar, "
+                 f"+{w6['se_margin']:.1f} SE.", font_size=SMALL, color=YELLOW),
+            Text(f"depth 5's +{curve[5]['after'] - curve[5]['pretrained']:.2f} is larger and "
+                 f"still misses p<=0.05 (p={curve[5]['after_p']:.3f}).",
+                 font_size=SMALL, color=YELLOW),
+        ).arrange(DOWN, buff=0.22).move_to(UP * (CAPTION_Y + 0.15))
+        self.play(FadeIn(honest))
+        self.wait(2.5)
 
 
 class TheWall(Scene):

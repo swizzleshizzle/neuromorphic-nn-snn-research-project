@@ -3,8 +3,8 @@
 A three-act arc for explaining this project, built **only** from measured results. Every number
 below is in a committed `RESULTS.md`. Nothing is illustrative.
 
-The through-line: **a spiking network that started barely above chance now solves cubes four
-moves deep, and the thing that finally moved it was not more compute.**
+The through-line: **a spiking network that started barely above chance now solves cubes six
+moves deep, and neither thing that moved it was more compute.**
 
 ---
 
@@ -80,7 +80,7 @@ stabilizers. Everything cheap inside the architecture, measured and closed.
 
 ---
 
-## Act 3 — "Train the encoder" (EXP-039, EXP-040)
+## Act 3 — "Two levers, and they compound" (EXP-039/040, EXP-041/042/043)
 
 ### Scene 5 — `TheEncoderLearns`
 Self-supervised pretraining: predict which move was played between two cube states. No labels,
@@ -99,26 +99,48 @@ the first time the spiking network does work rather than acting as a fixed rando
 **The detail worth animating:** at depth 3 it merely *matches* the ceiling (+0.003). The margin
 grows with depth: +0.044, +0.042, **+0.087**. It helps most exactly where the observation fails.
 
-### Scene 6 — `TheBreakPointMoves`
-The payoff. Same 390-parameter head, one thing changed:
+### Scene 5b — `TheDepth1Trap`
+The second lever, and the one that needs explaining rather than showing. `max_steps_for(d) = 2d+3`
+gave depth 1 **five** steps where optimal is **one**. A cube face has **order 4**, so a repeated
+move either inverts a one-move scramble (1 step) or cycles all the way back to solved (3 steps).
 
-| depth | before (EXP-036) | **after (EXP-040)** |
-|---|---|---|
-| 4 | 0.1591 | **0.3471** |
-| 5 | 0.0396 (broken) | **0.2304** (working) |
-| 6 | 0.0000 | **0.1037** |
+**A constant-action policy therefore scored 0.3333 at depth 1, against a random policy's 0.2208.**
+Curriculum stage 1 was paying more for the worst possible policy than for exploring. Capping the
+depth-1 **training** budget at 2 steps flips it to 0.1667, below random. Nothing else changed.
+
+**The refutation that came with it:** EXP-042 also tried *deleting* the depth-1 stage. That scored
+0.3565 against the cap's 0.5351. **Reprice it, do not remove it.**
+
+### Scene 6 — `TheBreakPointMoves`
+The payoff. Same 390-parameter head throughout, two levers, and they compound:
+
+| depth | frozen (EXP-036) | + trained encoder (EXP-040) | **+ depth-1 cap** |
+|---|---|---|---|
+| 4 | 0.1591 | 0.3471 | **0.5351** (EXP-042) |
+| 5 | 0.0396 (broken) | 0.2304 | **0.3412** (EXP-043) |
+| 6 | 0.0000 (broken) | 0.1037 (at the bar) | **0.1800 working** (EXP-043) |
 
 Depth 5 had been broken since it was first measured, and neither curriculum tuning nor trainer
-stabilizers moved it. **Depth 6 was 0.0000 on all twelve seeds.**
+stabilizers moved it. **Depth 6 was 0.0000 on all twelve seeds.** The break point is now **past
+depth 6 and unmeasured** - the first time in the project its location is genuinely unknown.
 
-**Keep it honest on screen:** depth 6 clears its "working" bar by **0.11 standard errors** with
-5 of 12 seeds above it. Say *off the floor*, not *working*.
+**Neither lever alone reaches depth 6**, which is why this shot has three bars and not two.
+
+**Keep it honest on screen, both ways:**
+- Depth 6 is *working* by EXP-036's own pre-registered rule, and this time with room:
+  **+2.81 SE** of margin with **10 of 12** seeds above the bar, against EXP-040's +0.11 SE and
+  5 of 12. That rule's extra conditions were written precisely because 0.1037 cleared the bare
+  `>= 0.10` on noise.
+- Depth 5's **+0.1108 is REFUTED** - `p = 0.0815` against a pre-registered 0.05, with four seeds
+  regressing. It is the larger effect and it still misses. Say *"large but not established at
+  n=12"*, and do **not** say the cap fails at depth 5; it is a p-value miss, not a demonstrated
+  absence.
 
 ### Scene 7 — `WhereWeStarted`
-Close the loop. EXP-029's opening table dissolving into EXP-040's:
+Close the loop. EXP-029's opening table dissolving into today's:
 
-> **depth 4: 0.0% -> 34.7%. depth 3: 2.2% -> 50%.**
-> Same 390 trainable parameters. The encoder changed, not the head.
+> **depth 4: 0.0% -> 53.5%. depth 6: did not exist -> 18.0%.**
+> Same 390 trainable parameters. The encoder changed and the reward budget changed, not the head.
 
 ---
 
@@ -126,13 +148,17 @@ Close the loop. EXP-029's opening table dissolving into EXP-040's:
 
 These keep the video credible, and they are all in the write-ups:
 
-- **Still 0.02% of the cube.** Depths 3-4 out of 14. A random scramble is at depth 11 and remains
-  out of reach. Do not imply the cube is solved.
-- **The wins came from refutations.** Four things were closed before the one that worked was
-  found. That is the actual method and it is the more interesting story.
-- **Two of twelve seeds fail completely** with the pretrained encoder (0.000 where the baseline
-  managed 0.278). The lever is powerful and unreliable, and the pretraining metric does not
-  predict which seeds fail. Currently under diagnosis.
+- **Still 0.32% of the cube.** Depths 3-6 out of 14. A random scramble is at depth 11, where 97.5%
+  of the state space lives, and remains out of reach. Do not imply the cube is solved.
+- **The wins came from refutations.** *Six* things were closed before the *two* that worked: width,
+  volume alone, curriculum stage weighting, starvation at depth 6, trainer stabilizers, and
+  deleting the depth-1 stage. That is the actual method and it is the more interesting story.
+- **The "powerful but unreliable" caveat has mostly, not entirely, gone.** EXP-040's two dead seeds
+  at depth 5 were largely the depth-1 trap: zeros went 2/12 -> 0/12 at depth 5 and 3/12 -> 1/12 at
+  depth 6, and the spread narrowed at every depth. But the halving of variance seen at depth 4
+  (sd 0.2242 -> 0.1012) does **not** repeat at 5 and 6 (0.80, 0.82), so some genuine seed
+  sensitivity remains deeper. Report the counts descriptively: **n=12 cannot show a count went to
+  zero**, and Fisher's exact on 2/12 against 0/12 is ~0.48.
 - **Pre-registration did real work.** EXP-036's gap came back *inconclusive* against a bar set in
   advance, and was not upgraded. EXP-037's aggregator printed a true-but-misleading verdict and
   was corrected without moving a threshold.
@@ -144,7 +170,7 @@ These keep the video credible, and they are all in the write-ups:
 | scene | needs | data source | priority |
 |---|---|---|---|
 | `PolicyCollapse` | cube renderer, no LaTeX | EXP-031/032/038 records | **first** |
-| `TheBreakPointMoves` | bars | EXP-036 + EXP-040 records (local) | **first** |
+| `TheBreakPointMoves` | bars | EXP-036 + 040 + 042/043 records (local) | **first** |
 | `ScaleOfTheCube` | shells | BFS table, computed live | second |
 | `TheCurriculumUnlock` | line chart | EXP-034/035 records (local) | second |
 | `TheWall` | line chart | EXP-033 records (local) | third |
