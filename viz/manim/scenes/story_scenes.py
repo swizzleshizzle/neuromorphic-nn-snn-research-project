@@ -33,6 +33,13 @@ TITLE = 40
 LABEL = 24
 SMALL = 20
 
+# The default Pango face renders OLD-STYLE figures: 4, 7 and 9 drop below the baseline while 0,
+# 1 and 8 do not. Manim centres each Text on its bounding box, so a row of numbers set in it does
+# not sit on a common baseline - visible as jitter in `TheWall`'s chance row. Numeric CELLS use a
+# lining, monospaced face; prose keeps the default. Pango falls back silently if it is absent,
+# and the render boxes are all Windows.
+MONO = "Consolas"
+
 
 def _bar(value: float, max_value: float, color, width: float = 0.8, height: float = 4.0):
     """A bar whose HEIGHT is proportional to value. Zero-height bars are illegal in manim,
@@ -173,15 +180,15 @@ class TheWall(Scene):
         # arrange-based table centres each row on its own width and the columns drift apart.
         col_x = [-1.5 + 1.3 * i for i in range(len(depths))]
         label_right = -2.5
-        row_y = [1.5 - 0.75 * i for i in range(len(rows) + 1)]
+        row_y = [1.25 - 0.75 * i for i in range(len(rows) + 1)]
 
-        header = VGroup(*[Text(f"d{d}", font_size=LABEL).move_to([x, row_y[0], 0])
+        header = VGroup(*[Text(f"d{d}", font_size=LABEL, font=MONO).move_to([x, row_y[0], 0])
                           for d, x in zip(depths, col_x)])
         self.play(FadeIn(header))
 
         table = VGroup(header)
         for (label, series, color), y in zip(rows, row_y[1:]):
-            cells = VGroup(*[Text(f"{series[d]:.3f}", font_size=LABEL, color=color)
+            cells = VGroup(*[Text(f"{series[d]:.3f}", font_size=LABEL, color=color, font=MONO)
                              .move_to([x, y, 0]) for d, x in zip(depths, col_x)])
             name = Text(label, font_size=SMALL, color=color)
             name.move_to([label_right - name.width / 2, y, 0])
@@ -218,26 +225,29 @@ class ScaleOfTheCube(Scene):
                             fill_color=color, fill_opacity=0.8)
             bar_group.add(seg)
         bar_group.arrange(RIGHT, buff=0.0)
-        bar_group.shift(UP * 0.5)
+        bar_group.move_to([0, 1.3, 0])
         self.play(Create(bar_group))
 
         # Name only the two that carry the argument: where we are, and where a real scramble is.
+        # Both are left-aligned UNDER the bar's left end; the two closing lines are centred on the
+        # frame instead. Chaining next_to() off `here` ran them into the left edge, because a
+        # centred-on-a-left-hanging-label line is wider than the label it inherits its x from.
         here = Text("depths 1-3: 153 states (0.004%)", font_size=SMALL, color=GREEN)
-        here.next_to(bar_group, DOWN, buff=0.8).to_edge(LEFT, buff=1.0)
+        here.move_to([bar_group.get_left()[0], 0.0, 0], aligned_edge=LEFT)
         there = Text("depths 10-12: 3,063,976 (97.5%)", font_size=SMALL, color=RED)
-        there.next_to(here, DOWN, buff=0.35).align_to(here, LEFT)
+        there.move_to([bar_group.get_left()[0], -0.6, 0], aligned_edge=LEFT)
         self.play(FadeIn(here))
         self.wait(0.6)
         self.play(FadeIn(there))
         self.wait(1)
 
         punch = Text(f"A random scramble sits at depth {data.RANDOM_SCRAMBLE_DEPTH}.",
-                     font_size=LABEL, color=WHITE).next_to(there, DOWN, buff=0.7)
+                     font_size=LABEL, color=WHITE).move_to([0, -1.8, 0])
         self.play(Write(punch))
         self.wait(1)
 
         honest = Text("We solve depths 3-6. That is 0.32% of the cube.",
-                      font_size=SMALL, color=YELLOW).next_to(punch, DOWN, buff=0.4)
+                      font_size=SMALL, color=YELLOW).move_to([0, -2.7, 0])
         self.play(FadeIn(honest))
         self.wait(2)
 
@@ -256,7 +266,7 @@ class CollapseIsASymptom(Scene):
         order = ["baseline", "beta 0.05", "beta 0.2", "beta 0.8"]
         # Same reason as `TheWall`: the names have different widths, so the columns are placed at
         # fixed x rather than arranged inside each row.
-        col_x = [-5.6, -3.4, 3.2]
+        col_x = [-5.4, -3.2, 2.4]
         rows = VGroup()
         for i, key in enumerate([k for k in order if k in ev]):
             modal, succ = ev[key]["modal"], ev[key]["success"]
