@@ -390,7 +390,7 @@ class WhereWeStarted(Scene):
     def construct(self):
         rows = data.origin_vs_now()
         col_depth, col_then, col_now = -2.8, 0.0, 2.8    # centred on the frame
-        top_y = 1.7
+        top_y = 1.9
 
         title = Text("Where this started", font_size=TITLE).to_edge(UP)
         self.play(Write(title))
@@ -434,17 +434,18 @@ class WhereWeStarted(Scene):
         noted = next((r for r in rows if r["note"]), None)
         if noted:
             star = Text(f"depth {noted['depth']} is {noted['note']}; the rest are today's "
-                        f"recipe at 10,000", font_size=SMALL, color=GREY).move_to([0, -2.3, 0])
+                        f"recipe at 10,000", font_size=SMALL, color=GREY).move_to([0, -2.35, 0])
             self.play(FadeIn(star))
 
         self.wait(0.8)
         punch = Text(f"The same {data.TRAINABLE_PARAMS} trainable parameters.",
-                     font_size=LABEL, color=WHITE).move_to([0, -2.9, 0])
+                     font_size=LABEL, color=WHITE).move_to([0, -3.0, 0])
         self.play(Write(punch))
         self.wait(1.2)
 
+        # Four lines stack up at the bottom of this one, so it caps out lower than CAPTION_Y.
         honest = Text("Still 0.32% of the cube. A random scramble is at depth 11.",
-                      font_size=SMALL, color=YELLOW).move_to([0, CAPTION_Y, 0])
+                      font_size=SMALL, color=YELLOW).move_to([0, -3.6, 0])
         self.play(FadeIn(honest))
         self.wait(2.5)
 
