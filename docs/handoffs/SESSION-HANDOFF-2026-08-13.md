@@ -1,5 +1,8 @@
 # Session Handoff - 2026-08-13 (Thu) - Week 19 session 3
 
+> [!important] **SUPERSEDED. Start from `docs/handoffs/SESSION-HANDOFF-2026-08-14.md`.**
+> EXP-043 finished and is written up. Nothing is in flight; the job is now the render.
+
 > **EXP-043 is IN FLIGHT on the laptop.** Dispatched 2026-08-13 13:13:46 at commit `cbbe9d4`.
 > 24 runs, ~2.15M env steps, **ETA about 02:15 Friday**. The repo is clean and pushed.
 >
