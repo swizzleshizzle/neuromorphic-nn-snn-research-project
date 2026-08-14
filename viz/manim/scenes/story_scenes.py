@@ -25,13 +25,14 @@ Two layout rules learned from that first render, both of which produced visible 
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
 from manim import (
     BLUE, GREEN, GREY, RED, WHITE, YELLOW,
     DOWN, LEFT, RIGHT, UP,
-    Create, FadeIn, FadeOut, Line, Rectangle, Scene, Text, Transform, VGroup, Write,
+    Create, Dot, FadeIn, FadeOut, Line, Rectangle, Scene, Text, Transform, VGroup, Write,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -49,6 +50,35 @@ SMALL = 20
 MONO = "Consolas"
 
 
+def _axes(x0: float, x1: float, y0: float, y1: float):
+    """A bare L. Ticks and labels belong to the caller, because the two line scenes label
+    different things and a general-purpose axis helper would be mostly arguments."""
+    return VGroup(Line([x0, y0, 0], [x1, y0, 0]).set_stroke(GREY, 2),
+                  Line([x0, y0, 0], [x0, y1, 0]).set_stroke(GREY, 2))
+
+
+def _polyline(points, color, width: float = 4.0):
+    """(segments, dots) for a series already in scene coordinates.
+
+    Returned separately so a scene can reveal a line one leg at a time - a series that appears
+    all at once reads as a picture, and one that draws reads as a claim being made.
+    """
+    dots = VGroup(*[Dot(point=p, radius=0.075, color=color) for p in points])
+    segs = VGroup(*[Line(a, b).set_stroke(color, width) for a, b in zip(points, points[1:])])
+    return segs, dots
+
+
+def _legend(entries, y: float):
+    """Swatch-and-label row, centred, at a fixed y."""
+    row = VGroup()
+    for color, label in entries:
+        swatch = Rectangle(width=0.3, height=0.3, color=color,
+                           fill_color=color, fill_opacity=0.85)
+        row.add(VGroup(swatch, Text(label, font_size=SMALL, color=color)).arrange(RIGHT, buff=0.2))
+    row.arrange(RIGHT, buff=0.9).move_to([0, y, 0])
+    return row
+
+
 def _bar(value: float, max_value: float, color, width: float = 0.8, height: float = 4.0):
     """A bar whose HEIGHT is proportional to value. Zero-height bars are illegal in manim,
     so a floor of 0.01 keeps a 0.0000 result visible as a hairline rather than vanishing -
@@ -59,6 +89,7 @@ def _bar(value: float, max_value: float, color, width: float = 0.8, height: floa
 
 BASELINE_Y = -2.1          # where every bar stands, so the three reveals share one axis
 CAPTION_Y = -3.35
+LEGEND_Y = 2.45            # measured off the rendered frame, just clear of a to_edge(UP) title
 
 
 class TheBreakPointMoves(Scene):
@@ -87,14 +118,7 @@ class TheBreakPointMoves(Scene):
         title = Text("Two levers. The same 390 parameters.", font_size=TITLE).to_edge(UP)
         self.play(Write(title))
 
-        legend = VGroup()
-        for _, color, label in arms:
-            swatch = Rectangle(width=0.3, height=0.3, color=color,
-                               fill_color=color, fill_opacity=0.85)
-            legend.add(VGroup(swatch, Text(label, font_size=SMALL, color=color)
-                              ).arrange(RIGHT, buff=0.2))
-        legend.arrange(RIGHT, buff=0.9)
-        legend.next_to(title, DOWN, buff=0.35)
+        legend = _legend([(color, label) for _, color, label in arms], LEGEND_Y)
 
         axis = Line(LEFT * 6.2, RIGHT * 6.2).shift(UP * BASELINE_Y).set_stroke(GREY, 2)
         self.play(Create(axis), run_time=0.5)
@@ -163,6 +187,176 @@ class TheBreakPointMoves(Scene):
         ).arrange(DOWN, buff=0.2).move_to(UP * CAPTION_Y)
         self.play(FadeIn(honest))
         self.wait(2.5)
+
+
+class TheCurriculumUnlock(Scene):
+    """Act 2's one thing that worked, at depth 3.
+
+    A rising line on its own is not a result - more episodes is more compute, and the audience
+    should suspect exactly that. The scene exists for its CONTROL: direct training at 3,000
+    episodes, five times the budget with no curriculum, lands BELOW the 600-episode run. Both
+    series are on screen or this shot is dishonest.
+    """
+
+    def construct(self):
+        c = data.curriculum_climb()
+        x0, x1, y0, y1 = -4.9, 5.0, -2.0, 2.0
+        vmax = 0.55
+
+        budgets = [e for e, _ in c["curriculum"]]
+        lo, hi = math.log10(budgets[0]), math.log10(budgets[-1])
+        # Log x: on a linear axis the 30,000 point sits so far right that the first three
+        # collapse into one, and the diminishing return - the honest shape - disappears.
+        def px(e):
+            return x0 + (x1 - x0) * (math.log10(e) - lo) / (hi - lo)
+
+        def py(v):
+            return y0 + (y1 - y0) * v / vmax
+
+        title = Text("The curriculum is the lever, not the compute.",
+                     font_size=TITLE).to_edge(UP)
+        legend = _legend([(GREEN, "curriculum 1 -> 2 -> 3"), (RED, "no curriculum")], LEGEND_Y)
+        self.play(Write(title))
+
+        axes = _axes(x0, x1, y0, y1)
+        x_ticks = VGroup(*[Text(f"{e:,}", font_size=SMALL, font=MONO, color=GREY)
+                           .move_to([px(e), y0 - 0.38, 0]) for e in budgets])
+        y_ticks = VGroup(*[Text(f"{v:.2f}", font_size=SMALL, font=MONO, color=GREY)
+                           .move_to([x0 - 0.55, py(v), 0]) for v in (0.0, 0.25, 0.50)])
+        x_name = Text("training episodes", font_size=SMALL, color=GREY).move_to([0, y0 - 0.95, 0])
+        self.play(Create(axes), FadeIn(x_ticks), FadeIn(y_ticks), FadeIn(x_name))
+
+        # The chance floor, so 0.022 reads as "barely above chance" rather than as a small number.
+        floor = Line([x0, py(c["floor"]), 0], [x1, py(c["floor"]), 0]).set_stroke(GREY, 2, 0.5)
+        floor_label = Text(f"chance {c['floor']:.3f}", font_size=SMALL, color=GREY)
+        floor_label.move_to([x1 - 0.1, py(c["floor"]) + 0.3, 0], aligned_edge=RIGHT)
+        self.play(Create(floor), FadeIn(floor_label))
+
+        def caption(text, color):
+            return Text(text, font_size=SMALL, color=color).move_to([0, -3.15, 0])
+
+        # Beat 1: the climb, drawn leg by leg so it reads as a claim being made.
+        self.play(FadeIn(legend[0]))
+        pts = [[px(e), py(v), 0] for e, v in c["curriculum"]]
+        segs, dots = _polyline(pts, GREEN)
+        for i, (_, v) in enumerate(c["curriculum"]):
+            label = Text(f"{v:.3f}", font_size=SMALL, color=GREEN).next_to(dots[i], UP, buff=0.2)
+            if i:
+                self.play(Create(segs[i - 1]), run_time=0.35)
+            self.play(FadeIn(dots[i]), FadeIn(label), run_time=0.35)
+        doubt = caption("More episodes, more success. On its own that proves nothing.", WHITE)
+        self.play(FadeIn(doubt))
+        self.wait(1.8)
+        self.play(FadeOut(doubt))
+
+        # Beat 2: the control. Same budget, no curriculum, and it does not move.
+        self.play(FadeIn(legend[1]))
+        d_pts = [[px(e), py(v), 0] for e, v in c["direct"]]
+        d_segs, d_dots = _polyline(d_pts, RED)
+        self.play(FadeIn(d_dots), Create(d_segs), run_time=0.8)
+        note = Text(f"no curriculum, 5x the budget: {c['direct'][-1][1]:.3f}",
+                    font_size=SMALL, color=RED)
+        note.move_to([px(3_000) + 0.35, py(c["direct"][-1][1]) + 0.55, 0], aligned_edge=LEFT)
+        self.play(FadeIn(note))
+        self.wait(0.8)
+
+        worse = caption(f"Five times the compute, and WORSE than the "
+                        f"{c['direct'][0][0]}-episode run ({c['direct'][0][1]:.3f}).", RED)
+        self.play(FadeIn(worse))
+        self.wait(2)
+        self.play(FadeOut(worse))
+
+        honest = caption(f"Depth 3 only, and {budgets[-1]:,} episodes is "
+                         f"{budgets[-1] // budgets[0]}x the first run.", YELLOW)
+        self.play(FadeIn(honest))
+        self.wait(2)
+
+
+class TheEncoderLearns(Scene):
+    """Act 3's first lever, and the first time the spiking network does work rather than acting
+    as a fixed random projection.
+
+    Self-supervised: predict which move was played between two cube states. No labels, no oracle.
+    The claim is not "the probe went up" - it is that the TRAINED concept beats a linear probe on
+    the raw observation, which is the ceiling any encoder is trying to clear, and that the margin
+    grows with depth. It helps most exactly where the observation fails.
+    """
+
+    def construct(self):
+        probe = data.encoder_probe()
+        depths = sorted(probe)
+        x0, x1, y0, y1 = -4.6, 4.8, -2.0, 2.0
+        vlo, vhi = 0.30, 0.95      # truncated, and labelled as such at the bottom left
+
+        def px(d):
+            return x0 + (x1 - x0) * (d - depths[0]) / (depths[-1] - depths[0])
+
+        def py(v):
+            return y0 + (y1 - y0) * (v - vlo) / (vhi - vlo)
+
+        title = Text("Train the encoder and it beats the pixels.", font_size=TITLE).to_edge(UP)
+        legend = _legend([(GREY, "frozen concept"), (BLUE, "raw observation"),
+                          (GREEN, "trained concept")], LEGEND_Y)
+        self.play(Write(title))
+
+        axes = _axes(x0, x1, y0, y1)
+        x_ticks = VGroup(*[Text(f"depth {d}", font_size=SMALL, color=GREY)
+                           .move_to([px(d), y0 - 0.38, 0]) for d in depths])
+        y_ticks = VGroup(*[Text(f"{v:.1f}", font_size=SMALL, font=MONO, color=GREY)
+                           .move_to([x0 - 0.5, py(v), 0]) for v in (0.4, 0.6, 0.8)])
+        truncated = Text("probe accuracy; axis starts at 0.30", font_size=SMALL, color=GREY)
+        truncated.move_to([x0 - 1.2, y0 - 0.9, 0], aligned_edge=LEFT)
+        self.play(Create(axes), FadeIn(x_ticks), FadeIn(y_ticks), FadeIn(truncated))
+
+        def caption(text, color):
+            return Text(text, font_size=SMALL, color=color).move_to([0, -3.15, 0])
+
+        def series(key, color):
+            return _polyline([[px(d), py(probe[d][key]), 0] for d in depths], color)
+
+        intro = caption("Predict which move was played between two states. "
+                        "No labels, no oracle.", WHITE)
+        self.play(FadeIn(intro))
+        self.wait(1.5)
+        self.play(FadeOut(intro))
+
+        # The ceiling first: everything after is read against it.
+        self.play(FadeIn(legend[1]))
+        f_segs, f_dots = series("facelets", BLUE)
+        self.play(FadeIn(f_dots), Create(f_segs), run_time=1.0)
+        ceiling = caption("The ceiling: what a linear probe reads off the raw pixels.", BLUE)
+        self.play(FadeIn(ceiling))
+        self.wait(1.5)
+        self.play(FadeOut(ceiling))
+
+        self.play(FadeIn(legend[0]))
+        z_segs, z_dots = series("frozen", GREY)
+        self.play(FadeIn(z_dots), Create(z_segs), run_time=1.0)
+        worse = caption("What the policy actually reads is WORSE than the pixels.", GREY)
+        self.play(FadeIn(worse))
+        self.wait(1.5)
+        self.play(FadeOut(worse))
+
+        self.play(FadeIn(legend[2]))
+        t_segs, t_dots = series("trained", GREEN)
+        self.play(FadeIn(t_dots), Create(t_segs), run_time=1.0)
+
+        # The margin over the ceiling, drawn as the gap itself. At depth 3 it is a stub, which is
+        # the honest picture: there it merely MATCHES the ceiling.
+        gaps = VGroup(*[Line([px(d), py(probe[d]["facelets"]), 0],
+                             [px(d), py(probe[d]["trained"]), 0]).set_stroke(YELLOW, 6)
+                        for d in depths])
+        self.play(FadeIn(gaps))
+        margins = "  ".join(f"+{probe[d]['trained'] - probe[d]['facelets']:.3f}" for d in depths)
+        grows = caption(f"margin over the ceiling, depth {depths[0]} to {depths[-1]}:  {margins}",
+                        YELLOW)
+        self.play(FadeIn(grows))
+        self.wait(2)
+        self.play(FadeOut(grows))
+
+        punch = caption("It helps most exactly where the observation fails.", WHITE)
+        self.play(Write(punch))
+        self.wait(2)
 
 
 class TheWall(Scene):

@@ -88,16 +88,10 @@ PUBLISHED_CONCEPT64_PROBE = {1: 0.583, 2: 0.833, 3: 0.631, 4: 0.459, 5: 0.377}
 # Width refuted as the route: 8x the width closes about half the gap and saturates.
 PUBLISHED_CONCEPT512_PROBE = {1: 0.792, 2: 0.952, 3: 0.825, 4: 0.638, 5: 0.479}
 
-# EXP-034 / EXP-035 `RESULTS.md`. The curriculum climb at depth 3, and the CONTROL that makes it
-# a real result: direct training at 5x the episodes scores WORSE than the 600-episode baseline.
-PUBLISHED_CURRICULUM = [
-    ("EXP-029 baseline", 0.022),
-    ("curriculum 600", 0.097),
-    ("curriculum 3,000", 0.256),
-    ("curriculum 10,000", 0.397),
-    ("curriculum 30,000", 0.500),
-]
-PUBLISHED_DIRECT_CONTROL = [("direct 600", 0.022), ("direct 3,000", 0.019)]
+# EXP-034 / EXP-035's curriculum climb used to be transcribed here. It is now read from the
+# records by `curriculum_climb()` - they are all present locally, so there was never a reason to
+# keep a second copy that could drift. The transcription was already off in the last digit
+# (0.256 against a measured 0.2556).
 
 # 2x2 cube state-space census, God's number 14. From the vault roadmap.
 STATE_CENSUS = [
@@ -202,6 +196,33 @@ def working_bar(depth: int = 6) -> dict:
     }
 
 
+def curriculum_climb() -> dict:
+    """Act 2's one thing that worked, at depth 3, measured here.
+
+    The climb alone proves nothing - more episodes is more compute. The result is the CONTROL:
+    direct training at 3,000 episodes, five times the budget and no curriculum, scores WORSE than
+    the 600-episode run. Both series must be on screen or the scene is just a rising line.
+
+    EXP-029's baseline and chance floor at depth 3 stay PUBLISHED; those records were never
+    fetched here.
+    """
+    recs = _load("034_learning_signal") + _load("035_budget_scaling")
+
+    def at(tag):
+        return _mean(_cell(recs, depth=3, tag_has=tag))
+
+    return {
+        "curriculum": [(600, at("exp034_curriculum_e600")),
+                       (3_000, at("exp034_curriculum_e3000")),
+                       (10_000, at("exp035_curriculum_e10000")),
+                       (30_000, at("exp035_curriculum_e30000"))],
+        "direct": [(600, at("exp034_direct_e600")),
+                   (3_000, at("exp034_direct_e3000"))],
+        "floor": PUBLISHED_EXP029[3]["floor"],
+        "origin": PUBLISHED_EXP029[3]["success"],
+    }
+
+
 def encoder_probe() -> dict:
     """EXP-039: frozen vs trained concept vs the facelet ceiling, measured here."""
     recs = _load("039_encoder_pretraining")
@@ -240,7 +261,7 @@ def origin_vs_now() -> dict:
         "origin": PUBLISHED_EXP029,
         "now": {d: now[d]["after"] for d in now},
         "depth3_then": PUBLISHED_EXP029[3]["success"],
-        "depth3_now": 0.500,          # EXP-035 at 30,000 episodes
+        "depth3_now": curriculum_climb()["curriculum"][-1][1],   # EXP-035 at 30,000 episodes
         "trainable_params": 390,
     }
 
@@ -266,6 +287,13 @@ if __name__ == "__main__":
     print(f"\ndepth 6 against the pre-registered bar: mean {w['mean']:.4f}, "
           f"{w['se_margin']:.2f} SE of margin, {w['seeds_above']}/{w['n']} seeds above "
           f"{WORKING_BAR} -> {'WORKING' if w['working'] else 'NOT working'}")
+    climb = curriculum_climb()
+    print("\ncurriculum climb at depth 3, EXP-034/035 (chance floor "
+          f"{climb['floor']:.3f}):")
+    for label in ("curriculum", "direct"):
+        pts = "  ".join(f"{e:,}: {v:.4f}" for e, v in climb[label])
+        print(f"  {label:<11} {pts}")
+
     print("\nencoder probe, EXP-039:")
     for d, row in encoder_probe().items():
         print(f"  depth {d}: frozen {row['frozen']:.3f}  trained {row['trained']:.3f}  "
