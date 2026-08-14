@@ -2,7 +2,7 @@
 
 > **Nothing is in flight. Both machines are idle. The repo is clean and pushed at `3eaad93`.**
 >
-> **All four built scenes are rendered at 1080p on the laptop and checked against real frames.**
+> **All six built scenes are rendered at 1080p on the laptop and checked against real frames.**
 > Content Day (Sat 2026-08-16) has video assets. This file is the shorter one: the previous
 > handoff (`SESSION-HANDOFF-2026-08-14.md`) still describes the science correctly and nothing in
 > it was refuted today.
@@ -27,6 +27,28 @@ paired permutation itself and reproduces EXP-043's committed values exactly: p *
 depth 5 and **0.0273** at depth 6, and depth 6 at **+2.81 SE** with **10 of 12** seeds above the
 0.10 bar. So the caption cannot drift from the experiment, and the depth-5 REFUTED verdict is on
 screen rather than quietly dropped.
+
+**Two more scenes were built the same day**, both from records rather than transcriptions:
+
+- **`TheCurriculumUnlock`** - depth 3, log-x, the climb 0.097 -> 0.256 -> 0.397 -> 0.500 against
+  the **control** that makes it a result at all: direct training at 3,000 episodes, five times
+  the budget with no curriculum, scores **0.019**, below the 600-episode run. A rising line on
+  its own is just more compute, so both series are on screen.
+- **`TheEncoderLearns`** - the probe against depth, three series, with the margin over the raw
+  observation drawn as the gap itself: **+0.003, +0.044, +0.042, +0.087**. At depth 3 the gap is
+  a stub, which is the honest picture; the encoder only pulls ahead where the pixels fail.
+
+`curriculum_climb()` replaced the transcribed `PUBLISHED_CURRICULUM`, which was already off in
+its last digit (0.256 against a measured 0.2556). Records were local the whole time.
+
+> [!warning] Records do not travel with the repo, and this bit us
+> They are gitignored, so **each machine holds only the experiments it ran**. `TheEncoderLearns`
+> died on the laptop with `unsupported operand type(s) for -: 'NoneType' and 'float'` inside a
+> coordinate function, three layers from the cause: the laptop had **zero** EXP-039 records. They
+> were copied over (100 KB), and `data.py` now names the missing experiment instead.
+>
+> The mirror case still holds: **the VPS has no EXP-029/030 records and the laptop has both**
+> (265 and 144). That is where to get per-seed detail for `WhereWeStarted`.
 
 ## 2. The laptop is set up and does not need setting up again
 
@@ -94,9 +116,9 @@ it grows only with episode length, so a depth-7 eval is about 17/15 of a depth-6
    since EXP-036, so this is the interesting one.
 2. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1. It is the clearest case in the
    project where 12 seeds is the binding constraint rather than the effect.
-3. **Build the three story-only scenes** if Content Day wants more footage: `TheCurriculumUnlock`
-   and `TheEncoderLearns` are chart scenes and cheap; `PolicyCollapse` needs a cube renderer that
-   does not exist yet, and it is the most visceral shot in the deck.
+3. **Two scenes are still story-only.** `WhereWeStarted` is a cheap table morph. `PolicyCollapse`
+   needs a cube renderer that does not exist yet, and it is the most visceral shot in the deck:
+   two cubes side by side, one playing the same move forever.
 4. **Fine-tune the encoder during RL** - still untested, and the frozen version now carries four
    working depths.
 5. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in the vault `progress-tracker`.

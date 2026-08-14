@@ -19,8 +19,9 @@ step budget at 2. That second one closed a trap where curriculum stage 1 paid a
 constant-action policy 0.3333 against a random policy's 0.2208, because a cube face has
 order 4 and the 2d+3 budget let a repeated move cycle back to solved.
 
-The visual story is DONE and no longer the job: four scenes render at 1080p on the laptop
-and were checked against real frames on 2026-08-14.
+The visual story is DONE and no longer the job: six scenes render at 1080p on the laptop
+and were checked against real frames on 2026-08-14. Only PolicyCollapse (needs a cube
+renderer) and WhereWeStarted are still unbuilt.
 
 YOUR JOB THIS SESSION: find the new break point at depth 7.
 
@@ -42,7 +43,11 @@ zero.
 
 If depth 7 is not the right call, the other live options are re-running depth 5 at 24+
 seeds to settle EXP-043's Claim 1 (p 0.0815, four regressing seeds, a p-value miss and
-not a demonstrated absence), or building the three story-only scenes.
+not a demonstrated absence), or building the last two scenes.
+
+One thing to know before touching the visual story: experiment records are gitignored, so
+each machine holds only what it ran. The laptop had no EXP-039 and a scene died on it; the
+VPS still has no EXP-029/030 and the laptop has both. Copy records, never transcribe them.
 ```
 
 ---

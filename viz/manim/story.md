@@ -167,22 +167,34 @@ These keep the video credible, and they are all in the write-ups:
 
 ## Render plan
 
-| scene | needs | data source | priority |
+| scene | form | data source | built? |
 |---|---|---|---|
-| `PolicyCollapse` | cube renderer, no LaTeX | EXP-031/032/038 records | **first** |
-| `TheBreakPointMoves` | bars | EXP-036 + 040 + 042/043 records (local) | **first** |
-| `ScaleOfTheCube` | shells | BFS table, computed live | second |
-| `TheCurriculumUnlock` | line chart | EXP-034/035 records (local) | second |
-| `TheWall` | line chart | EXP-033 records (local) | third |
-| `TheEncoderLearns` | grouped bars | EXP-039 records (local) | third |
-| `WhereWeStarted` | table morph | EXP-029 published + EXP-040 | last |
+| `TheBreakPointMoves` | grouped bars | EXP-036 + 040 + 042/043 records | **rendered** |
+| `ScaleOfTheCube` | one stacked bar | `STATE_CENSUS`, published | **rendered** |
+| `TheCurriculumUnlock` | line chart, log x | EXP-034/035 records | **rendered** |
+| `TheWall` | table | EXP-033, published | **rendered** |
+| `TheEncoderLearns` | line chart | EXP-039 records | **rendered** |
+| `CollapseIsASymptom` | table | EXP-036 + 038 records | **rendered** |
+| `PolicyCollapse` | two cubes, animated | EXP-031/032/038 records | needs a cube renderer |
+| `WhereWeStarted` | table morph | EXP-029 published + today | not built |
+
+Three of the six are charts and three are tables, which is deliberate: the two levers and the
+curriculum climb are **trends**, so they are lines and bars, while the probe ceiling and the
+collapse sweep are **comparisons at a glance**, so they are tables. Two bar charts back to back
+read as one slide.
 
 **Hardware:** everything renders on the laptop, at any quality. **Not this VPS at all**: manim
 cannot import there. `scripts/laptop/render_story.ps1` drives it and pulls stills; `README.md` has
 the setup, which is already done.
 
-**Status 2026-08-14:** four scenes are built, rendered at 1080p, and layout-checked against real
-frames: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, and `CollapseIsASymptom`, which is
-Scene 3's evidence as a chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a
-cube renderer that does not exist yet. Still story-only: `TheCurriculumUnlock`, `PolicyCollapse`,
-`TheEncoderLearns`, `WhereWeStarted`.
+**Status 2026-08-14:** six scenes are built, rendered at 1080p, and layout-checked against real
+frames: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`,
+`TheCurriculumUnlock`, and `TheEncoderLearns`. `CollapseIsASymptom` is Scene 3's evidence as a
+chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a cube renderer that does
+not exist yet. Still story-only: `PolicyCollapse` and `WhereWeStarted`.
+
+**Records do not travel with the repo.** They are gitignored, so each machine holds only what it
+ran, and a scene whose experiment is missing now fails by name rather than as a `NoneType` deep
+in a coordinate function. The laptop needed EXP-039 copied to it; the VPS still has no EXP-029 or
+EXP-030, which **the laptop does** (265 and 144 records) if `WhereWeStarted` ever wants per-seed
+detail.

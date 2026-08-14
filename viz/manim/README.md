@@ -96,7 +96,8 @@ scp 'laptop:C:/Users/mlgbr/manim-frames/*.png' ./frames/     # then LOOK at them
 on a scene whose caption is sitting on top of a label.** Green logs are not a rendered video; the
 stills are the actual check. `-Quality ql|qm|qh|qk`, `-Scenes A,B,C`, `-Frames N`.
 
-Scenes: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`.
+Scenes: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`,
+`TheCurriculumUnlock`, `TheEncoderLearns`.
 
 > [!important] What the first render actually broke
 > Three defects, none of which are visible by reading the code:
@@ -120,12 +121,23 @@ it. Two provenance classes are kept distinct:
 
 `python data.py` prints which experiments have records and which are published-only.
 
-## Data gaps
+## Data gaps - and they differ per machine
 
-Records absent locally: **EXP-027, EXP-029, EXP-030**. Their published means are in `data.py`,
-which covers every scene in `story.md`.
+**Records are gitignored, so each machine holds only the experiments it ran.** That is a real
+constraint on rendering, not a footnote: `TheEncoderLearns` failed on the laptop because EXP-039
+had never been there. The loaders in `data.py` now name the missing experiment instead of dying
+as a `NoneType` inside a scene's coordinate function.
 
-**They would only be needed for per-seed detail** - a scatter of EXP-029's twelve seeds, say.
-The means alone cannot produce that. If those records exist on the desktop or laptop, copying
-`experiments/029_cube_baseline/outputs/` and `030_memory_engagement/outputs/` here would unlock
-it; nothing in the current story depends on it.
+| | VPS | laptop |
+|---|---|---|
+| EXP-029, EXP-030 | **absent** | present (265, 144) |
+| EXP-031 | present (144) | **absent** |
+| EXP-039 | present (12) | copied there 2026-08-14 |
+
+Everything the six built scenes need is now on the laptop. **EXP-027/029/030's published means
+are in `data.py`** and cover the story; they would only be needed at per-seed resolution - a
+scatter of EXP-029's twelve seeds, say, which a mean cannot produce. The laptop has those
+records if `WhereWeStarted` ever wants one.
+
+**Copy records, never transcribe them.** A second copy of a number is a number that can drift:
+`PUBLISHED_CURRICULUM` was already off in its last digit before it was deleted.
