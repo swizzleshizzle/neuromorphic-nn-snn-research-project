@@ -277,16 +277,30 @@ def collapse_evidence() -> dict:
     return out
 
 
-def origin_vs_now() -> dict:
-    """Scene 7: EXP-029's opening table against today's."""
+TRAINABLE_PARAMS = 390       # Linear(64 -> 6) plus bias. Unchanged since EXP-029.
+
+
+def origin_vs_now() -> list[dict]:
+    """Scene 7's table: EXP-029's opening numbers against today's, row per depth.
+
+    `then` is None where EXP-029 never went. It stopped at depth 4, having scored 0.000 there.
+
+    > THE DEPTH-3 "NOW" CELL IS NOT ON TODAY'S RECIPE, and carries a note saying so. It is
+    > EXP-035's 30,000-episode run on a FROZEN encoder. Depth 3 has never been re-measured with
+    > the pretrained encoder and the depth-1 cap, so dropping it into the column unmarked would
+    > silently mix two encoders and a 3x budget difference into one "now". The other three cells
+    > are all 10,000 episodes on today's recipe.
+    """
     now = depth_curve()
-    return {
-        "origin": PUBLISHED_EXP029,
-        "now": {d: now[d]["after"] for d in now},
-        "depth3_then": PUBLISHED_EXP029[3]["success"],
-        "depth3_now": curriculum_climb()["curriculum"][-1][1],   # EXP-035 at 30,000 episodes
-        "trainable_params": 390,
-    }
+    rows = [{"depth": 3,
+             "then": PUBLISHED_EXP029[3]["success"],
+             "now": curriculum_climb()["curriculum"][-1][1],
+             "note": "EXP-035: frozen encoder, 30,000 episodes"}]
+    rows += [{"depth": d,
+              "then": PUBLISHED_EXP029.get(d, {}).get("success"),
+              "now": now[d]["after"],
+              "note": None} for d in (4, 5, 6)]
+    return rows
 
 
 def availability() -> dict:

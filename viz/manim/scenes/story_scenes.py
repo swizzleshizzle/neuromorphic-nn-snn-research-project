@@ -376,6 +376,79 @@ class TheEncoderLearns(Scene):
         self.wait(2)
 
 
+class WhereWeStarted(Scene):
+    """The closer: EXP-029's opening table morphing into today's.
+
+    Deliberately a morph rather than two tables side by side. The point is that these are the
+    SAME rows - same head, same 390 trainable parameters, same observation - so the numbers
+    should change in place while everything around them stays still.
+
+    Depths 5 and 6 have no "then" at all, because EXP-029 stopped at depth 4 having scored
+    0.000 there. A dash is the honest cell, not a zero.
+    """
+
+    def construct(self):
+        rows = data.origin_vs_now()
+        col_depth, col_then, col_now = -2.8, 0.0, 2.8    # centred on the frame
+        top_y = 1.7
+
+        title = Text("Where this started", font_size=TITLE).to_edge(UP)
+        self.play(Write(title))
+
+        header = VGroup(
+            Text("depth", font_size=LABEL, color=GREY).move_to([col_depth, top_y, 0]),
+            Text("EXP-029", font_size=LABEL, color=GREY).move_to([col_then, top_y, 0]),
+            Text("now", font_size=LABEL, color=GREY).move_to([col_now, top_y, 0]),
+        )
+        self.play(FadeIn(header))
+
+        # The "then" column, alone, for a beat. Four rows of nothing much.
+        then_cells, depth_cells, ys = [], VGroup(), []
+        for i, row in enumerate(rows):
+            y = top_y - 0.85 * (i + 1)
+            ys.append(y)
+            depth_cells.add(Text(str(row["depth"]), font_size=LABEL, font=MONO)
+                            .move_to([col_depth, y, 0]))
+            text = f"{row['then']:.3f}" if row["then"] is not None else "-"
+            then_cells.append(Text(text, font_size=LABEL, font=MONO, color=GREY)
+                              .move_to([col_then, y, 0]))
+        self.play(FadeIn(depth_cells), *[FadeIn(c) for c in then_cells], run_time=0.8)
+
+        never = Text("EXP-029 stopped at depth 4. It scored 0.000 there.",
+                     font_size=SMALL, color=GREY).move_to([0, CAPTION_Y, 0])
+        self.play(FadeIn(never))
+        self.wait(1.8)
+        self.play(FadeOut(never))
+
+        # The morph. A COPY of each "then" travels across and becomes its "now", so the original
+        # column stays put: the shot is "this number became that one", not "the table was
+        # replaced". Transform leaves the copy on screen wearing the target's appearance, which
+        # is why nothing is faded in on top of it.
+        for row, then_cell, y in zip(rows, then_cells, ys):
+            now_cell = Text(f"{row['now']:.3f}", font_size=LABEL, font=MONO, color=GREEN)
+            now_cell.move_to([col_now, y, 0])
+            self.play(Transform(then_cell.copy(), now_cell), run_time=0.5)
+
+        # One column must not imply one experiment: the depth-3 cell is a different encoder and
+        # a 3x budget, and the footnote says so on screen.
+        noted = next((r for r in rows if r["note"]), None)
+        if noted:
+            star = Text(f"depth {noted['depth']} is {noted['note']}; the rest are today's "
+                        f"recipe at 10,000", font_size=SMALL, color=GREY).move_to([0, -2.3, 0])
+            self.play(FadeIn(star))
+
+        self.wait(0.8)
+        punch = Text(f"The same {data.TRAINABLE_PARAMS} trainable parameters.",
+                     font_size=LABEL, color=WHITE).move_to([0, -2.9, 0])
+        self.play(Write(punch))
+        self.wait(1.2)
+
+        honest = Text("Still 0.32% of the cube. A random scramble is at depth 11.",
+                      font_size=SMALL, color=YELLOW).move_to([0, CAPTION_Y, 0])
+        self.play(FadeIn(honest))
+        self.wait(2.5)
+
+
 class TheWall(Scene):
     """Act 2's explanation. A linear probe for 'which move reduces distance-to-solved', read off
     the raw observation, decays with depth and reaches chance around depth 8-9.
@@ -514,3 +587,61 @@ class CollapseIsASymptom(Scene):
                       font_size=LABEL, color=WHITE).move_to([0, -2.9, 0])
         self.play(Write(punch2))
         self.wait(2)
+
+
+# --------------------------------------------------------------------------- the whole arc
+
+# Order is `story.md`'s, act by act. `PolicyCollapse` - the two-cube shot - is missing because it
+# needs a cube renderer that does not exist yet; `CollapseIsASymptom` carries its evidence.
+ACTS = [
+    ("Act 1", "It barely works",
+     [ScaleOfTheCube]),
+    ("Act 2", "One thing works, and four do not",
+     [TheCurriculumUnlock, CollapseIsASymptom, TheWall]),
+    ("Act 3", "Two levers, and they compound",
+     [TheEncoderLearns, TheBreakPointMoves, WhereWeStarted]),
+]
+
+
+def _clear(scene, run_time: float = 0.6):
+    """Fade out whatever is still on screen.
+
+    Every scene above was written to stand alone, so each holds its closing frame. That is right
+    for a single clip and wrong for a cut, and a scene that does not clean up leaves its last
+    caption sitting under the next one's title.
+    """
+    if scene.mobjects:
+        scene.play(*[FadeOut(m) for m in scene.mobjects], run_time=run_time)
+
+
+def _act_card(scene, act: str, subtitle: str):
+    card = VGroup(Text(act, font_size=TITLE, color=YELLOW),
+                  Text(subtitle, font_size=LABEL, color=WHITE)).arrange(DOWN, buff=0.5)
+    scene.play(FadeIn(card), run_time=0.8)
+    scene.wait(1.6)
+    scene.play(FadeOut(card), run_time=0.6)
+
+
+class FullStory(Scene):
+    """The whole arc as one continuous render, about two and a half minutes.
+
+    It calls each scene's own `construct` with THIS scene as the receiver instead of duplicating
+    their bodies. A `construct` here only ever touches `self.play` and `self.wait`, so a Scene is
+    all it needs, and there stays exactly one definition of every shot: fixing a layout in
+    `TheWall` fixes it here too, with no second copy to forget.
+
+    `next_section()` marks the cut points. Render with `--save_sections` and manim writes one
+    file per section as well as the continuous cut, which is what an editor wants: the assembled
+    story to work against, and the pieces to re-order without re-rendering.
+
+        manim -qh --save_sections scenes/story_scenes.py FullStory
+    """
+
+    def construct(self):
+        for act, subtitle, scenes in ACTS:
+            self.next_section(act)
+            _act_card(self, act, subtitle)
+            for scene_cls in scenes:
+                self.next_section(scene_cls.__name__)
+                scene_cls.construct(self)
+                _clear(self)
