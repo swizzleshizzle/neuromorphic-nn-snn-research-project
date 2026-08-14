@@ -30,7 +30,8 @@ param(
     [string]  $FramesDir = 'C:\Users\mlgbr\manim-frames',
     [string]  $Quality  = 'ql',
     [int]     $Frames   = 3,
-    [string[]]$Scenes   = @('TheBreakPointMoves', 'TheWall', 'ScaleOfTheCube', 'CollapseIsASymptom')
+    [string[]]$Scenes   = @('TheBreakPointMoves', 'TheWall', 'ScaleOfTheCube', 'CollapseIsASymptom',
+                            'TheCurriculumUnlock', 'TheEncoderLearns')
 )
 
 $ErrorActionPreference = 'Continue'
