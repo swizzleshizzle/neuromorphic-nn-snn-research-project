@@ -3,9 +3,10 @@
 Every number is pulled from `data.py`, which reads the committed experiment records. Nothing
 here is hand-typed, so a scene cannot drift from the experiment that produced it.
 
-DELIBERATELY CONSERVATIVE API USE: only `Text`, `Rectangle`, `Line`, `VGroup` and the basic
-animations, all stable across ManimCE releases. No `MathTex`/`Tex`, so **no LaTeX install is
-required**. No `BarChart`, whose signature has moved between versions.
+DELIBERATELY CONSERVATIVE API USE: only `Text`, `Rectangle`, `Line`, `Dot`, `VGroup` and the
+basic animations, all stable across ManimCE releases. No `MathTex`/`Tex`, so **no LaTeX install
+is required**. No `BarChart` or `Axes`, whose signatures have moved between versions - the two
+line scenes place their own axes and ticks, which is also what makes their layout predictable.
 
     manim -ql scenes/story_scenes.py TheBreakPointMoves    # 480p, iterate
     manim -qh scenes/story_scenes.py TheBreakPointMoves    # 1080p, wants real cores
@@ -15,12 +16,14 @@ required**. No `BarChart`, whose signature has moved between versions.
 whose caption is sitting on top of a label, so the only way to check layout from a headless
 session is to look at frames.
 
-Two layout rules learned from that first render, both of which produced visible defects:
+Three layout rules learned from rendering, each of which produced a visible defect:
 
 1. **Place table cells at fixed x and y, not with nested `arrange()`.** Row labels differ in
    width, so an arranged table centres each row on its own width and the columns drift.
 2. **Do not chain `next_to()` off a left-hanging label.** The inheriting line is wider than the
    label, so it overflows the frame edge.
+3. **Check what else lives near the caption line.** The two plot scenes carry an axis name below
+   their ticks, which is why they caption lower (`PLOT_CAPTION_Y`) than the bar scenes.
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ def _bar(value: float, max_value: float, color, width: float = 0.8, height: floa
 
 BASELINE_Y = -2.1          # where every bar stands, so the three reveals share one axis
 CAPTION_Y = -3.35
+PLOT_CAPTION_Y = -3.5     # lower than CAPTION_Y: the plot scenes carry an axis name below the ticks
 LEGEND_Y = 2.45            # measured off the rendered frame, just clear of a to_edge(UP) title
 
 
@@ -223,17 +227,17 @@ class TheCurriculumUnlock(Scene):
                            .move_to([px(e), y0 - 0.38, 0]) for e in budgets])
         y_ticks = VGroup(*[Text(f"{v:.2f}", font_size=SMALL, font=MONO, color=GREY)
                            .move_to([x0 - 0.55, py(v), 0]) for v in (0.0, 0.25, 0.50)])
-        x_name = Text("training episodes", font_size=SMALL, color=GREY).move_to([0, y0 - 0.95, 0])
+        x_name = Text("training episodes", font_size=SMALL, color=GREY).move_to([0, y0 - 0.85, 0])
         self.play(Create(axes), FadeIn(x_ticks), FadeIn(y_ticks), FadeIn(x_name))
 
         # The chance floor, so 0.022 reads as "barely above chance" rather than as a small number.
         floor = Line([x0, py(c["floor"]), 0], [x1, py(c["floor"]), 0]).set_stroke(GREY, 2, 0.5)
         floor_label = Text(f"chance {c['floor']:.3f}", font_size=SMALL, color=GREY)
-        floor_label.move_to([x1 - 0.1, py(c["floor"]) + 0.3, 0], aligned_edge=RIGHT)
+        floor_label.move_to([x0 + 0.15, py(c["floor"]) + 0.32, 0], aligned_edge=LEFT)
         self.play(Create(floor), FadeIn(floor_label))
 
         def caption(text, color):
-            return Text(text, font_size=SMALL, color=color).move_to([0, -3.15, 0])
+            return Text(text, font_size=SMALL, color=color).move_to([0, PLOT_CAPTION_Y, 0])
 
         # Beat 1: the climb, drawn leg by leg so it reads as a claim being made.
         self.play(FadeIn(legend[0]))
@@ -241,6 +245,8 @@ class TheCurriculumUnlock(Scene):
         segs, dots = _polyline(pts, GREEN)
         for i, (_, v) in enumerate(c["curriculum"]):
             label = Text(f"{v:.3f}", font_size=SMALL, color=GREEN).next_to(dots[i], UP, buff=0.2)
+            if not i:
+                label.shift(RIGHT * 0.4)      # point 1 is ON the axis; centred, it overhangs
             if i:
                 self.play(Create(segs[i - 1]), run_time=0.35)
             self.play(FadeIn(dots[i]), FadeIn(label), run_time=0.35)
@@ -305,14 +311,22 @@ class TheEncoderLearns(Scene):
         y_ticks = VGroup(*[Text(f"{v:.1f}", font_size=SMALL, font=MONO, color=GREY)
                            .move_to([x0 - 0.5, py(v), 0]) for v in (0.4, 0.6, 0.8)])
         truncated = Text("probe accuracy; axis starts at 0.30", font_size=SMALL, color=GREY)
-        truncated.move_to([x0 - 1.2, y0 - 0.9, 0], aligned_edge=LEFT)
+        truncated.move_to([x0 - 1.2, y0 - 0.75, 0], aligned_edge=LEFT)
         self.play(Create(axes), FadeIn(x_ticks), FadeIn(y_ticks), FadeIn(truncated))
 
         def caption(text, color):
-            return Text(text, font_size=SMALL, color=color).move_to([0, -3.15, 0])
+            return Text(text, font_size=SMALL, color=color).move_to([0, PLOT_CAPTION_Y, 0])
 
         def series(key, color):
-            return _polyline([[px(d), py(probe[d][key]), 0] for d in depths], color)
+            """Segments, dots, and the depth-6 value labelled at the line's right end.
+
+            Labelling only the endpoint keeps twelve numbers off the screen while still giving
+            the audience something concrete to read: depth 6 is where the three series are
+            furthest apart and where the argument lands."""
+            segs, dots = _polyline([[px(d), py(probe[d][key]), 0] for d in depths], color)
+            end = Text(f"{probe[depths[-1]][key]:.3f}", font_size=SMALL, color=color, font=MONO)
+            end.next_to(dots[-1], RIGHT, buff=0.2)
+            return segs, dots, end
 
         intro = caption("Predict which move was played between two states. "
                         "No labels, no oracle.", WHITE)
@@ -322,24 +336,27 @@ class TheEncoderLearns(Scene):
 
         # The ceiling first: everything after is read against it.
         self.play(FadeIn(legend[1]))
-        f_segs, f_dots = series("facelets", BLUE)
+        f_segs, f_dots, f_end = series("facelets", BLUE)
         self.play(FadeIn(f_dots), Create(f_segs), run_time=1.0)
+        self.play(FadeIn(f_end), run_time=0.3)
         ceiling = caption("The ceiling: what a linear probe reads off the raw pixels.", BLUE)
         self.play(FadeIn(ceiling))
         self.wait(1.5)
         self.play(FadeOut(ceiling))
 
         self.play(FadeIn(legend[0]))
-        z_segs, z_dots = series("frozen", GREY)
+        z_segs, z_dots, z_end = series("frozen", GREY)
         self.play(FadeIn(z_dots), Create(z_segs), run_time=1.0)
+        self.play(FadeIn(z_end), run_time=0.3)
         worse = caption("What the policy actually reads is WORSE than the pixels.", GREY)
         self.play(FadeIn(worse))
         self.wait(1.5)
         self.play(FadeOut(worse))
 
         self.play(FadeIn(legend[2]))
-        t_segs, t_dots = series("trained", GREEN)
+        t_segs, t_dots, t_end = series("trained", GREEN)
         self.play(FadeIn(t_dots), Create(t_segs), run_time=1.0)
+        self.play(FadeIn(t_end), run_time=0.3)
 
         # The margin over the ceiling, drawn as the gap itself. At depth 3 it is a stub, which is
         # the honest picture: there it merely MATCHES the ceiling.
