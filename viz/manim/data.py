@@ -25,7 +25,8 @@ import json
 import statistics as st
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
 OUT = REPO / "experiments"
 
 
@@ -301,6 +302,23 @@ def origin_vs_now() -> list[dict]:
               "now": now[d]["after"],
               "note": None} for d in (4, 5, 6)]
     return rows
+
+
+def policy_traces() -> dict:
+    """Two REAL depth-6 rollouts from the same held-out scramble, for `PolicyCollapse`.
+
+    Recorded by `record_traces.py` in the PROJECT venv, because replaying a checkpoint needs
+    torch and the brain and the manim venv has neither. Committed, and verified frame by frame
+    against `apply_move` before it was: the repo has already had a cube frame labelled
+    `solved: yes` on a scrambled cube pass every unit test.
+    """
+    p = HERE / "traces.json"
+    if not p.exists():
+        raise RuntimeError(
+            f"{p} is missing. Regenerate it with the PROJECT venv, not the manim one:\n"
+            f"    .venv/bin/python viz/manim/record_traces.py"
+        )
+    return json.loads(p.read_text())
 
 
 def availability() -> dict:

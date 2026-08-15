@@ -33,12 +33,13 @@ import sys
 from pathlib import Path
 
 from manim import (
-    BLUE, GREEN, GREY, RED, WHITE, YELLOW,
+    BLACK, BLUE, GREEN, GREY, ORANGE, RED, WHITE, YELLOW,
     DOWN, LEFT, RIGHT, UP,
     Create, Dot, FadeIn, FadeOut, Line, Rectangle, Scene, Text, Transform, VGroup, Write,
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import cube_net  # noqa: E402
 import data  # noqa: E402
 
 TITLE = 40
@@ -80,6 +81,32 @@ def _legend(entries, y: float):
         row.add(VGroup(swatch, Text(label, font_size=SMALL, color=color)).arrange(RIGHT, buff=0.2))
     row.arrange(RIGHT, buff=0.9).move_to([0, y, 0])
     return row
+
+
+# Facelet values ARE face indices - a solved cube has face f showing colour f - so this is
+# U R F D L B in the model's own order, not a palette someone chose for the video.
+CUBE_COLORS = [WHITE, RED, GREEN, YELLOW, ORANGE, BLUE]
+
+
+def _cube_net(frame, center, cell: float = 0.36):
+    """A 2x2 cube as an unfolded net. Returns (group, squares-by-facelet) so a scene can recolour
+    individual stickers without rebuilding the net.
+
+    Geometry comes from `cube_net.py`, which is the twin of the dashboard's `cubeNet.ts` and
+    carries the same corner self-check. Both had every face's rows inverted until 2026-08-15.
+    """
+    squares = {}
+    group = VGroup()
+    for f in range(24):
+        r, c = cube_net.net_position(f)
+        sq = Rectangle(width=cell, height=cell,
+                       fill_color=CUBE_COLORS[frame[f]], fill_opacity=1.0)
+        sq.set_stroke(BLACK, 1.5)
+        sq.move_to([center[0] + (c - (cube_net.NET_COLS - 1) / 2) * cell,
+                    center[1] + ((cube_net.NET_ROWS - 1) / 2 - r) * cell, 0])
+        squares[f] = sq
+        group.add(sq)
+    return group, squares
 
 
 def _bar(value: float, max_value: float, color, width: float = 0.8, height: float = 4.0):
@@ -450,6 +477,101 @@ class WhereWeStarted(Scene):
         self.wait(2.5)
 
 
+class PolicyCollapse(Scene):
+    """Act 2's most visceral shot, and the one that needed a cube renderer.
+
+    Two 2x2 nets, THE SAME held-out depth-6 scramble, both policies greedy. Left is EXP-036 seed
+    3 with a frozen random encoder: it plays R fifteen times and never stops. Right is EXP-043
+    seed 11 on today's recipe: eight moves, solved.
+
+    Every frame is REPLAYED FROM A RECORDING, not drawn. `record_traces.py` rolled out the two
+    real checkpoints and `traces.json` was verified frame by frame against `apply_move` before it
+    was committed - this repo has already had a cube frame labelled `solved: yes` on a scrambled
+    cube pass every unit test, so an unchecked picture is not evidence.
+
+    The pairing crosses experiments on purpose, and the scene says so: EXP-036 has no working
+    seed at depth 6 to pair against, because all twelve score 0.0000.
+    """
+
+    def construct(self):
+        t = data.policy_traces()
+        cube_net.verify()          # cheap, and it pins the geometry the video actually draws
+        ev = data.collapse_evidence()
+
+        title = Text("The same scramble. Two policies.", font_size=TITLE).to_edge(UP)
+        self.play(Write(title))
+
+        sides = [("left", -3.4, GREY), ("right", 3.4, GREEN)]
+        nets, squares, name_labels = {}, {}, VGroup()
+        for key, x, color in sides:
+            group, sq = _cube_net(t["scramble"], (x, 0.95))
+            nets[key], squares[key] = group, sq
+            name_labels.add(Text(t[key]["name"], font_size=SMALL, color=color)
+                            .move_to([x, 2.45, 0]))
+        self.play(*[Create(nets[k]) for k, _, _ in sides],
+                  *[FadeIn(lbl) for lbl in name_labels], run_time=1.0)
+        self.wait(0.8)
+
+        # Move labels accumulate in a grid under each net. That IS the picture: one side grows a
+        # wall of the same letter, the other grows a varied sequence.
+        def move_label(key, x, i):
+            row, col = divmod(i, 8)
+            return Text(t[key]["labels"][i], font_size=SMALL, font=MONO,
+                        color=GREY if key == "left" else GREEN
+                        ).move_to([x + (col - 3.5) * 0.34, -0.7 - row * 0.36, 0])
+
+        steps = max(len(t["left"]["actions"]), len(t["right"]["actions"]))
+        solved_note = None
+        for i in range(steps):
+            anims = []
+            for key, x, _ in sides:
+                frames = t[key]["frames"]
+                if i + 1 >= len(frames):
+                    continue
+                before, after = frames[i], frames[i + 1]
+                # Recolour only the stickers the move actually moved.
+                anims += [squares[key][f].animate.set_fill(CUBE_COLORS[after[f]])
+                          for f in range(24) if before[f] != after[f]]
+                anims.append(FadeIn(move_label(key, x, i)))
+            self.play(*anims, run_time=0.42)
+
+            if solved_note is None and t["right"]["solved"] and \
+                    i + 1 == len(t["right"]["actions"]):
+                solved_note = Text(f"solved in {len(t['right']['actions'])}",
+                                   font_size=SMALL, color=GREEN).move_to([3.4, -1.75, 0])
+                self.play(FadeIn(solved_note), run_time=0.4)
+
+        stuck = Text(f"{t['left']['labels'][0]} x {len(t['left']['actions'])}. "
+                     f"Budget exhausted.", font_size=SMALL, color=RED).move_to([-3.4, -1.75, 0])
+        self.play(FadeIn(stuck))
+        self.wait(1.2)
+
+        # The twist, and the reason this scene sits in Act 2 rather than Act 3.
+        beat1 = Text(f"Seven of twelve seeds did this. Modal action fraction "
+                     f"{t['left']['arm_modal']:.3f}.",
+                     font_size=SMALL, color=WHITE).move_to([0, -2.45, 0])
+        self.play(FadeIn(beat1))
+        self.wait(1.6)
+        self.play(FadeOut(beat1))
+
+        beta = min((k for k in ev if k != "baseline"), key=lambda k: ev[k]["modal"])
+        beat2 = VGroup(
+            Text(f"An entropy bonus broke the collapse: {ev['baseline']['modal'] * 100:.0f}% "
+                 f"-> {ev[beta]['modal'] * 100:.0f}% of one action.",
+                 font_size=SMALL, color=YELLOW),
+            Text(f"Success went {ev['baseline']['success']:.4f} -> {ev[beta]['success']:.4f}. "
+                 f"It bought nothing.", font_size=SMALL, color=YELLOW),
+        ).arrange(DOWN, buff=0.22).move_to([0, -2.6, 0])
+        self.play(FadeIn(beat2))
+        self.wait(2.2)
+
+        honest = Text(f"Collapse was a symptom. The right-hand policy still solves only "
+                      f"{t['right']['arm_success']:.3f} of held-out depth-6 states.",
+                      font_size=SMALL, color=GREY).move_to([0, -3.45, 0])
+        self.play(FadeIn(honest))
+        self.wait(2.5)
+
+
 class TheWall(Scene):
     """Act 2's explanation. A linear probe for 'which move reduces distance-to-solved', read off
     the raw observation, decays with depth and reaches chance around depth 8-9.
@@ -592,13 +714,18 @@ class CollapseIsASymptom(Scene):
 
 # --------------------------------------------------------------------------- the whole arc
 
-# Order is `story.md`'s, act by act. `PolicyCollapse` - the two-cube shot - is missing because it
-# needs a cube renderer that does not exist yet; `CollapseIsASymptom` carries its evidence.
+# Order is `story.md`'s, act by act.
+#
+# `CollapseIsASymptom` is deliberately NOT in the cut. It and `PolicyCollapse` land the same
+# punchline from the same records - one as a table, one as two cubes - and back to back the
+# second one to play is just the first one repeated. The visual wins. The table remains a
+# first-class scene for anywhere the numbers matter more than the picture; putting it back is
+# one entry in this list.
 ACTS = [
     ("Act 1", "It barely works",
      [ScaleOfTheCube]),
     ("Act 2", "One thing works, and four do not",
-     [TheCurriculumUnlock, CollapseIsASymptom, TheWall]),
+     [TheCurriculumUnlock, PolicyCollapse, TheWall]),
     ("Act 3", "Two levers, and they compound",
      [TheEncoderLearns, TheBreakPointMoves, WhereWeStarted]),
 ]
