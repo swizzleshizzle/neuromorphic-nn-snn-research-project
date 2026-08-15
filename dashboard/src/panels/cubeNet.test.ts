@@ -138,22 +138,26 @@ describe("cube net corner geometry", () => {
   });
 
   /**
-   * THIS TEST CURRENTLY FAILS, AND THAT IS THE POINT. `it.fails` asserts it fails, so the
-   * suite stays green while the defect stays pinned. When cubeNet.ts is fixed this will start
-   * erroring ("expected test to fail") - remove the `.fails` then.
+   * FIXED 2026-08-15. This carried `it.fails` from 2026-08-03 to pin the defect while the suite
+   * stayed green; the marker is gone because the geometry is now right.
    *
-   * On a 2x2 every facelet is a corner sticker, so two facelets touching across a net border
-   * are the same physical corner. cubeNet.ts maps every face row-major (i -> [i>>1, i&1]),
-   * which satisfies this for B alone. Worked example, the U/F border: U's F-side stickers are
-   * facelets 0 and 1 (corners UFL and UFR), so they belong on U's BOTTOM row; row-major puts
-   * them on the top. F's U-side stickers are 10 and 11, which row-major puts on the bottom.
+   * On a 2x2 every facelet is a corner sticker, so two facelets touching across a net border are
+   * the same physical corner. The old code mapped every face row-major (i -> [i>>1, i&1]), which
+   * satisfies that for B alone. Worked example, the U/F border: U's F-side stickers are facelets
+   * 0 and 1 (corners UFL and UFR), so they belong on U's BOTTOM row; row-major put them on the
+   * top. F's U-side stickers are 10 and 11, which row-major put on the bottom rather than the
+   * top. Inverting the within-face row fixes both, and the same single rule fixes every face.
    *
-   * NOTE: the 2026-08-02 handoff recorded this as "B and D are probably mis-oriented". That is
-   * close to backwards. Solving the border constraints gives 32 consistent assignments; B is
-   * the ONLY face for which row-major appears in any of them, because this net constrains B
-   * through R alone. U, R, F, D and L are all inconsistent.
+   * NOTE: the 2026-08-02 handoff recorded this as "B and D are probably mis-oriented". That was
+   * close to backwards. Solving the border constraints gives 32 consistent assignments; B is the
+   * ONLY face for which row-major appears in any of them, because this net constrains B through
+   * R alone. U, R, F, D and L were all inconsistent - it was never a two-face problem.
+   *
+   * Of those 32, eight also keep the U/F and F/D column-alignment tests above green, and exactly
+   * one of the eight is a uniform rule rather than a per-face table. No test was weakened to land
+   * the fix, which was the thing worth checking before touching anything.
    */
-  it.fails("places facelets touching across a net border on the same corner", () => {
+  it("places facelets touching across a net border on the same corner", () => {
     for (const [a, b, kind] of BORDERS) {
       for (const [fa, fb] of touchingPairs(a, b, kind)) {
         expect(cornerOf(fa)).toBe(cornerOf(fb));
