@@ -88,7 +88,7 @@ def _legend(entries, y: float):
 CUBE_COLORS = [WHITE, RED, GREEN, YELLOW, ORANGE, BLUE]
 
 
-def _cube_net(frame, center, cell: float = 0.36):
+def _cube_net(frame, center, cell: float = 0.42):
     """A 2x2 cube as an unfolded net. Returns (group, squares-by-facelet) so a scene can recolour
     individual stickers without rebuilding the net.
 
@@ -501,13 +501,13 @@ class PolicyCollapse(Scene):
         title = Text("The same scramble. Two policies.", font_size=TITLE).to_edge(UP)
         self.play(Write(title))
 
-        sides = [("left", -3.4, GREY), ("right", 3.4, GREEN)]
+        sides = [("left", -3.6, GREY), ("right", 3.6, GREEN)]
         nets, squares, name_labels = {}, {}, VGroup()
         for key, x, color in sides:
-            group, sq = _cube_net(t["scramble"], (x, 0.95))
+            group, sq = _cube_net(t["scramble"], (x, 1.0))
             nets[key], squares[key] = group, sq
             name_labels.add(Text(t[key]["name"], font_size=SMALL, color=color)
-                            .move_to([x, 2.45, 0]))
+                            .move_to([x, 2.6, 0]))
         self.play(*[Create(nets[k]) for k, _, _ in sides],
                   *[FadeIn(lbl) for lbl in name_labels], run_time=1.0)
         self.wait(0.8)
@@ -518,7 +518,7 @@ class PolicyCollapse(Scene):
             row, col = divmod(i, 8)
             return Text(t[key]["labels"][i], font_size=SMALL, font=MONO,
                         color=GREY if key == "left" else GREEN
-                        ).move_to([x + (col - 3.5) * 0.34, -0.7 - row * 0.36, 0])
+                        ).move_to([x + (col - 3.5) * 0.36, -0.95 - row * 0.36, 0])
 
         steps = max(len(t["left"]["actions"]), len(t["right"]["actions"]))
         solved_note = None
@@ -528,21 +528,24 @@ class PolicyCollapse(Scene):
                 frames = t[key]["frames"]
                 if i + 1 >= len(frames):
                     continue
-                before, after = frames[i], frames[i + 1]
-                # Recolour only the stickers the move actually moved.
-                anims += [squares[key][f].animate.set_fill(CUBE_COLORS[after[f]])
-                          for f in range(24) if before[f] != after[f]]
+                # A face turn CUTS, it does not cross-fade. `animate.set_fill` interpolates in
+                # colour space, and the 480p stills caught stickers passing through olive, tan
+                # and pink - colours no cube has. Set the fill outright and let the move label
+                # carry the timing.
+                for f, colour in enumerate(frames[i + 1]):
+                    if frames[i][f] != colour:
+                        squares[key][f].set_fill(CUBE_COLORS[colour])
                 anims.append(FadeIn(move_label(key, x, i)))
             self.play(*anims, run_time=0.42)
 
             if solved_note is None and t["right"]["solved"] and \
                     i + 1 == len(t["right"]["actions"]):
                 solved_note = Text(f"solved in {len(t['right']['actions'])}",
-                                   font_size=SMALL, color=GREEN).move_to([3.4, -1.75, 0])
+                                   font_size=SMALL, color=GREEN).move_to([3.6, -1.95, 0])
                 self.play(FadeIn(solved_note), run_time=0.4)
 
         stuck = Text(f"{t['left']['labels'][0]} x {len(t['left']['actions'])}. "
-                     f"Budget exhausted.", font_size=SMALL, color=RED).move_to([-3.4, -1.75, 0])
+                     f"Budget exhausted.", font_size=SMALL, color=RED).move_to([-3.6, -1.95, 0])
         self.play(FadeIn(stuck))
         self.wait(1.2)
 
