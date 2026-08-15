@@ -6,11 +6,10 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project. EXP-044 was dispatched to the laptop at
-23:52 UTC on 2026-08-14: depth 7, 12 seeds, ~9-10 h, so expect it around 09:00-10:00 UTC. PROBE BEFORE ANYTHING ELSE, and do
-not re-dispatch - see the danger block at the top of the handoff, including why the log
-ends with a traceback that is expected and harmless, and the floor cells that still need
-a short follow-up run.
+Picking up the neuromorphic cube project. Nothing is running. EXP-044 landed:
+depth 7 scores 0.0621 and does NOT clear the 0.10 bar, so Claim 1 is REFUTED - but the
+break point is NOT located, because the pre-registered escalation (arm B, 44,000
+episodes, ~32 h) is triggered and unrun.
 
 Read docs/handoffs/SESSION-HANDOFF-2026-08-14b.md first, then CLAUDE.md. The earlier
 SESSION-HANDOFF-2026-08-14.md is still accurate on the science and is the fuller account.
@@ -28,29 +27,26 @@ FullStory assembles them into one 2:21 cut with act cards, and all of it was che
 against real frames on 2026-08-14. The only unbuilt scene is PolicyCollapse, which needs a
 cube renderer.
 
-YOUR JOB THIS SESSION: land EXP-044 and write it up.
+YOUR JOB THIS SESSION: decide on arm B, and if yes, dispatch and land it.
 
-The contract is already committed at b992854 and aggregate.py at 62b825e, both BEFORE any
-record existed - do not edit a threshold. Read the spec, run aggregate.py, and write
-experiments/044_depth7_frontier/RESULTS.md against the pre-registered claims, marking each
-confirmed or refuted. Claim 1 is ABSOLUTE and carries no p-value by design; if you find
-yourself computing one, you have invented a baseline.
+Arm B is the only thing that turns 'depth 7 does not clear the bar' into a located
+frontier. Its reading is already fixed in the spec: B works -> the failure was
+STARVATION and the break point is not found; B also fails -> the break point IS depth 7
+for this recipe. Do not edit a threshold, and do not compute a p-value for Claim 1 - it
+is absolute by design, and computing one means you invented a baseline.
 
-The pre-flight is already measured, so do not redo it:
+Read experiments/044_depth7_frontier/RESULTS.md first. Facts already measured:
 - The depth-7 shell is 33,058 states, NOT the ~58,000 an earlier handoff guessed.
 - ExactBFSDistance(max_depth=8) builds in 0.96 s at 95 MB. It is a non-issue.
 - heldout_cap=200 already binds at depth 6, so evaluation cost does NOT grow with the
   shell. It grows only with episode length.
 
-The one thing that DOES need designing: the training side goes 8,769 -> 32,858 states,
-3.7x, while the episode budget stays at 10,000. If depth 7 fails, "harder task" and
-"each state seen a quarter as often" are not separable unless the pre-registration says
-so. Decide that before dispatching - either hold episodes-per-state roughly fixed, or
-run a budget arm the way EXP-035 did at depth 3.
-
-Pre-register the contract before the numbers exist, n >= 12 seeds, and put the primary
-claim on a quantity that moves on every seed - n=12 cannot show a failure count went to
-zero.
+- Arm A took at most 7.3 h for 12 seeds at 12 workers. Arm B is 4.40x the steps, so
+  about 32 h. Starting it Saturday runs it through Content Day on the same laptop the
+  editing happens on - decide that before dispatching.
+- The floor is measured at exactly 0.0000, so BAR = 0.10 binds.
+- The 12 depth-7 head checkpoints are still only on the laptop. They are tracked; copy
+  and commit them.
 
 If depth 7 is not the right call, the other live options are re-running depth 5 at 24+
 seeds to settle EXP-043's Claim 1 (p 0.0815, four regressing seeds, a p-value miss and

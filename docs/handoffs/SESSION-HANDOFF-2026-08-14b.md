@@ -1,26 +1,27 @@
 # Session Handoff - 2026-08-14 (Fri) - Week 19 session 5 - THE RENDER IS DONE
 
-> [!danger] EXP-044 IS RUNNING ON THE LAPTOP. Dispatched **2026-08-14 23:52 UTC** (19:52 ET).
-> That time is the launcher powershell's own `StartTime`, not an estimate. 12 training seeds at
-> **depth 7**, 10,000 episodes, 12 workers, expected **~9-10 h** wall, so it should land around
-> **09:00-10:00 UTC** Saturday (05:00-06:00 ET).
+> [!important] EXP-044 LANDED. Depth 7 scores **0.0621** and does NOT clear the 0.10 bar.
+> Claim 1 REFUTED on all three conditions (mean 0.0621, margin -2.38 SE, 4 of 12 seeds above).
+> The measured floor is **exactly 0.0000**, and 11 of 12 seeds beat it, so depth 7 is **off the
+> floor and below the bar** - the position EXP-040's depth 6 was in before the cap.
+> Full write-up: `experiments/044_depth7_frontier/RESULTS.md`.
 >
-> Verified HEALTHY at 02:33 UTC, 2h41m in: `probe_run.ps1` reports roots=1, workers=13,
-> `root_parent=powershell.exe` alive, 6.5 effective cores, 0 tracebacks. The dispatching ssh from
-> the VPS was killed at ~02:30 and **the run was unaffected** - `ssh -n` with no `Start-Process`
-> is what makes that hold, as it did for EXP-038. **Probe, do not re-dispatch** - a second launcher would put 24
-> workers on a memory-bound laptop. `scripts/laptop/probe_run.ps1 -OutDir "experiments\044_depth7_frontier\outputs"`.
+> **THE BREAK POINT IS NOT LOCATED YET.** Claim 2's escalation is triggered and unrun: coverage at
+> depth 7 is 0.044 episodes per training state against depth 6's 0.190, so "harder" and "starved"
+> are inseparable from arm A alone. **Arm B (44,000 episodes) is the only thing that resolves it**,
+> and its reading was fixed in advance. Re-costed from what arm A actually did: 4.40x the steps,
+> arm A took at most 7.3 h, so **about 32 h** rather than the 52 h the design guessed.
 >
-> **The log WILL end with an UnboundLocalError traceback, and that is expected.** The 12 floor
-> cells were queued behind the training runs against a bug that has since been fixed (`62b825e`),
-> and the running workers hold the old code in memory. `ProcessPoolExecutor.__exit__` calls
-> `shutdown(wait=True)`, which waits for running futures rather than cancelling them, so **all 12
-> training records still get written**. The floor is simply unmeasured.
+> ```
+> run.py --episodes 44000 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 12 --skip-existing --no-floor
+> ```
 >
-> **After arm A lands:** sync the laptop to pick up the fix, then re-run for the floor only -
-> `run.py --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 12 --skip-existing` skips the 12 existing
-> training records and runs the 12 floor cells, which take minutes. **The bar cannot be computed
-> without it**: BAR = max(0.10, 2 x the measured floor).
+> **Scheduling conflict worth deciding first:** 32 h from Saturday morning runs straight through
+> Content Day on Sunday, with 12 workers on the machine the editing happens on.
+>
+> **Still to do:** the 12 depth-7 head checkpoints are on the laptop and NOT yet copied here. They
+> are tracked (`.gitignore` negates `*_head.pt`) and the laptop went to sleep before they could be
+> fetched.
 
 > **Otherwise the repo is clean and pushed.**
 >
