@@ -1,6 +1,22 @@
 # Session Handoff - 2026-08-14 (Fri) - Week 19 session 5 - THE RENDER IS DONE
 
-> **Nothing is in flight. Both machines are idle. The repo is clean and pushed.**
+> [!danger] EXP-044 IS RUNNING ON THE LAPTOP. Dispatched 2026-08-15 ~00:30 UTC.
+> 12 training seeds at **depth 7**, 10,000 episodes, 12 workers, expected **~9-10 h** wall, so it
+> should land mid-morning Saturday. **Probe, do not re-dispatch** - a second launcher would put 24
+> workers on a memory-bound laptop. `scripts/laptop/probe_run.ps1 -OutDir "experiments\044_depth7_frontier\outputs"`.
+>
+> **The log WILL end with an UnboundLocalError traceback, and that is expected.** The 12 floor
+> cells were queued behind the training runs against a bug that has since been fixed (`62b825e`),
+> and the running workers hold the old code in memory. `ProcessPoolExecutor.__exit__` calls
+> `shutdown(wait=True)`, which waits for running futures rather than cancelling them, so **all 12
+> training records still get written**. The floor is simply unmeasured.
+>
+> **After arm A lands:** sync the laptop to pick up the fix, then re-run for the floor only -
+> `run.py --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 12 --skip-existing` skips the 12 existing
+> training records and runs the 12 floor cells, which take minutes. **The bar cannot be computed
+> without it**: BAR = max(0.10, 2 x the measured floor).
+
+> **Otherwise the repo is clean and pushed.**
 >
 > **All seven built scenes are rendered at 1080p, and `FullStory` assembles them into one
 > 2:21 cut** with act cards and fades. Checked against real frames, on the laptop.

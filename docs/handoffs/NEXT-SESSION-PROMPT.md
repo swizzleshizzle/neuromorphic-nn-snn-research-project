@@ -6,7 +6,11 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project. Nothing is running; both machines are idle.
+Picking up the neuromorphic cube project. EXP-044 was dispatched to the laptop at
+~00:30 UTC on 2026-08-15: depth 7, 12 seeds, ~9-10 h. PROBE BEFORE ANYTHING ELSE, and do
+not re-dispatch - see the danger block at the top of the handoff, including why the log
+ends with a traceback that is expected and harmless, and the floor cells that still need
+a short follow-up run.
 
 Read docs/handoffs/SESSION-HANDOFF-2026-08-14b.md first, then CLAUDE.md. The earlier
 SESSION-HANDOFF-2026-08-14.md is still accurate on the science and is the fuller account.
@@ -24,7 +28,13 @@ FullStory assembles them into one 2:21 cut with act cards, and all of it was che
 against real frames on 2026-08-14. The only unbuilt scene is PolicyCollapse, which needs a
 cube renderer.
 
-YOUR JOB THIS SESSION: find the new break point at depth 7.
+YOUR JOB THIS SESSION: land EXP-044 and write it up.
+
+The contract is already committed at b992854 and aggregate.py at 62b825e, both BEFORE any
+record existed - do not edit a threshold. Read the spec, run aggregate.py, and write
+experiments/044_depth7_frontier/RESULTS.md against the pre-registered claims, marking each
+confirmed or refuted. Claim 1 is ABSOLUTE and carries no p-value by design; if you find
+yourself computing one, you have invented a baseline.
 
 The pre-flight is already measured, so do not redo it:
 - The depth-7 shell is 33,058 states, NOT the ~58,000 an earlier handoff guessed.
