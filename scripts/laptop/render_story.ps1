@@ -69,7 +69,15 @@ foreach ($scene in $Scenes) {
     # FullStory always writes its sections: an editor wants the pieces as well as the cut, and
     # they cost nothing extra because manim has already rendered them.
     $extra = @()
-    if ($scene -eq 'FullStory') { $extra += '--save_sections' }
+    if ($scene -eq 'FullStory') {
+        $extra += '--save_sections'
+        # PURGE FIRST. manim does not clean this directory, so a section that existed in a
+        # previous cut survives a re-render under its old index. On 2026-08-15 that left both
+        # FullStory_0004_CollapseIsASymptom and FullStory_0004_PolicyCollapse in place - drop
+        # the folder on a timeline sorted by name and the same punchline plays twice.
+        $sections = Join-Path $MediaDir "videos\story_scenes\$resDir\sections"
+        if (Test-Path $sections) { Remove-Item (Join-Path $sections '*.mp4') -ErrorAction SilentlyContinue }
+    }
     & $python -m manim "-$Quality" @extra --media_dir $MediaDir scenes/story_scenes.py $scene *> $log
     $code = $LASTEXITCODE
 
