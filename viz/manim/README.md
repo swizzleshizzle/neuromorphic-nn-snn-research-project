@@ -97,7 +97,27 @@ on a scene whose caption is sitting on top of a label.** Green logs are not a re
 stills are the actual check. `-Quality ql|qm|qh|qk`, `-Scenes A,B,C`, `-Frames N`.
 
 Scenes: `TheBreakPointMoves`, `TheWall`, `ScaleOfTheCube`, `CollapseIsASymptom`,
-`TheCurriculumUnlock`, `TheEncoderLearns`, `WhereWeStarted`, and `FullStory`.
+`TheCurriculumUnlock`, `TheEncoderLearns`, `WhereWeStarted`, `PolicyCollapse`, and `FullStory`.
+
+## The one scene with recorded input
+
+`PolicyCollapse` replays two real rollouts rather than drawing a cube turning. Regenerate them
+only in the **project** venv - it needs torch and the brain, and the manim venv has neither:
+
+```bash
+.venv/bin/python viz/manim/record_traces.py     # writes viz/manim/traces.json, committed
+.venv/bin/python viz/manim/cube_net.py          # net geometry self-check, prints the layout
+```
+
+`record_traces.py` rebuilds each arm's config from **its own record** rather than a
+re-specification, so a replay cannot silently differ from the run that trained the checkpoint.
+Verify any regenerated `traces.json` against the cube model before committing it - every frame
+should replay under `apply_move`, and the `solved` flag should match `is_solved`. This repo has
+already had a cube frame labelled `solved: yes` on a scrambled cube pass every unit test.
+
+`cube_net.py` is the Python twin of `dashboard/src/panels/cubeNet.ts` and carries the same corner
+check, so the video and the dashboard draw the same cube. **Both had every face's rows inverted
+until 2026-08-15.**
 
 ## Assembling the whole arc
 

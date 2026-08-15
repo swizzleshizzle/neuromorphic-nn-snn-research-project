@@ -52,9 +52,14 @@ curriculum is the lever, not the compute.
 ### Scene 3 — `PolicyCollapse`
 The most visceral shot available, and it needs no chart.
 
-Two cubes, same scramble, side by side. Left: a collapsed policy playing **one move, over and
-over** (modal action fraction **1.000** against a uniform floor of 0.354; EXP-031 found 7 of 12
-seeds doing exactly this). Right: a working policy solving it.
+Two cube nets, same scramble, side by side. **Left: EXP-036 seed 3 plays R fifteen times and
+never stops** (modal action fraction **1.000**, success **0.0000**; four of its twelve seeds do
+exactly this, and EXP-031 found 7 of 12 at depth 2). **Right: EXP-043 seed 11 solves it in
+eight** - `U U U R U' R' U F'`.
+
+**The pairing crosses experiments, and the scene says so on screen.** EXP-036 has no working seed
+at depth 6 to pair against - all twelve score 0.0000 - so a same-experiment version of this shot
+does not exist at this depth, and depth 3 has no fully collapsed seed (modal tops out at 0.793).
 
 **The twist that makes it a real finding:** EXP-032 *fixed* the collapse and success got
 **worse** (0.380 -> 0.117 at depth 2). EXP-038 repeated that at depth 6 where the diagnosis was
@@ -176,8 +181,8 @@ These keep the video credible, and they are all in the write-ups:
 | `TheEncoderLearns` | line chart | EXP-039 records | **rendered** |
 | `CollapseIsASymptom` | table | EXP-036 + 038 records | **rendered** |
 | `WhereWeStarted` | table morph | EXP-029 published + today | **rendered** |
-| `FullStory` | all of the above, in order | - | **rendered, 2:21** |
-| `PolicyCollapse` | two cubes, animated | EXP-031/032/038 records | needs a cube renderer |
+| `PolicyCollapse` | two cube nets, animated | **recorded rollouts** + EXP-038 | **rendered** |
+| `FullStory` | all of the above, in order | - | **rendered** |
 
 Three of the six are charts and three are tables, which is deliberate: the two levers and the
 curriculum climb are **trends**, so they are lines and bars, while the probe ceiling and the
@@ -188,12 +193,19 @@ read as one slide.
 cannot import there. `scripts/laptop/render_story.ps1` drives it and pulls stills; `README.md` has
 the setup, which is already done.
 
-**Status 2026-08-14:** seven scenes are built, rendered at 1080p, and layout-checked against real
-frames, and **`FullStory` assembles them into one 2:21 cut** with act cards and fades - see
-`README.md` for how that composes and what still belongs in an editor. `CollapseIsASymptom` is
-Scene 3's evidence as a chart, **not** the two-cube `PolicyCollapse` shot, since that one needs a
-cube renderer that does not exist yet. `PolicyCollapse` is the only scene still story-only, and
-it is the most visceral shot in the deck.
+**Status 2026-08-15: every scene in this document is built and rendered at 1080p**, and
+`FullStory` assembles them with act cards and fades - see `README.md` for how that composes and
+what still belongs in an editor.
+
+`PolicyCollapse` landed last and replaces `CollapseIsASymptom` in the assembled cut: the two land
+the same punchline from the same records, one as two cubes and one as a table, and back to back
+the second is the first repeated. The table stays a first-class scene for anywhere the numbers
+matter more than the picture.
+
+**Its frames are replayed from real rollouts, not drawn.** `record_traces.py` loads the two head
+checkpoints and rolls them out from one shared held-out scramble; `traces.json` was verified
+frame by frame against `apply_move`, and its solved flags against `is_solved`, before being
+committed.
 
 **Records do not travel with the repo.** They are gitignored, so each machine holds only what it
 ran, and a scene whose experiment is missing now fails by name rather than as a `NoneType` deep
