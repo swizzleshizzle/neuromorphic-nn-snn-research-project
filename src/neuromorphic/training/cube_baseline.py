@@ -539,6 +539,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
+        # ...and for the same reason it never enters the stage loop that fills this. Empty is the
+        # honest value, not a missing key: EXP-042 added `stage_trace` and every floor arm before
+        # it predates the telemetry, so the combination went unexercised until EXP-044 asked for a
+        # measured floor at depth 7 WITH a curriculum. It raised UnboundLocalError at record time.
+        stage_trace: list[dict] = []
     else:
         agent = make_agent(cfg)
         torch.manual_seed(train_seed)  # head init and sampling stream matched across arms

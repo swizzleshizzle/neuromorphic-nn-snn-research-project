@@ -330,6 +330,32 @@ def test_random_arm_scores_near_the_floor_on_both_sides(tmp_path):
     assert r["n_train_eval"] == 90
 
 
+def test_floor_arm_with_a_curriculum_records_an_empty_stage_trace(tmp_path):
+    """The floor short-circuits training, so it never enters the loop that fills `stage_trace` -
+    and the record assembles that key unconditionally.
+
+    The combination went unexercised for two experiments. `stage_trace` arrived with EXP-042, so
+    every floor measured before it predates the telemetry, and the test above runs the floor with
+    **no curriculum**. EXP-044 asked for a measured floor at depth 7 with `curriculum=(1..7)` and
+    it raised `UnboundLocalError: local variable 'stage_trace' referenced before assignment` at
+    record time - after both evaluations had run, so the work was done and then thrown away.
+
+    Empty is asserted rather than merely present: a floor reporting stages would mean the
+    short-circuit had stopped short-circuiting and the chance floor was being trained, which is
+    the failure that would quietly invalidate every bar computed against it.
+    """
+    cfg = CubeConfig(seed=0, depth=2, arm="random", tag="t_floor_curriculum",
+                     curriculum=(1, 2), episodes=10, max_depth=2, out_dir=tmp_path)
+    r = run_cube_baseline(cfg)
+
+    assert r["stage_trace"] == []
+    # The floor never trains, whatever the schedule says. This is the number that moves first if
+    # a curriculum ever drags it into the training branch.
+    assert r["episodes"] == 0
+    on_disk = json.loads((tmp_path / record_filename(cfg)).read_text())
+    assert on_disk["stage_trace"] == []
+
+
 # --- EXP-037: curriculum stage weighting ---
 
 
