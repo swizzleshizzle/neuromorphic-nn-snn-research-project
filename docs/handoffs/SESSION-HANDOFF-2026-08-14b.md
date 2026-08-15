@@ -18,8 +18,8 @@
 
 > **Otherwise the repo is clean and pushed.**
 >
-> **All seven built scenes are rendered at 1080p, and `FullStory` assembles them into one
-> 2:21 cut** with act cards and fades. Checked against real frames, on the laptop.
+> **EVERY scene in `story.md` is now built and rendered at 1080p**, `PolicyCollapse` included,
+> and `FullStory` assembles them with act cards and fades. Checked against real frames.
 > Content Day (**Sunday** 2026-08-16, 09:00 ET) has video assets. This file is the shorter one: the previous
 > handoff (`SESSION-HANDOFF-2026-08-14.md`) still describes the science correctly and nothing in
 > it was refuted today.
@@ -59,9 +59,23 @@ screen rather than quietly dropped.
   and 6 get a dash rather than a zero, since EXP-029 stopped at depth 4. **Its depth-3 "now" cell
   is not on today's recipe** (EXP-035, frozen encoder, 30,000 episodes) and says so on screen; an
   unmarked column would have folded two encoders and a 3x budget into one word.
-- **`FullStory`** - all seven in `story.md` order, three act cards, a fade between each, **2:21**.
-  It calls each scene's own `construct` rather than copying it, so one definition of every shot
-  survives. `--save_sections` writes the pieces alongside the cut, which is what an editor wants.
+- **`FullStory`** - the arc in `story.md` order, three act cards, a fade between each. It calls
+  each scene's own `construct` rather than copying it, so one definition of every shot survives.
+  `--save_sections` writes the pieces alongside the cut, which is what an editor wants.
+- **`PolicyCollapse`** - built overnight, the last scene and the deck's best shot. Two cube nets,
+  the same held-out depth-6 scramble: EXP-036 seed 3 plays **R fifteen times** and never stops
+  (modal 1.000, success 0.0000, four of its twelve seeds do this), EXP-043 seed 11 solves in
+  **eight**. It replaces `CollapseIsASymptom` in the cut - same punchline from the same records,
+  and back to back the second is the first repeated.
+
+> [!important] PolicyCollapse replays recorded rollouts. Nothing in it is drawn by hand.
+> `record_traces.py` rebuilds each arm's config from **its own record**, loads the real head
+> checkpoint and rolls out; `traces.json` was verified frame by frame against `apply_move`, and
+> its solved flags against `is_solved`, before being committed. Regenerate it only in the PROJECT
+> venv - it needs torch and the brain, and the manim venv has neither.
+>
+> The pairing crosses experiments and the scene captions that: EXP-036 has no working seed at
+> depth 6 to pair against, since all twelve score 0.0000.
 
 `curriculum_climb()` replaced the transcribed `PUBLISHED_CURRICULUM`, which was already off in
 its last digit (0.256 against a measured 0.2556). Records were local the whole time.
@@ -154,9 +168,9 @@ it grows only with episode length, so a depth-7 eval is about 17/15 of a depth-6
    since EXP-036, so this is the interesting one.
 2. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1. It is the clearest case in the
    project where 12 seeds is the binding constraint rather than the effect.
-3. **One scene is still story-only:** `PolicyCollapse`, which needs a cube renderer that does not
-   exist yet. It is the most visceral shot in the deck - two cubes side by side, one playing the
-   same move forever - and it is the only thing the video is missing.
+3. **The visual story is complete.** Nothing in `story.md` is unbuilt. If Content Day wants more,
+   the next useful thing is narration-driven retiming, which is an editor job rather than a manim
+   one - every `wait()` is baked in at render time.
 4. **Fine-tune the encoder during RL** - still untested, and the frozen version now carries four
    working depths.
 5. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in the vault `progress-tracker`.
