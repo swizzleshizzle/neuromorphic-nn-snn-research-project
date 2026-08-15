@@ -34,7 +34,8 @@ param(
     [string]  $Quality  = 'ql',
     [int]     $Frames   = 3,
     [string[]]$Scenes   = @('TheBreakPointMoves', 'TheWall', 'ScaleOfTheCube', 'CollapseIsASymptom',
-                            'TheCurriculumUnlock', 'TheEncoderLearns', 'WhereWeStarted'),
+                            'TheCurriculumUnlock', 'TheEncoderLearns', 'WhereWeStarted',
+                            'PolicyCollapse'),
     [switch]  $Full
 )
 
