@@ -564,7 +564,7 @@ class PolicyCollapse(Scene):
                  font_size=SMALL, color=YELLOW),
             Text(f"Success went {ev['baseline']['success']:.4f} -> {ev[beta]['success']:.4f}. "
                  f"It bought nothing.", font_size=SMALL, color=YELLOW),
-        ).arrange(DOWN, buff=0.22).move_to([0, -2.6, 0])
+        ).arrange(DOWN, buff=0.24).move_to([0, -2.75, 0])
         self.play(FadeIn(beat2))
         self.wait(2.2)
 
