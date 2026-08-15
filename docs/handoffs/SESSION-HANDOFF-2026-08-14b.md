@@ -1,8 +1,14 @@
 # Session Handoff - 2026-08-14 (Fri) - Week 19 session 5 - THE RENDER IS DONE
 
-> [!danger] EXP-044 IS RUNNING ON THE LAPTOP. Dispatched 2026-08-15 ~00:30 UTC.
-> 12 training seeds at **depth 7**, 10,000 episodes, 12 workers, expected **~9-10 h** wall, so it
-> should land mid-morning Saturday. **Probe, do not re-dispatch** - a second launcher would put 24
+> [!danger] EXP-044 IS RUNNING ON THE LAPTOP. Dispatched **2026-08-14 23:52 UTC** (19:52 ET).
+> That time is the launcher powershell's own `StartTime`, not an estimate. 12 training seeds at
+> **depth 7**, 10,000 episodes, 12 workers, expected **~9-10 h** wall, so it should land around
+> **09:00-10:00 UTC** Saturday (05:00-06:00 ET).
+>
+> Verified HEALTHY at 02:33 UTC, 2h41m in: `probe_run.ps1` reports roots=1, workers=13,
+> `root_parent=powershell.exe` alive, 6.5 effective cores, 0 tracebacks. The dispatching ssh from
+> the VPS was killed at ~02:30 and **the run was unaffected** - `ssh -n` with no `Start-Process`
+> is what makes that hold, as it did for EXP-038. **Probe, do not re-dispatch** - a second launcher would put 24
 > workers on a memory-bound laptop. `scripts/laptop/probe_run.ps1 -OutDir "experiments\044_depth7_frontier\outputs"`.
 >
 > **The log WILL end with an UnboundLocalError traceback, and that is expected.** The 12 floor

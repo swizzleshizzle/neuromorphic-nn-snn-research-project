@@ -7,7 +7,7 @@ detail, and duplicating it here would create two versions that drift.
 
 ```
 Picking up the neuromorphic cube project. EXP-044 was dispatched to the laptop at
-~00:30 UTC on 2026-08-15: depth 7, 12 seeds, ~9-10 h. PROBE BEFORE ANYTHING ELSE, and do
+23:52 UTC on 2026-08-14: depth 7, 12 seeds, ~9-10 h, so expect it around 09:00-10:00 UTC. PROBE BEFORE ANYTHING ELSE, and do
 not re-dispatch - see the danger block at the top of the handoff, including why the log
 ends with a traceback that is expected and harmless, and the floor cells that still need
 a short follow-up run.
