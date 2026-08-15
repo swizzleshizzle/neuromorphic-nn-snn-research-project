@@ -2,7 +2,7 @@
 
 > **Nothing is in flight. Both machines are idle. The repo is clean at `c45f13a` and pushed.**
 >
-> **The job now is the RENDER, not another experiment.** Content Day is **Saturday 2026-08-16**
+> **The job now is the RENDER, not another experiment.** Content Day is **Sunday 2026-08-16**
 > and the visual-story scenes have never been rendered once. Section 3 is the whole task.
 >
 > Read `CLAUDE.md` first, then this file. Strategy is **not** in this repo: it is the vault at

@@ -125,7 +125,7 @@ noise dressed as a verdict, and it was reported as *at* the bar rather than *wor
 
 1. **Write `experiments/043_cap_at_depth_5_6/aggregate.py`, then read the records.** `^07e2`'s
    sibling; the EXP-042 one is the template.
-2. **`^5bdb` render the manim scenes - Content Day is SAT AUG 16.** They have never been
+2. **`^5bdb` render the manim scenes - Content Day is SUN AUG 16.** They have never been
    rendered, so layout is unverified. `manimpango` will **not** build on the VPS; three attempts
    are recorded in `viz/manim/README.md`. **Render on the laptop** once EXP-043 clears. Story arc
    and the data layer are done (`viz/manim/story.md`, `data.py`).

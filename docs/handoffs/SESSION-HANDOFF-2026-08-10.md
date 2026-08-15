@@ -302,7 +302,7 @@ Use **ManimCE** (`pip install manim`), not `3b1b/manim`, which is Grant's unsupp
 codebase. Records absent locally for EXP-027/029/030; their published means cover every scene,
 and they would only be needed for per-seed scatter.
 
-**Content Day is Sat Aug 16**, and both drafted titles for Video 8 are now out of date in the
+**Content Day is SUN Aug 16**, and both drafted titles for Video 8 are now out of date in the
 project's favour.
 
 ### Still queued for week 19
@@ -368,7 +368,7 @@ now installed**, so `pycairo` - the original blocker - builds.
 **Shortest path is probably the laptop**, which is the intended final-render box anyway and more
 likely to have matching prebuilt wheels. This VPS blocker may not be worth solving.
 
-**Content Day is Sat Aug 16 and the scenes remain unrendered and unverified.** That is the
+**Content Day is SUN Aug 16 and the scenes remain unrendered and unverified.** That is the
 standing risk.
 
 ### serverlocal is not a good render target

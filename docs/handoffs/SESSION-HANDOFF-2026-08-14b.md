@@ -20,7 +20,7 @@
 >
 > **All seven built scenes are rendered at 1080p, and `FullStory` assembles them into one
 > 2:21 cut** with act cards and fades. Checked against real frames, on the laptop.
-> Content Day (Sat 2026-08-16) has video assets. This file is the shorter one: the previous
+> Content Day (**Sunday** 2026-08-16, 09:00 ET) has video assets. This file is the shorter one: the previous
 > handoff (`SESSION-HANDOFF-2026-08-14.md`) still describes the science correctly and nothing in
 > it was refuted today.
 
