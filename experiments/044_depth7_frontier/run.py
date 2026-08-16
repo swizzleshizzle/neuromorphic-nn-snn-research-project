@@ -47,12 +47,14 @@ from pathlib import Path
 
 import torch
 
+from neuromorphic.envs.cube_distance import ExactBFSDistance
 from neuromorphic.training.cube_baseline import (
     CubeConfig,
     curriculum_schedule,
     max_steps_for,
     record_filename,
     run_cube_baseline,
+    shell_states,
 )
 
 torch.set_num_threads(1)
@@ -64,10 +66,11 @@ DEPTH = 7
 EPISODES_A = 10_000          # matched to every other depth in the series
 EPISODES_B = 44_000          # arm B only: matches depth 6's episodes-per-train-state (0.190)
 CAP = ((1, 2),)              # EXP-042's confirmed arm, unchanged
+HELDOUT_CAP, HELDOUT_FRAC = 200, 0.25        # CubeConfig defaults; only used for the banner
 
 # EXP-043, for the pre-flight print. The comparison the run is placed against, NOT a paired test.
 EXP043_D6 = 0.1800
-COVERAGE = {5: 0.973, 6: 0.190, 7: 0.044}    # episodes per train state at the deepest stage
+COVERAGE_D5, COVERAGE_D6 = 0.973, 0.190      # episodes per train state, both at 10,000 episodes
 
 
 def curriculum_for(depth: int) -> tuple[int, ...]:
@@ -108,6 +111,19 @@ def sweep_configs(seeds, out_dir: Path, episodes: int, floor: bool) -> list[Cube
     return configs
 
 
+def coverage(episodes: int) -> float:
+    """Episodes per TRAINING state at the deepest curriculum stage.
+
+    Computed, not a constant. It was a constant until arm B was dispatched, and the banner then
+    announced arm A's 0.044 for a run whose entire purpose is to raise it to 0.190 - a log a
+    later reader would have taken at face value.
+    """
+    stage = dict(curriculum_schedule(curriculum_for(DEPTH), episodes, None))[DEPTH]
+    shell = len(shell_states(ExactBFSDistance(max_depth=DEPTH), DEPTH))
+    train_side = shell - min(HELDOUT_CAP, int(shell * HELDOUT_FRAC))
+    return stage / train_side
+
+
 def env_steps(episodes: int) -> int:
     override = dict(CAP)
     sched = curriculum_schedule(curriculum_for(DEPTH), episodes, None)
@@ -130,6 +146,10 @@ def main() -> None:
                          "CLAIM 1 REFUTES - see the spec before dispatching it.")
     ap.add_argument("--no-floor", action="store_true",
                     help="skip the measured chance floor. Only sensible once it is recorded.")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the pre-flight banner and STOP. Checking the banner by running "
+                         "the driver and killing the pipe nearly started a 44,000-episode run on "
+                         "the wrong machine, against a seed the laptop was already computing.")
     args = ap.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -158,8 +178,8 @@ def main() -> None:
           f"{args.workers} workers")
     print(f"  {env_steps(args.episodes):,} env steps per training run "
           f"({env_steps(args.episodes) / env_steps(EPISODES_A):.2f}x arm A)")
-    print(f"  coverage at the deepest stage: {COVERAGE[7]:.3f} episodes/train state "
-          f"against depth 6's {COVERAGE[6]:.3f} and depth 5's {COVERAGE[5]:.3f}")
+    print(f"  coverage at the deepest stage: {coverage(args.episodes):.3f} episodes/train state "
+          f"against depth 6's {COVERAGE_D6:.3f} and depth 5's {COVERAGE_D5:.3f}")
     print(f"  depth 6 scored {EXP043_D6} here. THIS IS NOT A PAIRED TEST: there is no prior")
     print("  depth-7 arm, so Claim 1 is absolute and carries NO p-value.")
     print("  WORKING needs mean >= BAR, >= 1.0 SE of margin, and >= 8/12 seeds above BAR,")
@@ -170,6 +190,10 @@ def main() -> None:
 
     if not configs:
         print("nothing to do.")
+        return
+
+    if args.dry_run:
+        print(f"  --dry-run: {len(configs)} cell(s) NOT started.")
         return
 
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
