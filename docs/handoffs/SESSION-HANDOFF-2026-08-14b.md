@@ -16,8 +16,8 @@
 > run.py --episodes 44000 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 12 --skip-existing --no-floor
 > ```
 >
-> **Scheduling conflict worth deciding first:** 32 h from Saturday morning runs straight through
-> Content Day on Sunday, with 12 workers on the machine the editing happens on.
+> **No scheduling conflict.** An earlier version of this block worried about Content Day; it is
+> defunct (see `CLAUDE.md`), so the laptop is free and arm B can run whenever.
 >
 > **Still to do:** the 12 depth-7 head checkpoints are on the laptop and NOT yet copied here. They
 > are tracked (`.gitignore` negates `*_head.pt`) and the laptop went to sleep before they could be
@@ -27,7 +27,7 @@
 >
 > **EVERY scene in `story.md` is now built and rendered at 1080p**, `PolicyCollapse` included,
 > and `FullStory` assembles them with act cards and fades. Checked against real frames.
-> Content Day (**Sunday** 2026-08-16, 09:00 ET) has video assets. This file is the shorter one: the previous
+> **Content Day is defunct and nothing here is deadline-driven** (2026-08-15). This file is the shorter one: the previous
 > handoff (`SESSION-HANDOFF-2026-08-14.md`) still describes the science correctly and nothing in
 > it was refuted today.
 
@@ -175,9 +175,8 @@ it grows only with episode length, so a depth-7 eval is about 17/15 of a depth-6
    since EXP-036, so this is the interesting one.
 2. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1. It is the clearest case in the
    project where 12 seeds is the binding constraint rather than the effect.
-3. **The visual story is complete.** Nothing in `story.md` is unbuilt. If Content Day wants more,
-   the next useful thing is narration-driven retiming, which is an editor job rather than a manim
-   one - every `wait()` is baked in at render time.
+3. **The visual story is complete.** Nothing in `story.md` is unbuilt, and nothing is waiting on
+   it - the scenes are explanatory artefacts, not content with a ship date.
 4. **Fine-tune the encoder during RL** - still untested, and the frozen version now carries four
    working depths.
 5. `^0817` **needs Michael**: Phase 0 / Phase 1 checkpoints in the vault `progress-tracker`.

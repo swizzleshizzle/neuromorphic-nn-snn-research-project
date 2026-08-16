@@ -56,6 +56,19 @@ Practical consequences:
 - **Distance-to-solved is an instrument, never a model input.** The observation is raw facelets.
 - `brain.step` costs about 90 ms and dominates every runtime estimate.
 
+## There is no publishing deadline
+
+**Content Day is defunct - Michael does not post anything** (stated 2026-08-15). The recurring
+"Content Day" calendar events, and the Video 8-9 / Written Post #6 / subscriber-and-Patreon review
+they carry, are leftovers from the original 2026-03-31 plan. The vault recorded the
+media/monetization track as dropped 2026-06-25; this goes further.
+
+Several handoffs treated "Content Day is Aug 16" as a hard deadline and prioritised rendering
+against it. **That urgency was invented by the docs, not by Michael.** Visual work is still
+wanted - the manim scenes were asked for and liked - but as explanatory artefacts, not as content
+with a ship date. Do not schedule work against a publishing date, and do not let a handoff
+reintroduce one.
+
 ## Research habits
 
 - **Per-experiment `RESULTS.md`, committed.** Standing since the 2026-07-13 audit found EXP-027's numbers living only in a gitignored `outputs/` folder. Include provenance: seeds, date, machine, regeneration command.

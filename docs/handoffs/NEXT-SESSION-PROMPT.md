@@ -42,8 +42,7 @@ Read experiments/044_depth7_frontier/RESULTS.md first. Facts already measured:
   shell. It grows only with episode length.
 
 - Arm A took at most 7.3 h for 12 seeds at 12 workers. Arm B is 4.40x the steps, so
-  about 32 h. Starting it Saturday runs it through Content Day on the same laptop the
-  editing happens on - decide that before dispatching.
+  about 32 h. Nothing competes for the laptop: Content Day is defunct.
 - The floor is measured at exactly 0.0000, so BAR = 0.10 binds.
 - The 12 depth-7 head checkpoints are still only on the laptop. They are tracked; copy
   and commit them.
