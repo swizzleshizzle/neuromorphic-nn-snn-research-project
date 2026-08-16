@@ -24,7 +24,12 @@
 
 param(
     [string]$OutDir = '',
-    [int]$SampleSeconds = 45
+    [int]$SampleSeconds = 45,
+    # Which log to watch. It was hardcoded to run.log, which silently reports the WRONG run when
+    # an experiment has more than one arm: probing EXP-044's arm B printed arm A's finished log,
+    # so log_growth_bytes=0 looked like a stall on a run that was perfectly healthy. The process
+    # tree and effective cores are unaffected - they are the signals that decide the verdict.
+    [string]$LogName = 'run.log'
 )
 
 $procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python' }
@@ -53,7 +58,7 @@ foreach ($r in $roots) {
 
 # Worker count alone proves nothing; measure that they are actually advancing.
 $a = ($procs | Measure-Object -Property WorkingSetSize -Sum).Sum
-$log = if ($OutDir -ne '') { Join-Path $OutDir 'run.log' } else { '' }
+$log = if ($OutDir -ne '') { Join-Path $OutDir $LogName } else { '' }
 $hasLog = ($log -ne '' -and (Test-Path $log))
 $l1 = if ($hasLog) { (Get-Item $log).Length } else { 0 }
 
@@ -69,7 +74,8 @@ Write-Output ("effective_cores=" + $cores)
 Write-Output ("working_set_gb=" + [math]::Round($a / 1GB, 2))
 
 if ($hasLog) {
-    Write-Output ("records=" + (Get-ChildItem $OutDir -Filter *.json).Count)
+    Write-Output ("records=" + (Get-ChildItem $OutDir -Filter *.json).Count +
+                  "  (ALL arms in this folder, not just the one running)")
     Write-Output ("tracebacks=" + (Select-String -Path $log -Pattern 'Traceback').Count)
     # LastWriteTime is NOT usable here. Windows does not flush it to the directory entry while
     # the writer holds the file open, so a healthy run reads as hours stale - EXP-038 showed
