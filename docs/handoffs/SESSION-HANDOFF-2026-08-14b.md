@@ -1,27 +1,22 @@
 # Session Handoff - 2026-08-14 (Fri) - Week 19 session 5 - THE RENDER IS DONE
 
-> [!important] EXP-044 LANDED. Depth 7 scores **0.0621** and does NOT clear the 0.10 bar.
-> Claim 1 REFUTED on all three conditions (mean 0.0621, margin -2.38 SE, 4 of 12 seeds above).
-> The measured floor is **exactly 0.0000**, and 11 of 12 seeds beat it, so depth 7 is **off the
-> floor and below the bar** - the position EXP-040's depth 6 was in before the cap.
-> Full write-up: `experiments/044_depth7_frontier/RESULTS.md`.
+> [!danger] EXP-044 ARM B IS RUNNING. Dispatched 2026-08-16 00:50 UTC (Sat 20:50 ET).
+> Depth 7 at **44,000 episodes**, 12 seeds, 12 workers. 465,175 env steps per run, 4.40x arm A,
+> so expect **about 32 h** - landing roughly **08:50 UTC Monday** (04:50 ET). Verified HEALTHY at
+> dispatch: roots=1, workers=13, `root_parent` alive, 7.1 effective cores, 0 tracebacks.
+> **Probe, do not re-dispatch.** Nothing competes for the laptop.
 >
-> **THE BREAK POINT IS NOT LOCATED YET.** Claim 2's escalation is triggered and unrun: coverage at
-> depth 7 is 0.044 episodes per training state against depth 6's 0.190, so "harder" and "starved"
-> are inseparable from arm A alone. **Arm B (44,000 episodes) is the only thing that resolves it**,
-> and its reading was fixed in advance. Re-costed from what arm A actually did: 4.40x the steps,
-> arm A took at most 7.3 h, so **about 32 h** rather than the 52 h the design guessed.
+> **It is not usefully interruptible.** All 12 seeds run in parallel and none writes until it
+> finishes, so killing it before ~32 h loses everything. `--skip-existing` only helps between runs.
 >
-> ```
-> run.py --episodes 44000 --seeds 0 1 2 3 4 5 6 7 8 9 10 11 --workers 12 --skip-existing --no-floor
-> ```
+> **ARM A ALREADY LANDED AND IS WRITTEN UP.** Depth 7 scores **0.0621** and does NOT clear the
+> 0.10 bar: Claim 1 REFUTED on all three conditions (margin -2.38 SE, 4 of 12 seeds above). The
+> measured floor is exactly 0.0000 and 11 of 12 seeds beat it, so depth 7 is **off the floor and
+> below the bar**. See `experiments/044_depth7_frontier/RESULTS.md`.
 >
-> **No scheduling conflict.** An earlier version of this block worried about Content Day; it is
-> defunct (see `CLAUDE.md`), so the laptop is free and arm B can run whenever.
->
-> **Still to do:** the 12 depth-7 head checkpoints are on the laptop and NOT yet copied here. They
-> are tracked (`.gitignore` negates `*_head.pt`) and the laptop went to sleep before they could be
-> fetched.
+> **What arm B decides, fixed in advance:** B works -> the arm-A failure was **starvation** and the
+> break point is still unfound. B also fails -> **the break point IS depth 7** for this recipe.
+> Either way it is a result. Do not edit a threshold, and do not compute a p-value for Claim 1.
 
 > **Otherwise the repo is clean and pushed.**
 >

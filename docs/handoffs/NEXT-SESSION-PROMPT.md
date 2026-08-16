@@ -6,10 +6,14 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project. Nothing is running. EXP-044 landed:
-depth 7 scores 0.0621 and does NOT clear the 0.10 bar, so Claim 1 is REFUTED - but the
-break point is NOT located, because the pre-registered escalation (arm B, 44,000
-episodes, ~32 h) is triggered and unrun.
+Picking up the neuromorphic cube project. EXP-044 ARM B IS RUNNING on the laptop,
+dispatched 2026-08-16 00:50 UTC: depth 7 at 44,000 episodes, 12 seeds, ~32 h, landing
+about 08:50 UTC Monday. PROBE, DO NOT RE-DISPATCH. It is not usefully interruptible -
+all 12 seeds run in parallel and none writes until it finishes.
+
+Arm A already landed and is written up: depth 7 scores 0.0621 and does NOT clear the
+0.10 bar, Claim 1 REFUTED. Arm B decides whether that was difficulty or starvation, and
+its reading is already fixed in the spec.
 
 Read docs/handoffs/SESSION-HANDOFF-2026-08-14b.md first, then CLAUDE.md. The earlier
 SESSION-HANDOFF-2026-08-14.md is still accurate on the science and is the fuller account.
@@ -27,7 +31,7 @@ FullStory assembles them into one 2:21 cut with act cards, and all of it was che
 against real frames on 2026-08-14. The only unbuilt scene is PolicyCollapse, which needs a
 cube renderer.
 
-YOUR JOB THIS SESSION: decide on arm B, and if yes, dispatch and land it.
+YOUR JOB THIS SESSION: land arm B and write it up in the same RESULTS.md.
 
 Arm B is the only thing that turns 'depth 7 does not clear the bar' into a located
 frontier. Its reading is already fixed in the spec: B works -> the failure was
