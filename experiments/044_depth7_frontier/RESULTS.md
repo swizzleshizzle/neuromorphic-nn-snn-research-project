@@ -1,4 +1,4 @@
-# EXP-044 Results - depth 7 works at matched coverage. The deficit was STARVATION, not depth.
+# EXP-044 Results - depth 7 works at 4.4x the budget. The deficit was STARVATION, not depth.
 
 > **Why this file exists:** the standing habit from the 2026-07-13 Phase-2 audit. The contract was
 > committed at `b992854` **before the data existed**, and `aggregate.py` at `62b825e` **while arm A
@@ -22,12 +22,15 @@
 | **B** | **44,000** | **0.191** | **0.1971** | **+7.86 SE** | **12 / 12** | **CONFIRMED** |
 
 By the reading fixed in the spec before either number existed: **arm A's failure was starvation,
-not difficulty.** Depth 7 works once each training state is seen as often as depth 6's were.
+not difficulty.** Depth 7 works when given enough total training.
 
 > [!important] THE BREAK POINT IS NOT FOUND, and this is the second time it has moved out of reach
-> What has been found is a **budget scaling law**. Depth is not the variable that was binding
-> between 6 and 7; coverage is. Every earlier number in this series was taken at a fixed 10,000
-> episodes, so each one carries an unmeasured coverage confound of its own.
+> What has been found is that **depth 7 was under-trained, not out of reach**. Every earlier number
+> in this series was taken at a fixed 10,000 episodes, so each one carries the same unmeasured
+> budget confound - a depth that "stopped working" may only have run out of episodes.
+>
+> **Which quantity is doing the work - total budget, or episodes at the deepest shell - is NOT
+> settled**, and EXP-037 points away from the second. See the correction below.
 
 ## The comparison, and the confound in it
 
