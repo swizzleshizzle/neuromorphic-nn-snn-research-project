@@ -29,9 +29,27 @@ not difficulty.** Depth 7 works once each training state is seen as often as dep
 > between 6 and 7; coverage is. Every earlier number in this series was taken at a fixed 10,000
 > episodes, so each one carries an unmeasured coverage confound of its own.
 
-## The comparison that carries the finding
+## The comparison, and the confound in it
 
-Depth 6 at 10,000 episodes and depth 7 at 44,000 sit at **the same coverage**:
+> [!danger] CORRECTED 2026-08-17, after EXP-037 was re-read
+> This section first framed the finding as *coverage at the deepest shell*. **That framing is not
+> supported, and EXP-037 is evidence against it.** Arm B did not raise deepest-shell coverage in
+> isolation - it raised the total budget 4.4x, which gave **4.4x more episodes at every stage**,
+> shallow ones included (1,432 -> 6,290 per stage). Deepest-shell coverage is one of several
+> quantities that moved, and it was chosen because the design named it.
+>
+> **EXP-037 held the total fixed at depth 4 and shifted the budget toward the evaluated depth.
+> Success fell monotonically: 0.1591 at an equal split, 0.1078 at 50%, 0.0921 at 75%.** Raising
+> deepest-shell coverage *at fixed budget* made things worse. So the coverage story is in tension
+> with data this project already had.
+>
+> **What stands:** arm A was starved of **total budget**, and quadrupling it fixed depth 7. That
+> is a clean within-depth manipulation and it is what Claim 2's "starvation" verdict rests on.
+> **What does not stand:** any claim that deepest-shell coverage is the operative variable, or
+> that the depth series restates as a coverage series.
+
+Depth 6 at 10,000 episodes and depth 7 at 44,000 sit at the same **deepest-shell coverage** - but
+not at the same anything else. Depth 6 got 1,670 episodes per stage; depth 7 at 44,000 got 6,290:
 
 | | depth 6 @ 10,000 | depth 7 @ 44,000 |
 |---|---|---|
@@ -39,9 +57,10 @@ Depth 6 at 10,000 episodes and depth 7 at 44,000 sit at **the same coverage**:
 | mean success | 0.1800 | **0.1971** |
 | sd | 0.0985 | **0.0428** |
 
-**At matched coverage the two depths are indistinguishable.** The gap is +0.0171 against a
-combined standard error of ~0.031, so it is well inside noise - and the honest reading is
-*"depth 7 performs like depth 6 once it is fed like depth 6"*, **not** "depth 7 beats depth 6."
+The gap is +0.0171 against a combined standard error of ~0.031, so the two are indistinguishable.
+But **they are matched on one statistic and unmatched on the rest**, so this is a coincidence of
+one summary number, not a controlled comparison. The honest reading is *"depth 7 reaches depth 6's
+score when given 4.4x the budget"* - and **not** that the two are equivalent at equal coverage.
 
 ## Claim 1 (PRIMARY) - is depth 7 working? A REFUTED, B CONFIRMED
 
@@ -122,15 +141,19 @@ Coverage at the fixed 10,000-episode budget every earlier depth used:
 
 ## Lead for the next experiment
 
-1. **Test the scaling law where it is falsifiable: re-run depth 5 or 6 at raised coverage.** If
-   depth 6 at ~0.97 coverage (matching depth 5) lands near depth 5's 0.3412, the law holds and the
-   whole depth series needs restating as a budget series. If it does not move, depth 7 was a
-   special case. **This is cheaper and more informative than pushing to depth 8.**
-2. **Depth 8 at matched coverage needs ~174,000 episodes** (shell 114,149), roughly **100 h** at
+1. **Separate total budget from deepest-shell coverage, at fixed budget.** Depth 7, 10,000
+   episodes - the same cost as arm A - with `curriculum_weights` set so stage 7 gets arm B's 6,290
+   episodes out of that 10,000. If it scores like arm B (0.197), coverage is the operative
+   variable. If it scores like arm A (0.062) or worse, the variable is total budget and EXP-037's
+   monotone decline extends to depth 7. **EXP-037 predicts worse**, which makes this a real test
+   rather than a confirmation. ~7 h, and it decides which story the write-up above may tell.
+2. **Only then, re-run depth 5 or 6 at raised total budget** to see whether the depth series is
+   a budget series. ~25 h, and it rests on the answer to (1).
+3. **Depth 8 at matched coverage needs ~174,000 episodes** (shell 114,149), roughly **100 h** at
    the observed throughput. The matched budget grows about 4x per depth, so brute-forcing the
    frontier gets expensive faster than the frontier moves.
-3. **Fine-tune the encoder during RL** - still untested.
-4. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1 (p 0.0815).
+4. **Fine-tune the encoder during RL** - still untested.
+5. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1 (p 0.0815).
 
 **Still refuted and CLOSED:** width (EXP-033), volume alone (EXP-034), curriculum stage weighting
 (EXP-037), starvation at depth 6 (EXP-037), trainer stabilizers (EXP-038), deleting the depth-1
