@@ -8,20 +8,18 @@
 
 ## 1. What EXP-044 found
 
-| arm | episodes | coverage | mean | margin | seeds above bar | verdict |
-|---|---|---|---|---|---|---|
-| A | 10,000 | 0.044 | 0.0621 | -2.38 SE | 4 / 12 | REFUTED |
-| **B** | **44,000** | **0.191** | **0.1971** | **+7.86 SE** | **12 / 12** | **CONFIRMED** |
+| arm | episodes | mean | margin | seeds above bar | verdict |
+|---|---|---|---|---|---|
+| A | 10,000 | 0.0621 | -2.38 SE | 4 / 12 | REFUTED |
+| **B** | **44,000** | **0.1971** | **+7.86 SE** | **12 / 12** | **CONFIRMED** |
 
-**Depth 7 works once it is fed like depth 6 was.** By the reading fixed in the spec before either
-number existed, arm A's failure was **starvation, not difficulty**.
+**Depth 7 works when given 4.4x the training.** By the reading fixed in the spec before either
+number existed, arm A's failure was **starvation, not difficulty**. Arm B also cut the coefficient
+of variation from **0.89 to 0.22**, the tightest in the series: the seed sensitivity that looked
+like a property of depth was substantially a property of a starved budget.
 
-The comparison that carries it: depth 6 at 10,000 episodes and depth 7 at 44,000 sit at the same
-coverage - **0.190 against 0.191** episodes per training state - and score **0.1800 against
-0.1971**, a gap well inside a combined SE of 0.031. **At matched coverage the two depths are
-indistinguishable.** Feeding depth 7 properly also cut its coefficient of variation from **0.89 to
-0.22**, the tightest in the series: the seed sensitivity that looked like a property of depth was
-substantially a property of a starved budget.
+Arm B reaches depth 6's score (0.1800 at 10,000) but needed 4.4x the episodes to do it. An earlier
+draft called that "matched coverage" - **EXP-045 killed that framing**, see below.
 
 **The break point is not found, for the second time.** What is found is that depth 7 was
 under-trained.
@@ -82,7 +80,8 @@ settle EXP-043's Claim 1 (+0.1108 at p 0.0815).
   `CLAUDE.md`. The scenes do NOT yet include depth 7; adding it is a ~30 minute job if wanted.
 - **The laptop needs no setup.** manim 0.21 in `C:\Users\mlgbr\manim-venv`, ffmpeg 9.0, and
   `scripts/laptop/render_story.ps1` drives renders and pulls stills.
-- Records for EXP-044 (36) and all 24 head checkpoints are on the VPS and committed.
+- Records and head checkpoints for EXP-044 (36 + 24) and EXP-045 (12 + 12) are on the VPS and
+  committed.
 
 ## 4. Operational notes earned this run
 
@@ -101,7 +100,9 @@ settle EXP-043's Claim 1 (+0.1108 at p 0.0815).
 
 ## 5. Pointers
 
-- `experiments/044_depth7_frontier/RESULTS.md` - the full write-up
-- `docs/superpowers/specs/2026-08-14-exp044-depth7-frontier-design.md` - the pre-registration
+- `experiments/045_budget_vs_coverage/RESULTS.md` - read this first; it settles the mechanism
+- `docs/superpowers/specs/2026-08-17-exp045-budget-vs-coverage-design.md` - its pre-registration
+- `experiments/044_depth7_frontier/RESULTS.md` - the depth-7 write-up, corrected
+- `docs/superpowers/specs/2026-08-14-exp044-depth7-frontier-design.md` - its pre-registration
 - Previous handoff: `SESSION-HANDOFF-2026-08-14b.md` (the render session)
 - Remote runs: `docs/playbooks/remote-experiment-runs.md`
