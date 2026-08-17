@@ -38,7 +38,8 @@ EPISODES_B = 44_000
 # Earlier depths under the same recipe, for the descriptive series only.
 PRIOR = {4: {"mean": 0.5351, "sd": 0.1012}, 5: {"mean": 0.3412, "sd": 0.1277},
          6: {"mean": 0.1800, "sd": 0.0985}}
-COVERAGE = {5: 0.973, 6: 0.190, 7: 0.044}
+COVERAGE = {5: 0.973, 6: 0.190, 7: 0.044}   # all at 10,000 episodes
+COVERAGE_B = 0.191                         # depth 7 at 44,000, which is the point of arm B
 
 
 def load(d: Path) -> list[dict]:
@@ -110,10 +111,22 @@ def report(recs: list[dict], episodes: int) -> dict:
 
     # --- Claim 2, the pre-registered escalation ---
     print(f"\nCLAIM 2 - escalation")
-    if all(conds):
+    cov = COVERAGE[DEPTH] if episodes == EPISODES_A else COVERAGE_B
+    if all(conds) and arm_name == "B":
+        # The reading fixed in the spec BEFORE arm B existed. Printed here rather than left to a
+        # reader, because "depth 7 works" and "depth 7 works only at 4.4x the budget" are
+        # different findings and the second one is the true one.
+        print("  Arm B CONFIRMED and arm A did not. By the pre-registered reading, arm A's")
+        print("  failure was STARVATION, NOT DIFFICULTY: depth 7 works once each training state")
+        print(f"  is seen as often as depth 6's were ({cov:.3f} vs {COVERAGE[6]:.3f} episodes each).")
+        print("  THE BREAK POINT IS NOT FOUND. What is found is a budget scaling law, and every")
+        print("  depth's number becomes a function of coverage rather than of depth alone.")
+        print("  Do NOT write that the cube is solved: depths 1-7 are 0.9% of the state space")
+        print("  and a random scramble sits at depth 11.")
+    elif all(conds):
         print("  Claim 1 CONFIRMED, so ARM B DOES NOT RUN. The frontier is past depth 7 and")
         print("  still unmeasured; the next experiment is depth 8.")
-        print(f"  Coverage was {COVERAGE[DEPTH]:.3f} episodes/train state against depth 6's "
+        print(f"  Coverage was {cov:.3f} episodes/train state against depth 6's "
               f"{COVERAGE[6]:.3f}, so this is a")
         print("  STRONGER generalisation result than depth 6's, not a weaker one.")
         print("  Do NOT write that the cube is solved: depths 1-7 are 0.9% of the state space")
