@@ -6,59 +6,39 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project. EXP-044 ARM B IS RUNNING on the laptop,
-dispatched 2026-08-16 00:50 UTC: depth 7 at 44,000 episodes, 12 seeds, ~32 h, landing
-about 08:50 UTC Monday. PROBE, DO NOT RE-DISPATCH. It is not usefully interruptible -
-all 12 seeds run in parallel and none writes until it finishes.
+Picking up the neuromorphic cube project. Nothing is running; both machines are idle.
 
-Arm A already landed and is written up: depth 7 scores 0.0621 and does NOT clear the
-0.10 bar, Claim 1 REFUTED. Arm B decides whether that was difficulty or starvation, and
-its reading is already fixed in the spec.
+Read docs/handoffs/SESSION-HANDOFF-2026-08-17.md first, then CLAUDE.md.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-08-14b.md first, then CLAUDE.md. The earlier
-SESSION-HANDOFF-2026-08-14.md is still accurate on the science and is the fuller account.
+Where we are: a spiking network learns to solve a 2x2 Rubik's cube with a 390-parameter
+linear head on a frozen encoder. Depths 3 through 7 all clear the working bar. EXP-044
+just finished and its result reframes the series: depth 7 scored 0.0621 at the standard
+10,000 episodes and REFUTED, then 0.1971 at 44,000 and CONFIRMED with 12 of 12 seeds
+above the bar. Depth 6 at 10,000 and depth 7 at 44,000 sit at the same coverage - 0.190
+against 0.191 episodes per training state - and score 0.1800 against 0.1971, inside
+noise. So the depth-7 deficit was STARVATION, not difficulty, and the break point is
+not found.
 
-Where we are: a spiking network learns to solve a 2x2 Rubik's cube. Depths 3 through 6
-now all work (0.3972 / 0.5351 / 0.3412 / 0.1800), and the break point - stuck at depth 5
-since EXP-036 - is now past depth 6 and unmeasured. Two levers got us here and they
-compound: training the sensory encoder self-supervised, and capping the depth-1 training
-step budget at 2. That second one closed a trap where curriculum stage 1 paid a
-constant-action policy 0.3333 against a random policy's 0.2208, because a cube face has
-order 4 and the 2d+3 budget let a repeated move cycle back to solved.
+Do NOT generalise that to "every depth just needs more episodes". Depth 3 has 37x depth
+4's coverage and scores lower, so coverage cannot explain the whole series. Only the
+6-to-7 step has a matched-coverage comparison.
 
-The visual story is DONE and no longer the job: seven scenes render at 1080p on the laptop,
-FullStory assembles them into one 2:21 cut with act cards, and all of it was checked
-against real frames on 2026-08-14. The only unbuilt scene is PolicyCollapse, which needs a
-cube renderer.
+YOUR JOB THIS SESSION: test the scaling law where it is falsifiable.
 
-YOUR JOB THIS SESSION: land arm B and write it up in the same RESULTS.md.
+Re-run depth 5 or 6 at raised coverage. If depth 6 at ~0.97 coverage (matching depth 5's)
+lands near depth 5's 0.3412, the law holds and the whole depth series has to be restated
+as a budget series. If it does not move, depth 7 was a special case.
 
-Arm B is the only thing that turns 'depth 7 does not clear the bar' into a located
-frontier. Its reading is already fixed in the spec: B works -> the failure was
-STARVATION and the break point is not found; B also fails -> the break point IS depth 7
-for this recipe. Do not edit a threshold, and do not compute a p-value for Claim 1 - it
-is absolute by design, and computing one means you invented a baseline.
+Depth 8 is the tempting alternative and it is the wrong call for now: matched coverage
+there needs ~174,000 episodes, about 100 h, because the matched budget grows ~4x per
+depth. Test the law first; it is cheaper and it decides something.
 
-Read experiments/044_depth7_frontier/RESULTS.md first. Facts already measured:
-- The depth-7 shell is 33,058 states, NOT the ~58,000 an earlier handoff guessed.
-- ExactBFSDistance(max_depth=8) builds in 0.96 s at 95 MB. It is a non-issue.
-- heldout_cap=200 already binds at depth 6, so evaluation cost does NOT grow with the
-  shell. It grows only with episode length.
+Pre-register the contract before the numbers exist, n >= 12 seeds, measure the floor
+rather than assuming it, and put the primary claim on a quantity that moves on every
+seed - n=12 cannot show a failure count went to zero.
 
-- Arm A took at most 7.3 h for 12 seeds at 12 workers. Arm B is 4.40x the steps, so
-  about 32 h. Nothing competes for the laptop: Content Day is defunct.
-- The floor is measured at exactly 0.0000, so BAR = 0.10 binds.
-- The 12 depth-7 head checkpoints are still only on the laptop. They are tracked; copy
-  and commit them.
-
-If depth 7 is not the right call, the other live options are re-running depth 5 at 24+
-seeds to settle EXP-043's Claim 1 (p 0.0815, four regressing seeds, a p-value miss and
-not a demonstrated absence), or building PolicyCollapse, which needs a 2x2 cube renderer
-and is the most visceral shot in the deck.
-
-One thing to know before touching the visual story: experiment records are gitignored, so
-each machine holds only what it ran. The laptop had no EXP-039 and a scene died on it; the
-VPS still has no EXP-029/030 and the laptop has both. Copy records, never transcribe them.
+Other live options: fine-tune the encoder during RL (untested), or re-run depth 5 with
+24+ seeds to settle EXP-043's Claim 1 (+0.1108 at p 0.0815, four regressing seeds).
 ```
 
 ---
@@ -66,9 +46,9 @@ VPS still has no EXP-029/030 and the laptop has both. Copy records, never transc
 ## Why this prompt is shaped this way
 
 - **It names the file to read rather than restating it**, so the two cannot drift apart.
-- **It leads with the two levers**, because every current number depends on both and neither is
-  guessable from the code.
-- **It spends its length on the confound, not the compute.** The pre-flight that the last prompt
-  asked for is done, and it came back "no problem" - so the useful thing to carry forward is the
-  one that is still a real decision, which is coverage against episode budget.
-- **It says the render is finished**, because a prompt that still asks for it would get it redone.
+- **It leads with the reframing, not the number.** "Depth 7 works" is the shallow reading;
+  "the deficit was coverage, and the break point moved again" is the finding.
+- **It carries the refusal with the result.** The overreach this invites is a single sentence
+  away from the truth, and depth 3's coverage is the one-line disproof.
+- **It argues against the obvious next experiment.** Depth 8 is what a reader would reach for, so
+  the prompt says why the cheaper test comes first.
