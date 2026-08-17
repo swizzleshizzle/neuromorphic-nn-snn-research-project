@@ -16,10 +16,10 @@
 
 **Depth 7 does not clear the bar at 10,000 episodes, and clears it comfortably at 44,000.**
 
-| arm | episodes | coverage | mean | margin | seeds above bar | verdict |
-|---|---|---|---|---|---|---|
-| A | 10,000 | 0.044 | 0.0621 | **-2.38 SE** | 4 / 12 | **REFUTED** |
-| **B** | **44,000** | **0.191** | **0.1971** | **+7.86 SE** | **12 / 12** | **CONFIRMED** |
+| arm | episodes | mean | margin | seeds above bar | verdict |
+|---|---|---|---|---|---|
+| A | 10,000 | 0.0621 | **-2.38 SE** | 4 / 12 | **REFUTED** |
+| **B** | **44,000** | **0.1971** | **+7.86 SE** | **12 / 12** | **CONFIRMED** |
 
 By the reading fixed in the spec before either number existed: **arm A's failure was starvation,
 not difficulty.** Depth 7 works when given enough total training.
@@ -29,12 +29,21 @@ not difficulty.** Depth 7 works when given enough total training.
 > in this series was taken at a fixed 10,000 episodes, so each one carries the same unmeasured
 > budget confound - a depth that "stopped working" may only have run out of episodes.
 >
-> **Which quantity is doing the work - total budget, or episodes at the deepest shell - is NOT
-> settled**, and EXP-037 points away from the second. See the correction below.
+> **Which quantity does the work is now settled: TOTAL BUDGET.** EXP-045 tested the alternative
+> directly and it failed at p 0.0010 in the wrong direction. See the correction below.
 
 ## The comparison, and the confound in it
 
-> [!danger] CORRECTED 2026-08-17, after EXP-037 was re-read
+> [!danger] SETTLED 2026-08-17 by EXP-045. The coverage framing is WRONG, not merely unsupported.
+> EXP-045 gave depth 7 arm B's stage-7 episode count inside arm A's 10,000-episode budget. It did
+> not recover arm B's gain - it **destroyed** what arm A had: 0.0142 against 0.0621, paired delta
+> **-0.0479**, W-L-T **0-11-1**, exact **p 0.0010**, with 9 of 12 seeds at exactly zero and the
+> modal action fraction up from 0.561 to 0.847. **The operative variable is TOTAL BUDGET.**
+> See `experiments/045_budget_vs_coverage/RESULTS.md`.
+>
+> The original correction, written before EXP-045 ran, follows.
+
+> [!note] CORRECTED 2026-08-17, after EXP-037 was re-read
 > This section first framed the finding as *coverage at the deepest shell*. **That framing is not
 > supported, and EXP-037 is evidence against it.** Arm B did not raise deepest-shell coverage in
 > isolation - it raised the total budget 4.4x, which gave **4.4x more episodes at every stage**,
@@ -144,14 +153,10 @@ Coverage at the fixed 10,000-episode budget every earlier depth used:
 
 ## Lead for the next experiment
 
-1. **Separate total budget from deepest-shell coverage, at fixed budget.** Depth 7, 10,000
-   episodes - the same cost as arm A - with `curriculum_weights` set so stage 7 gets arm B's 6,290
-   episodes out of that 10,000. If it scores like arm B (0.197), coverage is the operative
-   variable. If it scores like arm A (0.062) or worse, the variable is total budget and EXP-037's
-   monotone decline extends to depth 7. **EXP-037 predicts worse**, which makes this a real test
-   rather than a confirmation. ~7 h, and it decides which story the write-up above may tell.
-2. **Only then, re-run depth 5 or 6 at raised total budget** to see whether the depth series is
-   a budget series. ~25 h, and it rests on the answer to (1).
+1. **DONE - EXP-045 separated them and the answer is total budget.** Back-loading a fixed budget
+   scored 0.0142 against arm A's 0.0621 at p 0.0010, with collapse rising from 0.561 to 0.847.
+2. **Re-run depth 6 at raised total budget** (~51,000 episodes, ~25 h) to see whether the depth
+   series is a budget series. This is now the open question.
 3. **Depth 8 at matched coverage needs ~174,000 episodes** (shell 114,149), roughly **100 h** at
    the observed throughput. The matched budget grows about 4x per depth, so brute-forcing the
    frontier gets expensive faster than the frontier moves.
