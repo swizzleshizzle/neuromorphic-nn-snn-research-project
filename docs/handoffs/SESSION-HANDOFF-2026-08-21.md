@@ -1,6 +1,6 @@
 # Session Handoff - 2026-08-21 (Fri) - for Week 20 session 4
 
-> **A ~22 h CHAIN IS IN FLIGHT ON THE LAPTOP.** Dispatched 2026-08-20 18:30 laptop time from
+> **A ~23 h CHAIN IS IN FLIGHT ON THE LAPTOP.** Dispatched 2026-08-20 18:30 laptop time from
 > commit `9d2c757`. Do not dispatch anything else to `SwizzlesDuo` until it finishes.
 >
 > **Nothing needs a human while it runs.** The learning-rate choice inside it is mechanical and
@@ -16,7 +16,7 @@ Then read the newest one. Phases in order, with what each writes:
 
 | phase | what | ~cost | artifact that proves it finished |
 |---|---|---|---|
-| 0 | EXP-040 encoders, seeds 12-23 | 20 min | `exp040_encoder_s{12..23}.pt` |
+| 0 | EXP-040 encoders, seeds 12-23 | **1.6 h** | `exp040_encoder_s{12..23}.pt` |
 | 1 | EXP-047 pilot, 3 rates x seeds 12,13 | 5.6 h | 6 records matching `_s1[23]_sig` |
 | 1b | probe the pilot encoders | 15 min | `probe_pilot.json` |
 | 2 | **`select_lr.py`** | 1 min | `selected_lr.json` |
@@ -27,9 +27,28 @@ Then read the newest one. Phases in order, with what each writes:
 > [!warning] A dispatching ssh reporting a non-zero exit does NOT mean the run failed.
 > Seen twice on EXP-046. Check for the artifacts above and for worker count before reacting.
 > **Worker processes are `python3.13.exe`, not `python.exe`** - match on `^python`.
+>
+> **Confirmed again on this dispatch, and this time deliberately.** The dispatching ssh client
+> was killed outright about 10 minutes in. The chain kept running: 14 python processes and 2
+> powershell processes were still up afterwards. Windows has no SIGHUP semantics, and the
+> launcher is started with `ssh -n` precisely so it survives the pipe closing.
+>
+> The only casualty is the launcher's own `Say` progress lines, which went to the dead stdout.
+> **Every phase's real output goes to `phase*.log` files, not the pipe**, so nothing that matters
+> was lost. Read the logs, never the dispatch transcript.
 
-**Estimates in this project run short** (EXP-046: 15.5 h against 23 h). ~15 h is the likelier
-total.
+**Estimates in this project run short** (EXP-046: 15.5 h against 23 h). ~16 h is the likelier
+total against the ~23 h nominal.
+
+> [!warning] Phase 0 is **1.6 h**, not the 20 min the 2026-08-20 handoff claimed.
+> That figure came from dividing EXP-039's ~900-1000 s per seed by 12 workers, which assumes
+> perfect 12-way parallelism. The laptop delivers about **6.6 effective cores** at 12 workers.
+> **EXP-040's own `RESULTS.md` records the real cost**: "Phase 1 pretrains 12 encoders (~1.6 h at
+> 10 workers)". Verified live on this dispatch - 81 minutes in, phase 0 had written nothing and
+> was consuming 6.56 effective cores, which is on track rather than stalled.
+>
+> **Encoders appear all at once near the end**, because all 12 workers start together and each
+> writes only when its seed finishes. An empty directory mid-phase is expected.
 
 ## 1. What was done on 2026-08-20
 
