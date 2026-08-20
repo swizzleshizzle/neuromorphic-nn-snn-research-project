@@ -60,11 +60,40 @@ The two seeds the depth-1 cap had left behind at depth 6 are the biggest winners
 (+0.320)** and **seed 6 (+0.255)**, which was EXP-043's only depth-6 failure and EXP-044's only
 depth-7 zero. Budget rescued the seeds that looked seed-specific.
 
-## Claim 2 - the escalation. TRIGGERED
+## Claim 2 - the escalation. TRIGGERED, RUN, AND THERE IS NO KNEE
 
-A **25,000-episode midpoint** (~13 h) is now warranted, and was pre-registered as conditional on
-exactly this outcome. It answers whether returns are still climbing at 44,000 or already
-flattening - i.e. whether the "one depth per 4.4x" line has a knee in it.
+The pre-registered midpoint ran on 2026-08-19/20 (dispatched 23:53 UTC, <= 9.8 h, 12 records,
+zero tracebacks; the dispatching ssh again reported **exit 1** on a run that finished cleanly).
+
+| budget | mean | sd | se | paired vs 10k | W-L-T | exact p |
+|---|---|---|---|---|---|---|
+| 10,000 | 0.1800 | 0.0985 | 0.0284 | - | - | - |
+| **25,000** | **0.2729** | 0.0838 | 0.0242 | **+0.0929** | 11-1-0 | **0.0010** |
+| **44,000** | **0.3225** | 0.0373 | 0.0108 | **+0.1425** | 12-0-0 | **0.0005** |
+
+**The response is log-linear in budget.** Slope per log10:
+
+| interval | slope |
+|---|---|
+| 10k -> 25k | 0.2335 |
+| 25k -> 44k | 0.2020 |
+| 10k -> 44k (overall) | **0.2215** |
+
+Fitting a straight line through the two endpoints predicts **0.2681** at 25,000. The midpoint
+measured **0.2729** - a deviation of **+0.0048** against its own standard error of **0.0242**.
+==There is no knee to exploit.==
+
+The slope does drop from 0.2335 to 0.2020 between the intervals, a hint of mild flattening, but
+the midpoint's error bar is five times that difference. **This data cannot resolve curvature; what
+it can rule out is a large one.**
+
+> [!warning] Why "no knee" is the expensive answer
+> A knee would have meant most of the benefit arrives early and you could buy 2.5x instead of 4.4x.
+> Log-linear means the opposite: **success grows linearly in the LOGARITHM of spend**, so each
+> additional +0.14 costs another 4.4x. There is no cheap fraction of this curve.
+
+**Variance also falls monotonically with budget** (sd 0.0985 -> 0.0838 -> 0.0373, regressions
+1/12 -> 0/12). More budget does not merely raise the mean; it makes the outcome reliable.
 
 ## Claim 3 - MECHANISM: no collapse, and the reward signal is why
 
@@ -108,7 +137,8 @@ consequences:
 
 - **Two depths, one multiplier.** 4.4x at depths 6 and 7. Nothing tested at 2x, 10x, or at depths
   4 and 5.
-- **No saturation point known.** The midpoint (Claim 2) is the first probe of the curve's shape.
+- **No saturation point known.** Three points spanning 4.4x show no flattening, but nothing was
+  tested above 44,000 at depth 6, and a knee could sit anywhere beyond it.
 - **Depths 3 and 4 still do not fit a pure budget story.** Depth 3 scores **lower** than depth 4
   (0.3972 against 0.5351) despite a shell 4.5x smaller, so something other than budget is binding
   at the shallow end.
@@ -117,10 +147,11 @@ consequences:
 
 ## Lead for the next experiment
 
-1. **The 25,000-episode midpoint at depth 6** (~13 h). Pre-registered, triggered, and the cheapest
-   way to learn the shape of the budget response.
+1. **DONE - the midpoint ran and the curve is log-linear.** ~0.22 success per log10 of budget at
+   depth 6, no knee.
 2. **Fine-tune the encoder during RL.** Now the only untried lever that is not about spending more,
-   and the one that could change the 4.4x-per-depth exchange rate.
+   and - given a log-linear budget curve - the only one that could change the exchange rate rather
+   than pay it.
 3. **Restate the depth series** in `road-to-a-solved-cube` and the vault progress tracker with the
    budget caveat attached.
 4. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1 (+0.1108 at p 0.0815).
