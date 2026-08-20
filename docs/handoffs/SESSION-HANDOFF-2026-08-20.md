@@ -1,9 +1,31 @@
-# Session Handoff - 2026-08-20 (Thu) - Week 20 session 2 - budget is characterised and priced
+# Session Handoff - 2026-08-20 (Thu) - for Week 20 session 3
 
-> **Nothing is in flight. Both machines are idle. The repo is clean and pushed.**
+> **Nothing is in flight. Both machines are idle. The repo is clean and pushed at `189ca68`.**
 >
 > **EXP-046 is complete, both arms.** Read `experiments/046_depth6_budget/RESULTS.md`.
-> The vault is current through it: `[[week-20-budget-not-depth]]` and the experiment log.
+> The vault is current through it: `[[week-20-budget-not-depth]]` and `experiment-log.md`.
+
+> [!important] SCHEDULING CONSTRAINT - session 3 runs tonight, and Michael is out tomorrow night
+> **Aim to have something dispatched before this session ends.** Otherwise the laptop sits idle
+> through tomorrow, and a 12-worker run is the one thing that does not need anyone present.
+>
+> **But do not rush the pre-registration to manufacture a dispatch.** Rules-on-disk-before-numbers
+> is the one thing this project does not trade, and there is a good cheap fallback below
+> specifically so that trade never has to be made.
+
+## 0. The decision rule for tonight
+
+1. Work the **primary job** (encoder fine-tuning, section 2). It needs a trainer change, a
+   pre-registration and a smoke test.
+2. **When the design is written and smoke-tested, dispatch it.** It is the most valuable run
+   available and it will happily use tomorrow.
+3. **If it is not smoke-tested and ready by the time the session is winding down, dispatch the
+   FALLBACK instead** (section 3) and finish the encoder design without a clock on it. The
+   fallback is ~5 h, already justified, and needs no new science.
+
+**A half-designed experiment dispatched to fill a night is worth less than nothing** - it burns the
+machine and produces a number nobody can interpret.
+
 
 ## 1. Where the project stands
 
@@ -27,34 +49,60 @@
 > exposure is ~194,000 episodes, roughly 4 days, for ~0.18. **Chasing depth with compute is a
 > losing exchange rate**, and a log-linear curve means there is no cheap fraction of it.
 
-## 2. THE NEXT EXPERIMENT: fine-tune the encoder during RL
+## 2. PRIMARY JOB: fine-tune the encoder during RL
 
-**It is the only untried lever that could change the exchange rate rather than pay it**, and it
-has been on the list since Week 18.
+**The only untried lever that could change the exchange rate rather than pay it.** On the list
+since Week 18, and after this week's results it is the only thing left that is not "spend more".
 
-Unlike the last four experiments this one **needs real design work**, so start it fresh rather
-than at the end of a session:
+### Three traps to get right BEFORE writing code
 
-- The encoder is **frozen by construction** - `make_agent` builds the brain and nothing unfreezes
-  it, and the 390-parameter head is the entire trainable surface. This is a trainer change, not a
-  config flag.
-- **The 390-parameter claim dies the moment the encoder trains.** Every write-up and the whole
-  visual story lean on "same 390 trainable parameters". A fine-tuning arm is a different
-  architecture and must be reported as one, not folded into the series.
-- **Pre-register the confound**: a fine-tuned arm has more trainable parameters AND more compute
-  per step. Decide in advance what the control holds fixed - most likely a budget-matched frozen
-  arm, since EXP-044/046 make budget the obvious alternative explanation.
+1. **The encoder is frozen by construction.** `make_agent` builds the brain and nothing unfreezes
+   it; the 390-parameter head is the entire trainable surface. This is a **trainer change**, not a
+   config flag. Expect to touch `policy_parameters` and the optimizer construction in
+   `run_cube_baseline`, and to add a config field rather than repurposing one.
+2. **"The same 390 trainable parameters" dies the moment the encoder trains.** That phrase is
+   load-bearing in every RESULTS.md and in the whole visual story. A fine-tuned arm is a
+   **different architecture** and must be reported as one - never folded into the depth series as
+   though it were another cell.
+3. **Pre-register the confound, because this week supplied it.** Fine-tuning adds trainable
+   parameters AND compute per step, so a naive win is explainable by budget - the leading
+   alternative after EXP-044/045/046. Decide in advance what the control holds fixed:
+   - matching **episodes** gives the fine-tuned arm more compute;
+   - matching **compute** means the frozen control gets more episodes, and EXP-046 says that alone
+     is worth about **+0.22 per log10 of spend**, which could swamp the effect.
+   **Whichever is chosen, the other must be reported.** A budget-matched frozen arm is the obvious
+   control; say so in the spec and say what it cannot rule out.
 
-Also open, cheaper:
+### A starting sketch, not a decision
 
-1. **Re-run depth 5 with 24+ seeds** to settle EXP-043's Claim 1 (+0.1108 at p 0.0815).
-2. **Restate the depth series** with the budget caveat in the vault's `road-to-a-solved-cube` and
+- **Depth 6 at 10,000 episodes** is the natural test bed: baseline **0.1800** (EXP-043), plenty of
+  headroom below depth 6's 44k ceiling of 0.3225, and only ~5 h for 12 seeds.
+- Paired against EXP-043's `exp043_capped_d6` cells - same seeds, same encoders at init.
+- The interesting quantity may be the **probe**, not the score: EXP-039 measured what the encoder
+  can represent, so re-probing a fine-tuned encoder says whether RL improved the representation or
+  merely fitted the head to it. That is a mechanism measurement, which this project prefers.
+
+## 3. FALLBACK if the design is not ready: depth 5 at 24 seeds
+
+Settles EXP-043's Claim 1, which has been open since Aug 14: **+0.1108 at p 0.0815**, the clearest
+case in the project where 12 seeds is the binding constraint rather than the effect.
+
+> [!warning] It is cheap but NOT free - it needs 12 more encoders first
+> Only **seeds 0-11** have pretrained encoders (`exp040_encoder_s*.pt`). A 24-seed depth-5 run
+> needs EXP-039's pretraining for **seeds 12-23** first: ~900-1000 s per seed, so **~20 min** at
+> 12 workers. Then the RL arm is 84,000 steps per run, about **4.6 h** for the 12 new seeds.
+>
+> **Total ~5 h**, and the existing 12 seeds are reused rather than re-run.
+
+## 4. Also open, not for tonight
+
+1. **Restate the depth series** with the budget caveat in the vault's `road-to-a-solved-cube` and
    `progress-tracker` - **both are still at EXP-037** (modified 2026-08-07), nine experiments
-   behind. Needs Michael's call: they are planning documents, not logs.
-3. The manim scenes do not include depth 7 or the budget finding. ~30 minutes if wanted; there is
+   behind. **Needs Michael's call**: they are planning documents, not logs.
+2. The manim scenes do not include depth 7 or the budget finding. ~30 minutes if wanted; there is
    **no deadline** (see `CLAUDE.md`).
 
-## 3. Operational notes earned this week
+## 5. Operational notes earned this week
 
 - **A dispatching ssh reporting `exit 1` does NOT mean the run failed.** Seen twice on EXP-046.
   `*>&1 | Tee-Object` - added so tracebacks stop being lost - puts torch's `UserWarning` in the
@@ -68,7 +116,7 @@ Also open, cheaper:
   EXP-044 arm B 25.4 h against 32 h estimated, EXP-046 15.5 h against 23 h, the midpoint 9.8 h
   against 13 h.
 
-## 4. Pointers
+## 6. Pointers
 
 - `experiments/046_depth6_budget/RESULTS.md` - the budget curve, both arms
 - `experiments/045_budget_vs_coverage/RESULTS.md` - why it is budget and not coverage
