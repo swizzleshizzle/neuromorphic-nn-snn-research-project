@@ -225,13 +225,21 @@ redirection is stated now so a null is not later left open-ended.
 
 Chained on the laptop `SwizzlesDuo`, unattended, per `docs/playbooks/remote-experiment-runs.md`.
 
-| phase | what | cost |
-|---|---|---|
-| 0 | EXP-040 `pretrain_one`, seeds 12-23 | ~20 min |
-| 1 | EXP-047 pilot: 3 rates x seeds {12,13} x 10,000 episodes | ~2.5 h |
-| 2 | `select_lr.py` - probe-only, mechanical, may **halt** the chain | ~10 min |
-| 3 | EXP-047 confirmatory: selected rate, seeds 0-11 | ~6 h |
-| 4 | Fallback: EXP-040 and EXP-043 depth 5, seeds 12-23, **both arms** | ~9.2 h |
+Costs below are derived by the **playbook's** method, not from `CLAUDE.md`'s 90 ms figure:
+`wall_hours = steps * 0.153 / 3600 / workers`, with the 1.33x applied to training steps only
+(evaluation uses `greedy_action`, which takes no `grad_brain` and stays at frozen cost). One
+depth-6 cell at 10,000 episodes is 94,962 training steps plus 6,000 evaluation steps: **4.29
+core-hours frozen, 5.62 fine-tuned.** Ten workers, not sixteen - the laptop is memory-bound at
+~920 MB private per worker.
+
+| phase | what | core-h | workers | wall |
+|---|---|---|---|---|
+| 0 | EXP-040 `pretrain_one`, seeds 12-23 | - | 12 | ~20 min |
+| 1 | EXP-047 pilot: 3 rates x seeds {12,13} x 10,000 episodes | 33.7 | 6 | ~5.6 h |
+| 2 | `select_lr.py` - probe-only, mechanical, may **halt** the chain | - | - | ~10 min |
+| 3 | EXP-047 confirmatory: selected rate, seeds 0-11 | 67.5 | 10 | ~6.7 h |
+| 4 | Fallback: EXP-040 and EXP-043 depth 5, seeds 12-23, **both arms** | 94.0 | 10 | ~9.4 h |
+| | **total** | | | **~22 h** |
 
 > **Phase 4 corrects the handoff.** `SESSION-HANDOFF-2026-08-20.md` §3 budgets ~4.6 h for "the
 > RL arm" on 12 new seeds. EXP-043's Claim 1 is a **paired** delta against EXP-040 depth 5, and
@@ -239,4 +247,49 @@ Chained on the laptop `SwizzlesDuo`, unattended, per `docs/playbooks/remote-expe
 > pair to compute. The fallback is 24 RL runs, not 12.
 
 Estimates in this project have consistently run **short** (EXP-046: 15.5 h against 23 h
-estimated; EXP-044 arm B: 25.4 h against 32 h), so these are upper bounds.
+estimated; EXP-044 arm B: 25.4 h against 32 h), so these are upper bounds. At EXP-046's ratio
+the chain is nearer **15 h**.
+
+Phase 4 runs **even if phase 2 halts the chain.** The fallback is independent, already
+justified, and needs no result from EXP-047, so a halted selection should still leave the
+machine doing useful work rather than idle.
+
+### 8.1 A defect this design's own test caught, recorded because it would recur
+
+`run_cube_baseline` passes `feature_fn=readout` on the **training** call for every readout
+including `"concept"`; only the two evaluation calls pass `None`. `MemoryReadout.__call__`
+wrapped its whole body in `torch.no_grad()`, so the identity concept branch - on the policy path
+of every cube run ever recorded - **detached the concept**. The first fine-tuning implementation
+therefore trained nothing: `fc1.weight` moved by exactly 0.0 while the run looked entirely
+normal, produced an ordinary-looking success rate, and passed every neutrality assertion.
+
+It was caught only by a complement test asserting the encoder MUST move (`drift > 1e-3`), which
+is the `CLAUDE.md` test-strength rule doing exactly what it exists for. The fix returns the
+concept before the `no_grad`; that is numerically inert for frozen runs, and the byte-identity
+tests prove it.
+
+**Any future "make X trainable" change on this codebase inherits the same trap.** Verify the
+gradient arrives at the parameter, never that the switch is set.
+
+### 8.2 Pre-flight validation, run 2026-08-20 before dispatch
+
+Every number here predates the experiment and none of them is a result.
+
+| check | outcome |
+|---|---|
+| `encoder_lr=None` and `encoder_lr=0.0` reproduce the pre-change baseline | asserted to 1e-6 |
+| fine-tuned run serialises its encoder | 110 KB, `fc1` drift 3.154e-03 over 60 episodes |
+| trainable parameters actually change | 390 -> 27,206 in the record |
+| **run-level cost model** | predicted 1.10x on the smoke shape, **measured 1.09x** |
+| memory overhead per worker | +9 MB (293 -> 302 MB peak), so 10 workers stays safe |
+| selection rule, both outcomes | choose and **halt** both exercised on synthetic probe data |
+| halt propagates | confirmatory arm refuses to start |
+| `--depths` neutrality on EXP-040/043 | default cell sets bit-identical |
+
+**Claim 2's instrument was falsified, not assumed.** A metric that cannot move is not a metric,
+and the smoke run's probe delta was exactly +0.0000. Deliberately damaging an encoder
+(`fc1 += N(0, 0.5)`) moved depth-4 top-1 from **0.8507 to 0.6493, a delta of -0.2015** - about
+**10x the 0.02 gate**. So the gate can fire, and the +0.0000 is a real reading of a drift too
+small to flip any of ~2,978 held-out decisions, not a broken probe. Features were confirmed to
+differ (max 0.156, i.e. 5 of 32 spikes), so the change does reach the code; the concept rate is
+quantised in 1/32 steps and top-1 accuracy is discrete, so small drift genuinely reads as zero.

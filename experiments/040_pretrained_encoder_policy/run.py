@@ -173,7 +173,12 @@ def pretrain_one(seed: int, out_dir: Path) -> dict:
     }
 
 
-def sweep_configs(seeds, out_dir: Path) -> list[CubeConfig]:
+def sweep_configs(seeds, out_dir: Path, depths=None) -> list[CubeConfig]:
+    # `depths=None` keeps the shipped [4, 5, 6]. `rl_heldout_union` above is intentionally
+    # left on the module-level DEPTHS: the encoder's exclusion set must not depend on which
+    # subset of depths a given invocation happens to run, or new seeds' encoders would stop
+    # being comparable with seeds 0-11's.
+    depths = DEPTHS if depths is None else depths
     return [
         CubeConfig(
             arm="regionalized", readout="concept", tag=cell_tag(depth),
@@ -183,7 +188,7 @@ def sweep_configs(seeds, out_dir: Path) -> list[CubeConfig]:
             encoder_state_path=str(encoder_path(out_dir, seed)),
             max_depth=max(6, depth), out_dir=out_dir,
         )
-        for depth in DEPTHS
+        for depth in depths
         for seed in seeds
     ]
 
@@ -201,6 +206,11 @@ def _run(cfg: CubeConfig) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(12)))
+    # Added 2026-08-20 for the depth-5-at-24-seeds follow-up, which needs THIS driver's depth-5
+    # cell on seeds 12-23 and must not also launch its other depths. Defaults to the shipped
+    # value, so every prior invocation is unchanged.
+    ap.add_argument("--depths", type=int, nargs="+", default=None,
+                    help=f"depths to run (default {DEPTHS})")
     ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--out-dir", type=Path, default=HERE / "outputs")
     ap.add_argument("--skip-existing", action="store_true",
@@ -227,7 +237,8 @@ def main() -> None:
             raise SystemExit(f"encoder for seed {s} missing after phase 1")
 
     # ---- phase 2: the policy runs ----
-    configs = sweep_configs(args.seeds, args.out_dir)
+    depths = args.depths or DEPTHS
+    configs = sweep_configs(args.seeds, args.out_dir, depths)
     names = [record_filename(c) for c in configs]
     if len(set(names)) != len(names):
         dupes = {n for n in names if names.count(n) > 1}
@@ -241,7 +252,7 @@ def main() -> None:
 
     total = sum(env_steps(c.depth) for c in configs)
     print(f"\nEXP-040 phase 2: {len(configs)} runs, {args.workers} workers")
-    for depth in DEPTHS:
+    for depth in depths:
         n = sum(1 for c in configs if c.depth == depth)
         print(f"  d{depth}: {n} runs, {env_steps(depth):,} steps/run, "
               f"vs EXP-036's {EXP036[depth]}")

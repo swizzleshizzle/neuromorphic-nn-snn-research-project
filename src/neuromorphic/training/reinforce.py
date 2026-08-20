@@ -16,6 +16,8 @@ See ADR-0001 and its amendments.
 
 from __future__ import annotations
 
+import contextlib
+
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
@@ -73,15 +75,27 @@ def action_distribution(
     store: bool = False,
     recall: bool = False,
     feature_fn=None,
+    grad_brain: bool = False,
 ) -> tuple[Categorical, torch.Tensor]:
     """One forward pass -> a categorical policy from the head on the chosen features.
 
-    The brain runs under ``no_grad`` (frozen feature extractor; also avoids backprop
-    through the spiking unroll). ``feature_fn`` selects what the head reads and defaults
-    to the sensory concept, so omitting it reproduces v1 exactly. ``store``/``recall``
-    engage the hippocampal pathway (both off by default, as in v1).
+    The brain runs under ``no_grad`` by default (frozen feature extractor; also avoids
+    backprop through the spiking unroll). ``feature_fn`` selects what the head reads and
+    defaults to the sensory concept, so omitting it reproduces v1 exactly.
+    ``store``/``recall`` engage the hippocampal pathway (both off by default, as in v1).
+
+    ``grad_brain=True`` (EXP-047) drops the ``no_grad`` so gradients reach the sensory
+    encoder through snnTorch's surrogate, making the encoder fine-tunable during RL. It
+    changes **nothing** about the forward: autograd does not alter the arithmetic and does
+    not touch the Poisson generator, so the concept, the action and the whole RNG stream are
+    bit-identical either way. That is what lets ``encoder_lr=0.0`` reproduce a frozen run
+    byte-for-byte, and it is asserted in ``tests/training/test_encoder_finetune_seam.py``.
+
+    Note this is a no-op unless the caller ALSO puts the encoder in the optimizer, and that
+    ``feature_fn`` must not re-wrap the concept in ``no_grad`` - ``MemoryReadout`` does, which
+    is why EXP-047 is a ``readout="concept"`` experiment (feature_fn is None there).
     """
-    with torch.no_grad():
+    with contextlib.nullcontext() if grad_brain else torch.no_grad():
         out = brain.step(obs, store=store, recall=recall, record=False, generator=generator)
     features = concept_rate(out) if feature_fn is None else feature_fn(out)
     logits = head(features)
@@ -98,7 +112,11 @@ def greedy_action(
     recall: bool = False,
     feature_fn=None,
 ) -> int:
-    """The argmax-logit action (deterministic eval policy)."""
+    """The argmax-logit action (deterministic eval policy).
+
+    No ``grad_brain`` passthrough, deliberately: evaluation never needs a graph, and building
+    one over every held-out state would cost memory for nothing.
+    """
     _, logits = action_distribution(
         brain, head, obs, generator=generator,
         store=store, recall=recall, feature_fn=feature_fn,
@@ -107,7 +125,12 @@ def greedy_action(
 
 
 def policy_parameters(head: nn.Module):
-    """Trainable parameters of the policy. v1: the head only — the brain is frozen."""
+    """Trainable parameters of the policy. v1: the head only — the brain is frozen.
+
+    EXP-047 does NOT change this. A fine-tuning caller builds explicit Adam parameter groups
+    instead, so the head's learning rate and the encoder's stay separate quantities and this
+    function keeps meaning exactly what every prior experiment recorded it as meaning.
+    """
     return head.parameters()
 
 
@@ -126,6 +149,7 @@ def train_episode(
     store: bool = False,
     recall: bool = False,
     feature_fn=None,
+    grad_brain: bool = False,
 ) -> dict:
     """Run one episode, then apply one REINFORCE update to the head.
 
@@ -153,7 +177,7 @@ def train_episode(
     while steps < limit:
         dist, _ = action_distribution(
             brain, head, obs, generator=generator,
-            store=store, recall=recall, feature_fn=feature_fn,
+            store=store, recall=recall, feature_fn=feature_fn, grad_brain=grad_brain,
         )
         action = dist.sample()
         log_probs.append(dist.log_prob(action))

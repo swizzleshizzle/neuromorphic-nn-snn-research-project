@@ -55,6 +55,15 @@ wandb/
 # what makes "never retrain to re-evaluate" true from a fresh checkout rather than only true
 # on whichever machine happens to still hold the run. Must come after `*.pt`: last match wins.
 !experiments/*/outputs/*_head.pt
+# EXP-047 FINE-TUNED encoders are tracked for the same reason, at a different price. Each is a
+# SensoryCortex (144 -> 128 -> 64), 26,816 parameters, about 108 KB, so the 18 runs of the
+# experiment cost roughly 2 MB. Claim 2 re-probes these weights, and regenerating one costs
+# ~5.6 core-hours; the whole set is a ~12 h laptop run.
+#
+# This pattern deliberately does NOT match `exp040_encoder_s*.pt` (the PRETRAINED encoders),
+# which end in `_s<seed>.pt` and stay ignored: those are reproducible from EXP-040's phase 1 in
+# about 15 minutes per seed, and there are more of them.
+!experiments/*/outputs/*_encoder.pt
 *.pth
 results.csv
 training_curves.png

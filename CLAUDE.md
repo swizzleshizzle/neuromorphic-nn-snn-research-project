@@ -54,6 +54,15 @@ Practical consequences:
 - **Action-space width comes from `N_ACTIONS` / `len(MOVES)` / `env.action_space.n`, never a literal.** The 2x2 cube is 6 moves; a 3x3 is 12 or 18.
 - **The 6-move cube set is a 2x2-only simplification.** A 2x2 has no centres, so `U == D'`, `R == L'`, `F == B'`; holding the DLB corner still removes the redundancy. A 3x3 has fixed centres and needs all six faces.
 - **Distance-to-solved is an instrument, never a model input.** The observation is raw facelets.
+- **The TRAINING call passes `feature_fn=readout` for every readout, including `"concept"`.** Only
+  the two evaluation calls pass `None`. So `MemoryReadout` is on the policy path of every cube run
+  ever recorded, not just the memory arms. Its `__call__` used to wrap the whole body in
+  `torch.no_grad()`, which detached the concept: EXP-047's first fine-tuning implementation
+  trained nothing, `fc1.weight` moved by exactly 0.0, and the run produced a perfectly ordinary
+  success rate. The concept branch now returns before that `no_grad` (inert for frozen runs).
+  **Any future "make X trainable" change must verify the gradient ARRIVES AT THE PARAMETER, not
+  that the switch is set.** A frozen-vs-trainable comparison where both arms are secretly frozen
+  looks exactly like a null result.
 - `brain.step` costs about 90 ms and dominates every runtime estimate.
 
 ## There is no publishing deadline

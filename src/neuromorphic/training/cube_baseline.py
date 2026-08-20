@@ -84,6 +84,24 @@ class CubeConfig:
     # Verified against a baseline captured before this field existed; see
     # tests/training/test_encoder_seam.py.
     encoder_state_path: str | None = None
+    # EXP-047. Learning rate for the SENSORY ENCODER during RL. `None` keeps the encoder
+    # FROZEN, which is what every cube result from EXP-029 onward was produced with, and is a
+    # strict no-op: `test_encoder_finetune_seam.py` asserts the pre-change baseline still
+    # reproduces byte-for-byte, and that `encoder_lr=0.0` (grad ON, zero step) does too.
+    #
+    # THIS CHANGES THE ARCHITECTURE, not a hyperparameter. Setting it takes the trainable
+    # surface from 390 parameters (the `Linear(64 -> 6)` head) to 27,206 (head + `fc1`'s
+    # 18,560 + `fc2`'s 8,256), a factor of 70. "The same 390 trainable parameters" is
+    # load-bearing in every RESULTS.md and in the whole visual story, so a fine-tuned run is
+    # a DIFFERENT ARM and must never be reported as another cell of the depth series.
+    #
+    # It also costs 1.33x per step (56.17 -> 74.87 ms, measured 2026-08-20 on the VPS), which
+    # EXP-046's budget curve prices at +0.027 success at depth 6. See the spec.
+    #
+    # Only meaningful for `arm="regionalized"` with `readout="concept"`: the monolithic arm has
+    # no `sensory` region, and `MemoryReadout` re-wraps the concept in `no_grad`, which would
+    # silently detach the encoder and train nothing. Both are refused rather than ignored.
+    encoder_lr: float | None = None
     # EXP-042. Per-depth TRAINING step-budget overrides as ((depth, steps), ...).
     #
     # EXP-041 found the trap this exists to close: `max_steps_for(d) = 2d+3` gives depth 1 a
@@ -246,11 +264,26 @@ class MemoryReadout:
         self.unshuffled_steps = 0
 
     def __call__(self, out: dict) -> torch.Tensor:
+        # EXP-047. The concept path returns BEFORE the `no_grad` below, deliberately.
+        #
+        # `run_cube_baseline` passes `feature_fn=readout` on the TRAINING call unconditionally,
+        # for every readout including "concept" (only the EVALUATION calls pass `None`). So this
+        # identity branch is on the policy path of every cube run ever recorded. While it sat
+        # inside `no_grad` it detached the concept, and fine-tuning silently trained nothing:
+        # the run looked completely normal and `fc1.weight` moved by exactly 0.0.
+        #
+        # Moving it out is numerically inert for every frozen run - `brain.step` already ran
+        # under `no_grad` there, so the tensor carries no graph either way and the returned
+        # VALUES are bit-identical. `test_encoder_finetune_seam.py` asserts exactly that against
+        # the pre-change baseline.
+        #
+        # The `no_grad` stays for the memory modes. Those touch `hippo.W_rec` in place and
+        # swap it out under `memory_amnesic`, which is not something to build a graph through.
+        if self.mode == "concept":
+            return concept_rate(out)                        # [content]
+
         with torch.no_grad():
             concept = concept_rate(out)                     # [content]
-            if self.mode == "concept":
-                return concept
-
             snapshot = out["concept"].mean(dim=0)           # [B, content]
 
             if self.mode == "memory_amnesic":
@@ -407,6 +440,15 @@ def head_filename(cfg) -> str:
     return record_filename(cfg).replace(".json", "_head.pt")
 
 
+def encoder_filename(cfg) -> str:
+    """Name of the FINE-TUNED encoder a run writes (EXP-047), beside its JSON record.
+
+    Only written when ``encoder_lr`` is set. Shares ``record_filename``'s stem for the same
+    pairing reason as ``head_filename``, and inherits the same collision warning.
+    """
+    return record_filename(cfg).replace(".json", "_encoder.pt")
+
+
 def modal_action_fraction(actions) -> float:
     """Fraction of a rollout spent on its single most-common action.
 
@@ -544,6 +586,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # it predates the telemetry, so the combination went unexercised until EXP-044 asked for a
         # measured floor at depth 7 WITH a curriculum. It raised UnboundLocalError at record time.
         stage_trace: list[dict] = []
+        trainable_params = 0   # the chance floor has no policy to train
     else:
         agent = make_agent(cfg)
         torch.manual_seed(train_seed)  # head init and sampling stream matched across arms
@@ -553,7 +596,38 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         head = AblatedConcept(
             nn.Linear(feature_width(cfg), cfg.n_actions), spec, width=feature_width(cfg)
         )
-        optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
+        # EXP-047. The frozen path builds the optimizer exactly as every prior experiment did,
+        # from `policy_parameters(head)` alone, so its Adam state and update sequence are
+        # unchanged. Fine-tuning ADDS a second parameter group rather than merging the two,
+        # which keeps the head's lr and the encoder's separate quantities.
+        finetune = cfg.encoder_lr is not None
+        if finetune:
+            if cfg.arm != "regionalized":
+                raise ValueError(
+                    f"encoder_lr requires arm='regionalized' (got {cfg.arm!r}): only that arm "
+                    "has a `sensory` region to fine-tune."
+                )
+            if cfg.readout != "concept":
+                # `MemoryReadout.__call__` wraps its body in `torch.no_grad()`, so a memory
+                # readout would detach the concept and the encoder would silently receive no
+                # gradient at all. The run would look fine and train nothing. Refuse instead.
+                raise ValueError(
+                    f"encoder_lr requires readout='concept' (got {cfg.readout!r}): MemoryReadout "
+                    "detaches the concept, so the encoder would train on nothing."
+                )
+            optimizer = torch.optim.Adam([
+                {"params": list(policy_parameters(head)), "lr": cfg.lr},
+                {"params": list(agent.sensory.parameters()), "lr": cfg.encoder_lr},
+            ])
+        else:
+            optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
+        # Counted from the optimizer rather than from the config, so it reports what is
+        # ACTUALLY being trained. 390 on every frozen run since EXP-029; 27,206 fine-tuned.
+        # Recorded because the depth series is only comparable at a fixed trainable surface,
+        # and a number in the record is harder to lose than a sentence in a write-up.
+        trainable_params = sum(
+            p.numel() for group in optimizer.param_groups for p in group["params"]
+        )
         # One stage when no curriculum is set, so the environment is constructed exactly
         # once from random.Random(train_seed) as before and the default path is unchanged.
         stages = curriculum_schedule(
@@ -601,6 +675,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     entropy_beta=cfg.entropy_beta,
                     normalize_advantages=cfg.normalize_advantages,
                     store=use_memory, recall=use_memory, feature_fn=readout,
+                    grad_brain=finetune,
                 )
                 baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
                 entropies.append(stats["mean_entropy"])
@@ -641,6 +716,9 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "seed": cfg.seed,
         "sigma": cfg.sigma,
         "episodes": episodes_run,
+        # EXP-047. Additive: a new key, so every prior record simply lacks it and no existing
+        # field or code path changes. `encoder_lr` itself rides along inside `config`.
+        "trainable_params": trainable_params,
         "is_heldout": is_heldout,
         "n_train": len(train_states),
         # EXP-036. `train_success_rate` is scored on `n_train_eval` states drawn from the
@@ -676,4 +754,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
     # cannot corrupt or withhold the run's actual result.
     if cfg.arm != "random":
         torch.save(head.state_dict(), out_dir / head_filename(cfg))
+        # EXP-047. A fine-tuned encoder is a RESULT, not a byproduct: Claim 2 re-probes it to
+        # ask whether RL improved the representation or merely fitted the head to it, and that
+        # question cannot be asked afterwards if the weights are gone. Frozen runs write
+        # nothing here - their encoder is already on disk as `encoder_state_path`, or is
+        # reproducible from `encoder_seed`.
+        if cfg.encoder_lr is not None:
+            torch.save(agent.sensory.state_dict(), out_dir / encoder_filename(cfg))
     return record
