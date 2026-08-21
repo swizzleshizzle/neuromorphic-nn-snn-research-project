@@ -47,8 +47,19 @@ total against the ~23 h nominal.
 > 10 workers)". Verified live on this dispatch - 81 minutes in, phase 0 had written nothing and
 > was consuming 6.56 effective cores, which is on track rather than stalled.
 >
-> **Encoders appear all at once near the end**, because all 12 workers start together and each
+> **Encoders appear all at once near the end**, because all workers start together and each
 > writes only when its seed finishes. An empty directory mid-phase is expected.
+
+> [!important] MEASURED ON THIS DISPATCH: **10 workers beat 12**, so phase 0 was dispatched wrong.
+> The launcher ran phase 0 at `--workers 12`. That took **>130 min** for the same 12 encoders
+> EXP-040 built in **100 min at 10 workers** (its RESULTS.md provenance: 2026-08-09 14:40-16:20,
+> same laptop, same operation). All 12 workers sat at ~0.5 CPU each, about **6.0 effective cores**,
+> against the **~8.4** EXP-040 got from 10.
+>
+> Twelve loses **even though it fits every seed in one scheduling wave** where 10 needs two. The
+> machine is memory-bound, not core-bound. This extends the playbook's "10 beat 16" down to
+> **"10 beat 12"**, and `launch047.ps1` has been corrected to 10 for any future run. The cost on
+> this dispatch was about 30 minutes and is already spent; the other phases were always 6 and 10.
 
 ## 1. What was done on 2026-08-20
 

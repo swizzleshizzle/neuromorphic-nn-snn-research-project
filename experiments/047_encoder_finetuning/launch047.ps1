@@ -76,7 +76,13 @@ if ($hits -lt 1 -or $hits2 -lt 1) {
 
 # ---------------- phase 0: encoders for the new seeds ----------------
 Say "PHASE 0: pretraining EXP-040 encoders for seeds $($newSeeds -join ',')"
-& $py -u "$exp\pretrain_seeds.py" --seeds $newSeeds --workers 12 >> "$out\phase0_pretrain.log" 2>&1
+# TEN workers, not twelve. Measured on this very dispatch: 12 workers took >130 min for the
+# 12 encoders that EXP-040 built in 100 min at 10 workers (its RESULTS.md provenance,
+# 2026-08-09 14:40-16:20, same laptop, same operation). Per-worker CPU sat at ~0.5 across all
+# 12, i.e. ~6.0 effective cores against the ~8.4 EXP-040 got from 10. Twelve loses even though
+# it fits every seed in ONE scheduling wave where 10 needs two - the machine is memory-bound,
+# not core-bound, exactly as the playbook says. Extends "10 beat 16" down to "10 beat 12".
+& $py -u "$exp\pretrain_seeds.py" --seeds $newSeeds --workers 10 >> "$out\phase0_pretrain.log" 2>&1
 
 $haveAll = $true
 foreach ($s in $newSeeds) {
