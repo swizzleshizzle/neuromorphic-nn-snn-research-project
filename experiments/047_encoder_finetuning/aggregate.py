@@ -70,6 +70,14 @@ def load(d: Path, tag: str, *, exact: bool = False) -> dict:
     out = {}
     for p in sorted(d.glob("*.json")):
         r = json.loads(p.read_text())
+        # EXP-047's outputs directory holds more than records: `probe_pilot.json` and
+        # `probe_confirm.json` are LISTS and `selected_lr.json` is a dict with no `tag`.
+        # EXP-046's aggregator could assume every *.json was a record; this one cannot.
+        # Fixed 2026-08-22 after the run, and it moves NO threshold - it only stops the
+        # aggregator crashing on files that are not records. Same class of post-run change
+        # as EXP-040's "print each margin in standard errors".
+        if not isinstance(r, dict):
+            continue
         hit = (r.get("tag") == tag) if exact else (tag in r.get("tag", ""))
         if hit and r.get("depth") == DEPTH and r.get("arm") == "regionalized":
             out[r["seed"]] = r

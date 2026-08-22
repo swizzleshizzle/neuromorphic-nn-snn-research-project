@@ -170,8 +170,42 @@ def steps(depth, episodes):
     return sum(per * (2 * d + 3) for d in stages)
 ```
 
-Then `wall_hours = total_steps * 0.153 / 3600 / workers`. Add the evaluations: each is
-`n_states * (2d+3)` steps, and since EXP-036 there are two of them per run (held-out and train-side).
+Add the evaluations: each is `n_states * (2d+3)` steps, and since EXP-036 there are two of them
+per run (held-out and train-side).
+
+### ROUND UP TO WHOLE WAVES. Dividing by `workers` is wrong and it is wrong by a lot.
+
+**Corrected 2026-08-22, after EXP-047 was estimated at 23 h and took 42 h.** The old formula here
+was `wall_hours = total_steps * 0.153 / 3600 / workers`. That assumes the cells pack perfectly
+into the worker pool. They do not: **12 cells on 10 workers is TWO waves**, and the second wave
+runs 2 workers busy against 8 idle for its whole duration. The pool does not refill.
+
+```python
+import math
+def wall_hours(cells, workers, steps_per_cell, s_per_step=0.153):
+    return math.ceil(cells / workers) * steps_per_cell * s_per_step / 3600
+```
+
+Measured against EXP-047's four phases, all on `SwizzlesDuo`:
+
+| phase | cells | workers | waves | actual | naive `/workers` | **wave-rounded** |
+|---|---|---|---|---|---|---|
+| pilot | 6 | 6 | 1 | 4.24 h | 5.62 h | 5.62 h |
+| confirmatory | 12 | 10 | 2 | **11.95 h** | 6.75 h | **11.25 h** |
+| fallback d5 (capped) | 12 | 10 | 2 | **7.80 h** | 4.55 h | **7.58 h** |
+
+**The 0.153 s/step constant was never the problem** - back-solving the per-cell time gives 0.163
+and 0.157 s/step at 10 workers, right on it. The formula was.
+
+**Fewer workers is faster per cell**: the 6-worker phase back-solved to **0.115 s/step** against
+10 workers' ~0.16. Same memory-bound story as "10 beat 16". So prefer a worker count that
+**divides the cell count** - 12 cells on 6 workers is 2 clean waves and each cell runs faster
+than it would at 10.
+
+> One EXP-047 phase (EXP-040 depth 5, 12 cells at 10 workers, overnight) ran at **0.301 s/step**,
+> roughly double its near-identical sibling phase. Never explained. It changed no result -
+> seeded runs are byte-identical regardless of scheduling - but do not treat a single phase's
+> throughput as a constant you can plan the next run against.
 
 ## 3. Launch
 

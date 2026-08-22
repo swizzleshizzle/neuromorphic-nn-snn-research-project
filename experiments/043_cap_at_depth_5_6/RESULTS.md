@@ -47,6 +47,35 @@ Pre-registered: **>= +0.05** at **p <= 0.05**, paired against EXP-040.
 > It is also **not** a null. A follow-up with more seeds is well motivated, and is the one place
 > in this experiment where more data would clearly change the answer.
 
+### RESOLVED 2026-08-22 at n=24: the depth-5 effect is real
+
+The follow-up above was run. Seeds 12-23 were pretrained and both arms executed for them
+(EXP-040's uncapped depth-5 cell had only ever covered seeds 0-11, so the new seeds had no
+baseline to pair against until now). **The bar was NOT re-negotiated**: still `>= +0.05` at
+`p <= 0.05`. Only `n` changed, and it was fixed at 24 in advance.
+
+| | delta | W-L-T | exact p | verdict |
+|---|---|---|---|---|
+| original 12 (above) | +0.1108 | 8-4-0 | 0.0815 | REFUTED |
+| **replication, the new 12** | **+0.0975** | 8-3-1 | **0.0400** | **CONFIRMED** |
+| all 24 | +0.1042 | 16-7-1 | 0.0055 | CONFIRMED |
+
+**The replication passes on its own**, which is the number that matters. Those twelve seeds were
+commissioned before any of their values existed and none of them influenced the decision to run,
+so they are a clean test of whether the original effect was real. It was, and at almost exactly
+the original effect size (+0.0975 against +0.1108).
+
+> [!warning] The pooled 24-seed figure is the best estimate but is NOT a clean pre-registration.
+> The first twelve seeds were seen before the second twelve were commissioned, and the extension
+> was decided **because** p sat near the bar. That is optional stopping. What contains it: the
+> bar is unchanged, n was fixed at 24 in advance rather than "add seeds until it passes", and the
+> replication is reported separately so it can be judged alone. **Report all three rows.**
+
+Means: capped **0.3229** vs baseline **0.2188** across 24 seeds.
+
+Reproduce with `.venv/bin/python experiments/043_cap_at_depth_5_6/aggregate_d5_24seeds.py`
+(exact permutation over all `2**24` sign flips, about 30 s).
+
 Depth 6's smaller effect passes because it is more consistent: 9 of 12 seeds improved and only
 one moved against by more than 0.05.
 
