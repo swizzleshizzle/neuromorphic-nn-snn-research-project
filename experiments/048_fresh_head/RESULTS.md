@@ -130,13 +130,26 @@ should not disagree this sharply, and one of them is measuring the wrong thing.
 
 Candidate explanations, none tested:
 
-1. **The probe scores top-1 optimal-move accuracy; the policy only needs to solve within `2d+3`
-   steps.** An encoder can get much better at "a move that makes progress" without getting better
-   at "*the* optimal move". This is the explanation I find most likely, and it would mean the
-   probe has been the wrong instrument for policy questions since EXP-033.
-2. **Different feature pipelines.** The probe batches `SensoryCortex`; the policy loops
+1. ~~The probe scores top-1 optimal-move accuracy while the policy only needs a distance-reducing
+   move.~~ **WRONG, corrected 2026-08-24 before any follow-up was run.** `optimal_move_mask`
+   already means *"which moves strictly reduce distance-to-solved"*, and `top1_accuracy` already
+   asks whether the argmax move is one of them. The two metrics were never different in the way
+   this claimed. Left visible rather than deleted, because it was published in this file, in the
+   vault and in a commit message as "the explanation I find most likely".
+
+2. **THE LIKELIEST EXPLANATION, and this project has already evidenced it: the probe measures
+   CAPACITY, the policy measures EXPLOITABILITY.** The probe trains to convergence with full
+   oracle supervision, so it reports the best a linear readout could do. REINFORCE trains on
+   sparse reward, so the policy reports what it could actually find. **EXP-028 already
+   established this family is optimization-limited rather than encoder-limited** - gaussian noise
+   *doubled* held-out navigation there. Fine-tuning could leave decodability flat while making
+   the code far easier for REINFORCE to exploit, which is exactly the pattern seen.
+
+3. **Single-step versus chained.** The probe scores one move from a state; the policy chains up
+   to `2d+3` of them, so small per-step advantages compound.
+4. **Different feature pipelines.** The probe batches `SensoryCortex`; the policy loops
    `brain.step`. EXP-039's Control B established these agree in *distribution*, not per-sample.
-3. **The probe fits jointly across depths 1-6** with a stratified split, so its depth-6 numbers
+5. **The probe fits jointly across depths 1-6** with a stratified split, so its depth-6 numbers
    come from a readout shaped by shallow shells the policy never evaluates on.
 
 **This is the most valuable open question in the project right now**, because the probe has been
@@ -161,10 +174,13 @@ representation quality, several mechanism readings need revisiting.
 
 ## What to do next
 
-1. **Resolve the probe tension.** Score the probe on "any distance-reducing move" rather than
-   top-1 optimal, on the encoders already serialised. This is offline, costs minutes, and
-   directly tests explanation 1. **Do this first** - it is cheap and it gates how much of
-   EXP-033/039/047's mechanism story survives.
+1. **Resolve the probe tension.** ~~Score the probe on "any distance-reducing move".~~ That was
+   based on a misreading and the metrics are already the same thing. The corrected test is
+   **capacity versus learnability**: fit the same probe at increasing epoch budgets (5, 15, 50,
+   300) on the encoders already serialised. If B only matches A at convergence but reaches it far
+   sooner, capacity is flat and *learnability* improved - which would reconcile the probe with
+   the policy and put EXP-028's "optimization-limited" finding at the centre of the cube line
+   too. Offline, minutes. **Do this first.**
 2. **Iterate the two-stage recipe.** Fine-tune again from arm B's encoder and retrain a head. If
    the budget accounting above is right, the third stage should yield about +0.05 again over its
    own compute cost, not more.
