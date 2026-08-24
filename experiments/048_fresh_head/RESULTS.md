@@ -156,6 +156,58 @@ Candidate explanations, none tested:
 the mechanism instrument for EXP-033, EXP-039 and EXP-047. If it does not track policy-relevant
 representation quality, several mechanism readings need revisiting.
 
+## RESOLVED 2026-08-24 - the probe was measuring the wrong UNIT, not the wrong metric
+
+Two hypotheses were tested and **both refuted**, using only encoders already on disk
+(`diagnose_probe_tension.py`, minutes on the VPS).
+
+**Refuted 1 - "more decodable".** No.
+**Refuted 2 - "easier to learn from".** Also no. The same probe at increasing epoch budgets:
+
+| epochs | A (pretrained) | B (fine-tuned) | B - A | W-L |
+|---|---|---|---|---|
+| 5 | 0.4739 | 0.4785 | +0.0046 | 7-5 |
+| 15 | 0.6350 | 0.6255 | -0.0095 | 3-9 |
+| 50 | 0.6766 | 0.6676 | -0.0090 | 1-11 |
+| 300 | 0.6839 | 0.6742 | -0.0097 | 1-11 |
+
+B is not faster to converge and not higher at convergence. **For single-step move prediction the
+fine-tuned encoder is consistently, if slightly, WORSE** - 1-11 seeds at every real budget.
+
+**What it actually is: the probe scores isolated STATES, the policy is judged on TRAJECTORIES.**
+
+| metric | A | B | B - A | exact p |
+|---|---|---|---|---|
+| success_rate | 0.1800 | 0.3112 | +0.1313 | **0.0059** |
+| **eval_revisit_rate** | 0.4652 | 0.3808 | **-0.0844** | **0.0454** |
+| **optimality** | 0.6445 | 0.7716 | **+0.1271** | **0.0132** |
+| revisit_rate (training) | 0.3376 | 0.2806 | -0.0571 | 0.0142 |
+| mean_train_entropy | 0.4982 | 0.3278 | -0.1704 | 0.0015 |
+| greedy_modal_action_frac | 0.4733 | 0.5000 | +0.0267 | 0.6333 |
+
+**B loops less and produces markedly more optimal paths**, and it does so without becoming
+degenerate - the modal action fraction is statistically unchanged (p 0.63), so this is not the
+collapse signature.
+
+A face move has **order 4**, so the dominant cube failure is oscillation: make a move, undo it,
+burn the `2d+3` budget. A probe that scores one move from a state drawn independently from a
+shell **cannot see that**, because it never asks what the policy does *next*. Two encoders can be
+identical per-state and differ enormously in whether they undo their own work.
+
+This is the same arithmetic that produced EXP-042's depth-1 trap, arriving from the other
+direction.
+
+### What this costs the project's mechanism story
+
+**It does not invalidate EXP-033, EXP-039 or EXP-047's probe numbers** - those measure what they
+always measured: how linearly decodable a distance-reducing move is from an isolated state.
+
+**It does bound what they can be used for.** A probe delta is not a policy prediction, and this
+is the first case where the two point in opposite directions with both significant. Anywhere a
+probe number was read as "this encoder will make a better policy", that inference now needs the
+trajectory measurements beside it. `revisit_rate` and `optimality` are already in every record
+since EXP-029 and were simply never the headline.
+
 ## What this does and does not license
 
 **Licensed:**
@@ -174,13 +226,11 @@ representation quality, several mechanism readings need revisiting.
 
 ## What to do next
 
-1. **Resolve the probe tension.** ~~Score the probe on "any distance-reducing move".~~ That was
-   based on a misreading and the metrics are already the same thing. The corrected test is
-   **capacity versus learnability**: fit the same probe at increasing epoch budgets (5, 15, 50,
-   300) on the encoders already serialised. If B only matches A at convergence but reaches it far
-   sooner, capacity is flat and *learnability* improved - which would reconcile the probe with
-   the policy and put EXP-028's "optimization-limited" finding at the centre of the cube line
-   too. Offline, minutes. **Do this first.**
+1. ~~Resolve the probe tension.~~ **DONE, same day** - see the RESOLVED section above. Both
+   candidate explanations were refuted and the answer turned out to be the unit of measurement,
+   not the metric. The follow-on is to **report `revisit_rate` and `optimality` alongside success
+   in future cube results**; they were in every record since EXP-029 and carried the mechanism
+   here while the probe missed it.
 2. **Iterate the two-stage recipe.** Fine-tune again from arm B's encoder and retrain a head. If
    the budget accounting above is right, the third stage should yield about +0.05 again over its
    own compute cost, not more.
