@@ -44,6 +44,23 @@ The parallel is exact:
 > stronger, not weaker.** This asymmetry is stated now so it cannot be presented later as a
 > caveat discovered after the fact.
 
+### 2.1 A third asymmetry, found in the smoke test and recorded BEFORE the run
+
+Warm-starting from E0 and training **one** epoch (259 updates) moves `fc1` by **7.855%** of its
+norm. EXP-047's **10,000** RL updates moved it **2.91%**. Per update that is roughly **100x more
+movement** from the pretraining objective.
+
+So the control is favoured on three axes at once, not one: **~17x more data per update, a clean
+supervised gradient instead of a noisy policy gradient, and ~100x more parameter movement per
+update.** All three point the same way.
+
+**Consequence for the grid, stated now:** a **refuted** Claim 1 becomes *stronger* - a control
+this heavily favoured getting nothing is decisive. But if Claim 1 **confirms and F beats B**, the
+win **cannot be attributed to the objective** rather than to the sheer magnitude of the updates,
+and that cell must be reported as *"more pretraining wins, mechanism unattributed"*. It would
+still be actionable - the practical advice would be "pretrain longer, it is offline and cheaper" -
+but it would not answer the question this experiment is named for.
+
 ## 3. Design
 
 Three arms, **two of which already exist and are not re-run**. All three are
