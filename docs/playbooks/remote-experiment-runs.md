@@ -202,6 +202,26 @@ and 0.157 s/step at 10 workers, right on it. The formula was.
 **divides the cell count** - 12 cells on 6 workers is 2 clean waves and each cell runs faster
 than it would at 10.
 
+### PRETRAINING is far more contended than RL. Measured 2026-08-25.
+
+EXP-050's phase 1 ran 12 encoder-pretraining jobs at 10 workers, so wave 1 had **10 concurrent**
+and wave 2 had **2**. The same job, same machine, minutes apart:
+
+| concurrency | per-seed wall | |
+|---|---|---|
+| 10 | **6,985 s** | |
+| 2 | **1,995 s** | **3.50x faster per seed** |
+
+That is **2.86 effective cores from 10 workers** - far worse than the ~7.4 the RL cells get. Ten
+still wins on total throughput (5.15 seeds/h against 2 workers' 3.61) but the returns are brutal,
+and the phase took **2.49 h against a 1.7 h estimate** because of it.
+
+**Estimate pretraining separately from RL.** The 0.153 s/step constant and the ~7.4 effective
+cores are RL-cell figures; inverse-model pretraining is much more memory-bandwidth-bound. Somewhere
+around 4-6 workers is probably the knee, but only 2 and 10 have been measured - **do not
+extrapolate the curve from two points**, which is the same warning this playbook already gives
+for the 10-versus-16 comparison.
+
 > One EXP-047 phase (EXP-040 depth 5, 12 cells at 10 workers, overnight) ran at **0.301 s/step**,
 > roughly double its near-identical sibling phase. Never explained. It changed no result -
 > seeded runs are byte-identical regardless of scheduling - but do not treat a single phase's
