@@ -6,52 +6,54 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project. Nothing is running; both machines are idle.
+Picking up the neuromorphic cube project. Nothing is running; the laptop is idle and the
+repo is clean at 54f2510.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-08-20.md first, then CLAUDE.md. It has a decision
-rule for tonight in section 0 - follow it.
+Read docs/handoffs/SESSION-HANDOFF-2026-08-27.md first, then CLAUDE.md. There is a
+decision waiting in section 0 - do not start building until it is settled.
 
-Where we are: a spiking network solves 2x2 cubes with a 390-parameter linear head on a
-FROZEN encoder. Depths 3-7 work. Four experiments this week established that the depth
-series is really a BUDGET series: depth 7 needed 4.4x the episodes to work (EXP-044),
-that gain came from total budget and not deep-end exposure (EXP-045: back-loading a fixed
-budget made it WORSE, p 0.0010), depth 6 responds identically to the same 4.4x (EXP-046,
-12-0-0, p 0.0005), and the curve across 10k/25k/44k is LOG-LINEAR with no knee - about
-0.22 success per log10 of spend.
+Where we are: a spiking network solves 2x2 cubes at depth 6 with 0.3525 held-out, and
+depths 3-7 all work given budget. Three facts shape everything:
 
-So budget is solved and unattractive: 4.4x buys about one depth, depth 8 would be
-~194,000 episodes for ~0.18, and a log-linear curve has no cheap fraction.
+1. The depth series was a BUDGET series. Success is linear in the LOGARITHM of spend,
+   ~0.22 per log10, no knee. Every depth number written before EXP-046 means "at 10,000
+   episodes".
 
-TIMING MATTERS TONIGHT: this is session 3, run tonight, and Michael is out tomorrow
-night. Aim to have something dispatched before the session ends so the laptop is not idle
-all day. But do NOT rush a pre-registration to manufacture a dispatch - there is a
-fallback for exactly that reason.
+2. The encoder can be trained, and it is bounded. Fine-tuning during RL works (EXP-047),
+   the gain is in the encoder not its head (EXP-048), it is RL's objective and not merely
+   more gradient (EXP-050) - but it does NOT compound (EXP-049, constant ~+0.05 per round)
+   and its advantage ERODES with depth (EXP-051: 1.69x cheaper than budget at depth 6,
+   1.09x at depth 7).
 
-YOUR JOB THIS SESSION: design, pre-register and (if ready) dispatch encoder fine-tuning
-during RL.
+3. THREE INSTRUMENTS NOW MOVE AGAINST POLICY QUALITY. The EXP-033 probe fell 0-12 at
+   p 0.0005 while policy rose, rose 12-0 at p 0.0005 while policy halved, and pretraining
+   move-accuracy climbs monotonically while policy collapses. USE revisit_rate and
+   optimality instead - they are in every record since EXP-029. Do not put a probe number
+   in a new spec.
 
-It is the only untried lever that could change the exchange rate rather than pay it.
-Three things to get right before writing code:
-- The encoder is frozen BY CONSTRUCTION. make_agent builds the brain and nothing unfreezes
-  it; the 390-parameter head is the entire trainable surface. This is a trainer change.
-- "The same 390 trainable parameters" is load-bearing in every write-up and the whole
-  visual story. A fine-tuned arm is a DIFFERENT ARCHITECTURE and must be reported as one.
-- Pre-register the confound: fine-tuning adds trainable parameters AND compute per step.
-  Matching episodes gives it more compute; matching compute gives the frozen control more
-  episodes, which EXP-046 prices at ~+0.22 per log10 and could swamp the effect. Pick one,
-  and report what it cannot rule out.
+YOUR JOB THIS SESSION: settle the Stage 3 direction, then design it.
 
-Depth 6 at 10,000 episodes is the natural test bed: baseline 0.1800, ~5 h for 12 seeds,
-paired against EXP-043. Consider re-probing the fine-tuned encoder as well as scoring it -
-that says whether RL improved the representation or just fitted the head to it.
+NeuromodBus is a 46-line stub whose learning_enabled property nothing reads. The fork:
+- 3a: a learned critic, TD error as the advantage. Targets the MEASURED failure (EXP-045's
+  depth-7 entropy collapse, 0.591 -> 0.098). Safer. But it is ACTOR-CRITIC, and routing
+  delta through a bus object does not make it neuromorphic.
+- 3b: gate encoder plasticity on learning_enabled. This is the increment where the bus
+  becomes load-bearing and the neuromorphic claim becomes honest.
 
-IF IT IS NOT SMOKE-TESTED AND READY when the session winds down, dispatch the fallback
-instead and finish the design unhurried: re-run depth 5 with 24 seeds to settle EXP-043's
-Claim 1 (+0.1108 at p 0.0815). It needs 12 more pretrained encoders first (~20 min at 12
-workers, only seeds 0-11 exist) and then ~4.6 h. Total ~5 h.
+CLAUDE.md and road-to-a-solved-cube both say nothing neuromorphic participates in the
+learning yet. Week 20 changed that once. Do not let 3a be written up as if it changed it
+twice. Ask Michael which way before building; the previous session deliberately did not
+choose.
+
+If he wants something cheaper instead, the best-value alternative is measuring the
+pretraining plateau's LEFT edge: between 0 epochs (0.0000) and 10 (0.2012) nobody has
+looked, and if 3 epochs also gives ~0.20 then pretraining is doing far less than the
+EXP-039/040 story implies. ~4.5 h.
 
 Pre-register the contract before the numbers exist, n >= 12 seeds, measure the floor
-rather than assuming it, and put the primary claim on a quantity that moves on every seed.
+rather than assuming it, and price any compute confound against EXP-046's budget curve.
+Two process failures last week are worth reading in section 5 of the handoff: both
+happened with every threshold obeyed.
 ```
 
 ---
@@ -59,11 +61,14 @@ rather than assuming it, and put the primary claim on a quantity that moves on e
 ## Why this prompt is shaped this way
 
 - **It names the file to read rather than restating it**, so the two cannot drift apart.
-- **It leads with the reframing, not the number.** "Depth 7 works" is the shallow reading;
-  "the deficit was coverage, and the break point moved again" is the finding.
-- **It carries the refusal with the result.** The overreach this invites is a single sentence
-  away from the truth, and depth 3's coverage is the one-line disproof.
-- **It carries the schedule, because the schedule changes the plan.** A design-only session is
-  right in general and wrong the night before a day nobody is around to dispatch.
-- **It names the fallback in the prompt itself**, so "dispatch something" never competes with
-  "pre-register properly". The fallback exists to keep that trade off the table.
+- **It leads with the three standing facts, not the newest result.** A fresh session that knows
+  only EXP-052 will mis-plan; a session that knows budget is log-linear, the encoder line is
+  bounded, and the instruments are inverted will not.
+- **It carries the retired instrument loudly.** Three experiments now show it moving the wrong
+  way, and it is the single easiest mistake for a fresh session to make, because the probe is what
+  EXP-033/039/047 all used and the vault is full of its numbers.
+- **It refuses to make the Stage 3 choice.** The previous session declined twice on purpose. A
+  prompt that quietly picked one would erase that, and 3a is the option that is easy to ship and
+  easy to over-claim.
+- **It names a cheaper fallback**, so "do something tonight" never competes with "settle the
+  direction properly".
