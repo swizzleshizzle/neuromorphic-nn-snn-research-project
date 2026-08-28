@@ -57,6 +57,20 @@ def make_policy_head(brain, head_type: str = "linear", hidden: int = 128) -> nn.
     raise ValueError(f"unknown head_type {head_type!r} (expected 'linear' or 'mlp')")
 
 
+def make_critic(brain) -> nn.Module:
+    """A learned state-dependent baseline: sensory concept -> one scalar (EXP-053).
+
+    65 parameters. It reads exactly what the policy head reads, on the EXP-025 precedent that
+    a wider readout did not beat a linear one, and it replaces the scalar EMA baseline with a
+    state-dependent one so that the advantage stops being "this episode against the running
+    average of all episodes".
+
+    The brain stays frozen. On every arm that uses a critic the concept arrives from a
+    `no_grad` forward, so the critic's gradient reaches its own weights and stops there.
+    """
+    return nn.Linear(brain.content, 1)
+
+
 def concept_rate(out: dict) -> torch.Tensor:
     """Mean firing rate of the sensory concept over the window, single agent. -> [concept]."""
     return out["concept"].mean(dim=0)[0]
@@ -76,6 +90,7 @@ def action_distribution(
     recall: bool = False,
     feature_fn=None,
     grad_brain: bool = False,
+    with_features: bool = False,
 ) -> tuple[Categorical, torch.Tensor]:
     """One forward pass -> a categorical policy from the head on the chosen features.
 
@@ -83,6 +98,8 @@ def action_distribution(
     backprop through the spiking unroll). ``feature_fn`` selects what the head reads and
     defaults to the sensory concept, so omitting it reproduces v1 exactly.
     ``store``/``recall`` engage the hippocampal pathway (both off by default, as in v1).
+    ``with_features=True`` (EXP-053) additionally returns the features the head read, so a
+    critic can share them without a second ``brain.step``; the default keeps the 2-tuple.
 
     ``grad_brain=True`` (EXP-047) drops the ``no_grad`` so gradients reach the sensory
     encoder through snnTorch's surrogate, making the encoder fine-tunable during RL. It
@@ -99,7 +116,13 @@ def action_distribution(
         out = brain.step(obs, store=store, recall=recall, record=False, generator=generator)
     features = concept_rate(out) if feature_fn is None else feature_fn(out)
     logits = head(features)
-    return Categorical(logits=logits), logits
+    dist = Categorical(logits=logits)
+    # `with_features` exists so a critic can read the SAME features the head just read
+    # without a second `brain.step`. A second step would cost 90 ms and, worse, would draw
+    # on `generator` and move every downstream number in the run.
+    if with_features:
+        return dist, logits, features
+    return dist, logits
 
 
 def greedy_action(
@@ -134,6 +157,23 @@ def policy_parameters(head: nn.Module):
     return head.parameters()
 
 
+def critic_fit_terms(values: torch.Tensor, returns: torch.Tensor) -> dict:
+    """Streamable pieces of an explained-variance figure (EXP-053).
+
+    `EV = 1 - SSE / SST`, and SST is the variance of returns over a whole CURRICULUM STAGE,
+    not within one episode - a single episode's returns are a deterministic geometric series
+    given its length, so a per-episode EV would be close to meaningless. This returns the
+    sums; `cube_baseline` accumulates them per stage and forms the ratio once.
+    """
+    resid = returns - values
+    return {
+        "critic_sse": float((resid * resid).sum()),
+        "return_sum": float(returns.sum()),
+        "return_sq_sum": float((returns * returns).sum()),
+        "critic_n": int(returns.numel()),
+    }
+
+
 def train_episode(
     brain,
     head: nn.Module,
@@ -150,6 +190,10 @@ def train_episode(
     recall: bool = False,
     feature_fn=None,
     grad_brain: bool = False,
+    critic: nn.Module | None = None,
+    critic_optimizer=None,
+    encoder_optimizer=None,
+    gate_fn=None,
 ) -> dict:
     """Run one episode, then apply one REINFORCE update to the head.
 
@@ -170,15 +214,22 @@ def train_episode(
     log_probs: list[torch.Tensor] = []
     rewards: list[float] = []
     entropies: list[torch.Tensor] = []
+    values: list[torch.Tensor] = []
     reached_goal = False
     limit = max_steps if max_steps is not None else getattr(env, "max_steps", 100)
 
     steps = 0
     while steps < limit:
-        dist, _ = action_distribution(
+        stepped = action_distribution(
             brain, head, obs, generator=generator,
             store=store, recall=recall, feature_fn=feature_fn, grad_brain=grad_brain,
+            with_features=critic is not None,
         )
+        if critic is None:
+            dist, _ = stepped
+        else:
+            dist, _, features = stepped
+            values.append(critic(features).squeeze(-1))
         action = dist.sample()
         log_probs.append(dist.log_prob(action))
         entropies.append(dist.entropy())
@@ -192,22 +243,52 @@ def train_episode(
             break
 
     returns = torch.tensor(discounted_returns(rewards, gamma), dtype=torch.float32)
-    advantages = returns - baseline
+    critic_stats: dict = {}
+    if critic is None:
+        advantages = returns - baseline
+    else:
+        v = torch.stack(values)
+        # DETACHED: the policy gradient must not flow into the critic, or the critic would be
+        # trained to make the advantage small rather than to predict the return.
+        advantages = returns - v.detach()
+        critic_stats = critic_fit_terms(v.detach(), returns)
     if normalize_advantages:
         advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     loss = -(torch.stack(log_probs) * advantages).sum()
     if entropy_beta:
         loss = loss - entropy_beta * torch.stack(entropies).sum()
+    policy_loss = float(loss.detach())
+    if critic is not None:
+        loss = loss + torch.nn.functional.mse_loss(v, returns)
 
     optimizer.zero_grad()
+    if critic_optimizer is not None:
+        critic_optimizer.zero_grad()
+    if encoder_optimizer is not None:
+        encoder_optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+    if critic_optimizer is not None:
+        critic_optimizer.step()
+
+    # THE GATE. `encoder_optimizer` is separate from `optimizer` for one reason: Adam applies
+    # `exp_avg` on every `step()`, so zeroing the encoder group's gradients inside a shared
+    # optimizer would still move the encoder. Skipping a separate optimizer's `step()` is the
+    # only way to actually withhold an update. See the spec's implementation-trap callout.
+    gate_open = True
+    if encoder_optimizer is not None:
+        if gate_fn is not None:
+            gate_open = bool(gate_fn(float(returns.mean()), baseline))
+        if gate_open:
+            encoder_optimizer.step()
 
     return {
         "steps": steps,
         "total_reward": float(sum(rewards)),
         "mean_return": float(returns.mean()),
-        "loss": float(loss.detach()),
+        "loss": policy_loss,
         "reached_goal": reached_goal,
         "mean_entropy": float(torch.stack(entropies).mean()) if entropies else 0.0,
+        "gate_open": gate_open,
+        **critic_stats,
     }
