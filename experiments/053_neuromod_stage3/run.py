@@ -47,6 +47,7 @@ from neuromorphic.training.cube_baseline import (
 torch.set_num_threads(1)
 
 HERE = Path(__file__).resolve().parent
+E0_DIR = Path("experiments/040_pretrained_encoder_policy/outputs")
 E1_DIR = Path("experiments/047_encoder_finetuning/outputs")
 EXP051_DIR = Path("experiments/051_depth7_transfer/outputs")
 
@@ -54,10 +55,7 @@ SEEDS = tuple(range(12))
 EPISODES = 10_000
 CAP = ((1, 2),)
 
-# Filled in from the pilot. `select_critic_lr.py` prints it; paste the number here and
-# commit that edit BEFORE dispatching arm B, so the value is in git history rather than in
-# a shell command nobody can reconstruct.
-SELECTED_CRITIC_LR = 1e-2
+SELECTED_CRITIC_LR_FILE = "selected_critic_lr.json"
 
 CONTROL_MEANS = {"B": 0.1471, "G": 0.2700}   # EXP-051, EXP-047 lr1e-4 seeds 0-11
 BAR, ATTRIBUTION_BAR = 0.05, 0.03
@@ -66,8 +64,26 @@ TAGS = {"B": "exp053_critic_d7", "G": "exp053_gate_d6", "R": "exp053_rgate_d6"}
 DEPTHS = {"B": 7, "G": 6, "R": 6}
 
 
+def e0_encoder(seed: int) -> Path:
+    return E0_DIR / f"exp040_encoder_s{seed}.pt"
+
+
 def e1_encoder(seed: int) -> Path:
     return E1_DIR / f"exp047_ft_d6_lr0.0001_regionalized_d6_s{seed}_sig0.0_encoder.pt"
+
+
+def read_selected_critic_lr(out_dir: Path) -> float:
+    """The rate `select_critic_lr.py` chose from the pilot. Refuses to guess if it has not run."""
+    path = out_dir / SELECTED_CRITIC_LR_FILE
+    if not path.exists():
+        raise SystemExit(
+            f"{path} not found. Arm B trains at the critic_lr `select_critic_lr.py` chose from "
+            "the pilot (seeds 12-13), and that choice is pre-registered and mechanical. Run "
+            "pilot_critic_lr.py, then select_critic_lr.py, then arm B. Do NOT pass a rate by "
+            "hand to skip this: choosing it yourself is the exact move the spec forbids."
+        )
+    chosen = json.loads(path.read_text(encoding="utf-8"))
+    return float(chosen["critic_lr"])
 
 
 def arm_g_rates(out_dir: Path) -> dict[int, float]:
@@ -79,7 +95,8 @@ def arm_g_rates(out_dir: Path) -> dict[int, float]:
     return rates
 
 
-def sweep_configs(arm: str, seeds, out_dir: Path, rates: dict[int, float] | None = None):
+def sweep_configs(arm: str, seeds, out_dir: Path, rates: dict[int, float] | None = None,
+                   critic_lr: float | None = None):
     """One arm's configs. Each is its control copied field for field, with ONE change."""
     depth = DEPTHS[arm]
     common = dict(
@@ -91,11 +108,14 @@ def sweep_configs(arm: str, seeds, out_dir: Path, rates: dict[int, float] | None
     )
     if arm == "B":
         # EXP-051's config. ONE change: a learned baseline replaces the scalar EMA.
+        if critic_lr is None:
+            critic_lr = read_selected_critic_lr(out_dir)
         return [CubeConfig(seed=s, encoder_state_path=str(e1_encoder(s)),
-                           critic_lr=SELECTED_CRITIC_LR, **common) for s in seeds]
+                           critic_lr=critic_lr, **common) for s in seeds]
     if arm == "G":
-        # EXP-047's confirmatory config. ONE change: the encoder steps only when the bus says so.
-        return [CubeConfig(seed=s, encoder_lr=1e-4,
+        # EXP-047's confirmatory config (its own EXP-040 starting encoder, unchanged). ONE
+        # change: the encoder steps only when the bus says so.
+        return [CubeConfig(seed=s, encoder_lr=1e-4, encoder_state_path=str(e0_encoder(s)),
                            plasticity_gate="dopamine", **common) for s in seeds]
     if arm == "R":
         if rates is None:
@@ -105,7 +125,9 @@ def sweep_configs(arm: str, seeds, out_dir: Path, rates: dict[int, float] | None
             raise SystemExit(
                 f"arm R needs arm G's realized gate_rate for seeds {missing}. Run arm G first."
             )
-        return [CubeConfig(seed=s, encoder_lr=1e-4, plasticity_gate="random",
+        # Same EXP-040 starting encoder as arm G: the two must differ ONLY in the gate.
+        return [CubeConfig(seed=s, encoder_lr=1e-4, encoder_state_path=str(e0_encoder(s)),
+                           plasticity_gate="random",
                            gate_rate_by_seed=((s, rates[s]),), **common) for s in seeds]
     raise SystemExit(f"unknown arm {arm!r} (expected B, G or R)")
 
@@ -136,6 +158,10 @@ def main() -> None:
             raise SystemExit(
                 f"EXP-051 records missing for seeds {missing}; they are the PAIRED control."
             )
+    if args.arm in ("G", "R"):
+        for s in args.seeds:
+            if not e0_encoder(s).exists():
+                raise SystemExit(f"missing EXP-040 encoder {e0_encoder(s)} (tracked in git)")
 
     configs = sweep_configs(args.arm, args.seeds, args.out_dir)
     names = [record_filename(c) for c in configs]

@@ -69,8 +69,9 @@ def select(records: list[dict]) -> float:
 
 
 def main() -> None:
+    out_dir = HERE / "outputs"
     records = []
-    for p in sorted((HERE / "outputs").glob("exp053_pilot_lr*.json")):
+    for p in sorted(out_dir.glob("exp053_pilot_lr*.json")):
         r = json.loads(p.read_text())
         records.append({"config": {"critic_lr": r["config"]["critic_lr"]},
                         "seed": r["seed"], "critic_ev": r["critic_ev"],
@@ -82,6 +83,8 @@ def main() -> None:
     for r in records:
         by_lr[float(r["config"]["critic_lr"])].append((float(r["critic_ev"]), int(r["critic_n"])))
 
+    chosen = select(records)
+
     print(f"{'critic_lr':>12} {'mean EV':>10} {'per-seed EV':>24} {'per-seed n':>24}")
     for lr in sorted(by_lr):
         cells = by_lr[lr]
@@ -89,8 +92,14 @@ def main() -> None:
         ns = [n for _, n in cells]
         print(f"{lr:>12.0e} {st.mean(evs):>10.4f}   {['%.4f' % e for e in evs]!s:>22} "
               f"{ns!s:>24}")
-    print(f"\nSELECTED critic_lr = {select(records):g}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / "selected_critic_lr.json"
+    dest.write_text(json.dumps({"critic_lr": chosen}, indent=1), encoding="utf-8")
+
+    print(f"\nSELECTED critic_lr = {chosen:g}")
     print("Rule fixed in the spec section 4.3. This script cannot see a success rate.")
+    print(f"\nwritten to {dest}. run.py's arm B reads it; do not pass a rate by hand.")
 
 
 if __name__ == "__main__":
