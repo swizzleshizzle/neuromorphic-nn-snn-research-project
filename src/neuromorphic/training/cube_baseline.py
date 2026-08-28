@@ -896,7 +896,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     "entropy_last_10pct": sum(stage_ents[-tenth:]) / tenth,
                     "entropy_min": min(stage_ents),
                     "train_solved_frac": stage_solved / len(stage_ents),
-                    **({"critic_ev": explained_variance(stage_fit)}
+                    **({"critic_ev": explained_variance(stage_fit),
+                        "critic_n": stage_fit["critic_n"]}
                        if critic is not None else {}),
                 })
         result = evaluate_states(
@@ -925,7 +926,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "trainable_params": trainable_params,
         # EXP-053. Additive: absent from every prior record. The FINAL stage's figure, which
         # is the deepest one and the regime the critic lr was selected in.
-        **({"critic_ev": stage_trace[-1]["critic_ev"]} if critic is not None else {}),
+        **({"critic_ev": stage_trace[-1]["critic_ev"],
+            "critic_n": stage_trace[-1]["critic_n"]} if critic is not None else {}),
         # EXP-053. The realized fraction of episodes on which the encoder actually stepped.
         # Arm R is rate-matched to this per seed, and a rate far from 0.5 is itself
         # diagnostic - it would mean the median threshold is not tracking the distribution.

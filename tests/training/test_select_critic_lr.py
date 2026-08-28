@@ -28,20 +28,26 @@ def test_picks_the_best_explained_variance_not_the_best_success():
     """The decisive test. The highest-EV lr here has the WORST success rate, so a selector
     that peeks at the outcome picks 1e-1 and fails."""
     records = [
-        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.10, "success_rate": 0.90},
-        {"config": {"critic_lr": 1e-3}, "seed": 13, "critic_ev": 0.12, "success_rate": 0.90},
-        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.55, "success_rate": 0.05},
-        {"config": {"critic_lr": 1e-2}, "seed": 13, "critic_ev": 0.57, "success_rate": 0.05},
-        {"config": {"critic_lr": 1e-1}, "seed": 12, "critic_ev": 0.20, "success_rate": 0.99},
-        {"config": {"critic_lr": 1e-1}, "seed": 13, "critic_ev": 0.22, "success_rate": 0.99},
+        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.10, "critic_n": 5000,
+         "success_rate": 0.90},
+        {"config": {"critic_lr": 1e-3}, "seed": 13, "critic_ev": 0.12, "critic_n": 5000,
+         "success_rate": 0.90},
+        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.55, "critic_n": 5000,
+         "success_rate": 0.05},
+        {"config": {"critic_lr": 1e-2}, "seed": 13, "critic_ev": 0.57, "critic_n": 5000,
+         "success_rate": 0.05},
+        {"config": {"critic_lr": 1e-1}, "seed": 12, "critic_ev": 0.20, "critic_n": 5000,
+         "success_rate": 0.99},
+        {"config": {"critic_lr": 1e-1}, "seed": 13, "critic_ev": 0.22, "critic_n": 5000,
+         "success_rate": 0.99},
     ]
     assert _module().select(records) == pytest.approx(1e-2)
 
 
 def test_ties_break_toward_the_smaller_lr():
     records = [
-        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.40},
-        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.40},
+        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.40, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.40, "critic_n": 5000},
     ]
     assert _module().select(records) == pytest.approx(1e-3)
 
@@ -49,9 +55,33 @@ def test_ties_break_toward_the_smaller_lr():
 def test_refuses_incomplete_cells():
     """A grid point missing a seed would be selected on a different sample than its rivals."""
     records = [
-        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.40},
-        {"config": {"critic_lr": 1e-3}, "seed": 13, "critic_ev": 0.40},
-        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.90},
+        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.40, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-3}, "seed": 13, "critic_ev": 0.40, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.90, "critic_n": 5000},
     ]
     with pytest.raises(ValueError, match="incomplete"):
         _module().select(records)
+
+
+def test_refuses_a_cell_with_no_critic_data():
+    """A degenerate stage yields critic_ev 0.0 with critic_n 0, indistinguishable from a
+    critic that genuinely explains nothing. Selecting on it would silently halve that
+    lr's mean. Refuse instead - a refusal cannot favour any learning rate."""
+    records = [
+        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.40, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-3}, "seed": 13, "critic_ev": 0.40, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.90, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-2}, "seed": 13, "critic_ev": 0.00, "critic_n": 0},
+    ]
+    with pytest.raises(ValueError, match="critic_n"):
+        _module().select(records)
+
+
+def test_a_real_zero_is_still_selectable():
+    """A genuine 0.0 with data behind it is a valid measurement, not an error. If this
+    test fails, the guard is rejecting real data and has become a re-ranking."""
+    records = [
+        {"config": {"critic_lr": 1e-3}, "seed": 12, "critic_ev": 0.00, "critic_n": 5000},
+        {"config": {"critic_lr": 1e-2}, "seed": 12, "critic_ev": 0.50, "critic_n": 5000},
+    ]
+    assert _module().select(records) == pytest.approx(1e-2)
