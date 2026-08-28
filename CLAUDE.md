@@ -20,7 +20,32 @@ Always run python via the venv, never a bare `python`. One test is marked `slow`
 
 **`ExactBFSDistance(max_depth=N)` is not the slow path.** A bounded build is near free (depth 6 is 11,913 states, about 0.04s). Only `max_depth=None` costs the 67s. Do not restructure code to avoid constructing a bounded provider; that optimisation buys nothing.
 
-Full suite is 370 tests as of 2026-07-30.
+Full suite is 370 tests as of 2026-07-30; 521 as of 2026-08-28 (EXP-053 added 55).
+
+**MEASURED PER-FILE RUNTIMES (2026-08-28, this VPS), because the 600 s Bash
+ceiling is now the binding constraint on this suite, not agent discipline:**
+
+| file | `-m "not slow"` | whole file |
+|---|---|---|
+| `test_encoder_finetune_seam.py` | 51 s (3 of 8) | **519 s** |
+| `test_cube_baseline.py` | 378 s | 378 s |
+| `test_critic_seam.py` | (fast subset only) | 251 s |
+| `test_encoder_seam.py` | (fast subset only) | 223 s |
+| `test_plasticity_gate.py` | 4 s | 273 s, split `-k always_open` |
+
+`test_encoder_finetune_seam.py` must be run **alone**. Two or more of these
+files in one call exceeds the ceiling and the harness auto-backgrounds it.
+
+The fast suite is ~13 min and **cannot complete in a single call at any
+timeout.** Run it in chunks; six worked here:
+
+```bash
+.venv/bin/python -m pytest tests/ -q -m "not slow" --ignore=tests/training   # 278, 41 s
+# then tests/training in five batches, keeping the four files above apart
+```
+
+Always pass an explicit tool timeout: the Bash default is 120 s, so even a
+250 s file auto-backgrounds without one. See the global CLAUDE.md gotcha.
 
 Ruff is configured in `pyproject.toml` but is not installed in the venv, so lint is not mechanically enforced.
 
