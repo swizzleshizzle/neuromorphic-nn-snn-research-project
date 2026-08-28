@@ -8,6 +8,7 @@ critic's value ENTERS the advantage and that gradient ARRIVES AT ITS PARAMETERS.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from neuromorphic.brain import Brain
@@ -63,11 +64,22 @@ def test_critic_value_enters_the_advantage():
                           critic=critic, critic_optimizer=copt)
 
     # Rebuild the returns from the rewards the episode actually earned. A solved episode
-    # ends early, so `steps` is the authority on length, not `max_steps`.
+    # ends early, so `steps` is the authority on length, not `max_steps`. Every non-terminal
+    # step earns `step_penalty` (-1.0); the last step earns `solve_reward` (10.0) only if the
+    # episode actually reached the goal, else another `step_penalty` (env default reward
+    # rule: `solve_reward if terminated else step_penalty`). This reconstructs the reward
+    # sequence independently of `critic_fit_terms`, so it can catch a broken residual
+    # computation rather than just re-deriving it.
     assert stats["critic_n"] == stats["steps"]
-    assert stats["critic_sse"] > 0.0, (
-        "a constant critic of 5.0 cannot have zero residual against cube returns "
-        "(solve_reward 10.0, step_penalty -1.0)"
+    step_penalty, solve_reward = -1.0, 10.0
+    rewards = [step_penalty] * (stats["steps"] - 1) + (
+        [solve_reward] if stats["reached_goal"] else [step_penalty]
+    )
+    returns = discounted_returns(rewards, gamma=0.99)
+    expected_sse = sum((g - 5.0) ** 2 for g in returns)
+    assert stats["critic_sse"] == pytest.approx(expected_sse), (
+        f"critic_sse {stats['critic_sse']} != sum((G_t - 5.0)**2) = {expected_sse} for the "
+        "realized episode's returns"
     )
 
 

@@ -102,6 +102,24 @@ def claim3_verdict(g_vs_control: tuple[float, float],
                 "not reach significance (p " + f"{gp:.4f}" + "). This is UNDERPOWERED, not a "
                 "null result, and it must not be reported as a refutation. Report the delta, "
                 "the p-value and the seed count, and state that n=12 could not resolve it.")
+    # A delta that is SIGNIFICANT but does not clear the bar is a different state of the
+    # world again, and the fifth row's fix did not cover it: `(gd=+0.03, gp=0.02)` used to
+    # fall all the way to the catch-all below and print "REFUTED", which contradicts the
+    # p-value describing it. A significant nonzero delta is a real effect, just a small one.
+    # The pre-registered +0.05 bar was not met, so Claim 2 is still not confirmed - but that
+    # is "bar not met", not "no effect", and the word REFUTED belongs only to a genuine null.
+    if gp <= ALPHA and abs(gd) < BAR:
+        if gd > 0:
+            return ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and "
+                    f"POSITIVE at {gd:+.4f} (p {gp:.4f}), but below the pre-registered +{BAR} "
+                    "bar. This is a real but small effect, not a null: the encoder updates "
+                    "did something, just not enough to confirm Claim 2. Report the delta, "
+                    "the p-value and the bar it missed.")
+        return ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and NEGATIVE "
+                f"at {gd:+.4f} (p {gp:.4f}), with magnitude below the pre-registered {BAR} "
+                "bar. This is a real but small cost, not a null: the encoder updates hurt, "
+                "just not by enough to call it a loss. Report the delta, the p-value and the "
+                "bar it missed.")
     return ("CLAIM 2 NOT CONFIRMED and CLAIM 3 NOT CONFIRMED. Encoder updates are redundant "
             "at this rate. The neuromorphic claim is REFUTED, not deferred. "
             "'We need a better gate' is NOT an available conclusion from this experiment.")

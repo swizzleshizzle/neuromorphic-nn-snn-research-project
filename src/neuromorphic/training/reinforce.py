@@ -65,8 +65,13 @@ def make_critic(brain) -> nn.Module:
     state-dependent one so that the advantage stops being "this episode against the running
     average of all episodes".
 
-    The brain stays frozen. On every arm that uses a critic the concept arrives from a
-    `no_grad` forward, so the critic's gradient reaches its own weights and stops there.
+    The critic's gradient reaches its own weights and stops there because `train_episode`
+    calls it on `features.detach()`, not because of the brain's `no_grad` forward: under
+    `grad_brain=True` (EXP-047) that `no_grad` is dropped so gradient CAN reach the encoder,
+    and the `.detach()` at the critic's read site is the only thing still holding this
+    guarantee. Do not remove that detach on the strength of this docstring; it is load-bearing
+    exactly when grad_brain=True, which is the case this project cares about (see
+    `test_the_critic_does_not_leak_gradient_into_the_encoder`).
     """
     return nn.Linear(brain.content, 1)
 

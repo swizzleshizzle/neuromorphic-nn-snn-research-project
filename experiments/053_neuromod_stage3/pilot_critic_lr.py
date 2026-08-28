@@ -17,6 +17,8 @@ Run (repo root):
 from __future__ import annotations
 
 import argparse
+import statistics as st
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -61,9 +63,16 @@ def sweep_configs(out_dir: Path) -> list[CubeConfig]:
     ]
 
 
-def _run(cfg: CubeConfig) -> dict:
+def _run(cfg: CubeConfig) -> tuple[float, dict]:
+    """Times the cell for the LOG only (Claim 6). The elapsed seconds are returned
+    alongside the record, never merged into it: records are seeded and byte-identical
+    across worker scheduling, and diffing a re-run seed's record is a standing correctness
+    check that a wall-clock field would permanently break."""
     torch.set_num_threads(1)
-    return run_cube_baseline(cfg)
+    start = time.perf_counter()
+    record = run_cube_baseline(cfg)
+    elapsed = time.perf_counter() - start
+    return elapsed, record
 
 
 def main() -> None:
@@ -95,11 +104,20 @@ def main() -> None:
         print(f"  {len(configs)} cell(s) NOT started.")
         return
 
+    cell_seconds: list[float] = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(_run, c): c for c in configs}
         for i, fut in enumerate(as_completed(futures), 1):
-            fut.result()
-            print(f"  {i}/{len(configs)}", flush=True)
+            elapsed, _record = fut.result()
+            cell_seconds.append(elapsed)
+            print(f"  {i}/{len(configs)}  ({elapsed:.1f}s)", flush=True)
+
+    if cell_seconds:
+        print(f"\n  CLAIM 6 timing: mean {st.mean(cell_seconds):.1f}s/cell over "
+              f"{len(cell_seconds)} cell(s), min {min(cell_seconds):.1f}s max "
+              f"{max(cell_seconds):.1f}s. Seconds-per-cell only: the returned record does not "
+              "carry a step count cheaply, and adding one would put a wall-clock-derived "
+              "quantity into the JSON record.")
 
     print(f"\ndone. now run select_critic_lr.py")
 

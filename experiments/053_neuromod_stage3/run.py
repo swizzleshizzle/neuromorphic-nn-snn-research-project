@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics as st
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -132,9 +134,16 @@ def sweep_configs(arm: str, seeds, out_dir: Path, rates: dict[int, float] | None
     raise SystemExit(f"unknown arm {arm!r} (expected B, G or R)")
 
 
-def _run(cfg: CubeConfig) -> dict:
+def _run(cfg: CubeConfig) -> tuple[float, dict]:
+    """Times the cell for the LOG only (Claim 6). The elapsed seconds are returned
+    alongside the record, never merged into it: records are seeded and byte-identical
+    across worker scheduling, and diffing a re-run seed's record is a standing correctness
+    check that a wall-clock field would permanently break."""
     torch.set_num_threads(1)
-    return run_cube_baseline(cfg)
+    start = time.perf_counter()
+    record = run_cube_baseline(cfg)
+    elapsed = time.perf_counter() - start
+    return elapsed, record
 
 
 def main() -> None:
@@ -192,11 +201,22 @@ def main() -> None:
         print(f"  --dry-run: {len(configs)} cell(s) NOT started.")
         return
 
+    cell_seconds: list[float] = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(_run, c): c for c in configs}
         for i, fut in enumerate(as_completed(futures), 1):
-            fut.result()
-            print(f"  {i}/{len(configs)}", flush=True)
+            elapsed, _record = fut.result()
+            cell_seconds.append(elapsed)
+            print(f"  {i}/{len(configs)}  ({elapsed:.1f}s)", flush=True)
+
+    if cell_seconds:
+        print(f"\n  CLAIM 6 timing: mean {st.mean(cell_seconds):.1f}s/cell over "
+              f"{len(cell_seconds)} cell(s), min {min(cell_seconds):.1f}s max "
+              f"{max(cell_seconds):.1f}s. Seconds-per-cell only: the returned record does not "
+              "carry a step count cheaply (steps_total is a local accumulator, not a record "
+              "field), and adding one would put a wall-clock-derived quantity into the JSON "
+              "record, which must stay reproducible across worker scheduling. Price this "
+              "against EXP-046's budget curve by hand (see spec section 3, Claim 6).")
 
     print(f"\ndone. records in {args.out_dir}.")
 

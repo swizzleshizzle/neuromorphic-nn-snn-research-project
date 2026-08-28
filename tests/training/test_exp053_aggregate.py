@@ -52,11 +52,15 @@ def test_claim3_licenses_the_claim_only_on_both():
 
 def test_claim3_calls_a_flat_result_refuted_not_deferred():
     """'We need a better gate' is not an available conclusion. If this test is ever edited
-    to allow it, the escape hatch the spec closed has been reopened."""
+    to allow it, the escape hatch the spec closed has been reopened.
+
+    Also covers the genuinely-flat case reading REFUTED and not AMBIGUOUS, so the
+    significant-but-sub-bar branch below cannot be widened to swallow a real null."""
     m = _module()
     verdict = m.claim3_verdict(g_vs_control=(0.005, 0.9), g_vs_r=(0.002, 0.95))
     assert "REFUTED" in verdict
     assert "deferred" not in verdict.lower().replace("not deferred", "")
+    assert "AMBIGUOUS" not in verdict
 
 
 def test_a_large_but_nonsignificant_result_is_ambiguous_not_refuted():
@@ -70,8 +74,32 @@ def test_a_large_but_nonsignificant_result_is_ambiguous_not_refuted():
 
 def test_a_genuinely_flat_result_is_still_refuted():
     """The escape hatch stays closed. A small delta with no significance is a real null
-    and must still read REFUTED, or the ambiguity branch has swallowed the whole table."""
+    and must still read REFUTED, or the significant-but-sub-bar branch below has swallowed
+    the whole table. Distinct inputs from the sibling test above: non-significant here
+    (p 0.85/0.5) rather than p 0.9/0.95, so this is not a second call on the same pair."""
     m = _module()
-    verdict = m.claim3_verdict(g_vs_control=(0.005, 0.9), g_vs_r=(0.002, 0.95))
+    verdict = m.claim3_verdict(g_vs_control=(0.004, 0.85), g_vs_r=(0.001, 0.5))
     assert "REFUTED" in verdict
     assert "AMBIGUOUS" not in verdict
+
+
+def test_significant_sub_bar_positive_delta_is_a_small_effect_not_refuted():
+    """gd=+0.03, gp=0.02: significant, but under the +0.05 bar. The pre-fix code fell
+    through every branch to the REFUTED catch-all, which contradicts a significant
+    p-value describing the same delta. Claim 2 still is not confirmed (bar not met), but
+    the word REFUTED must not appear - a significant effect is not a null."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.03, 0.02), g_vs_r=(0.02, 0.5))
+    assert "REFUTED" not in verdict
+    assert "NOT CONFIRMED" in verdict
+    assert "+0.05" in verdict or "0.05" in verdict
+
+
+def test_significant_sub_bar_negative_delta_is_a_small_cost_not_refuted():
+    """Mirror of the positive case: a significant but sub-bar-magnitude NEGATIVE delta is a
+    real small cost, not a null, and must not read REFUTED."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(-0.03, 0.02), g_vs_r=(0.0, 1.0))
+    assert "REFUTED" not in verdict
+    assert "cost" in verdict.lower()
+    assert "NOT CONFIRMED" in verdict

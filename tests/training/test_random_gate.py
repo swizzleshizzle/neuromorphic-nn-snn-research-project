@@ -49,23 +49,36 @@ def test_random_gate_ignores_the_dopamine_value():
 
 
 def test_random_gate_does_not_touch_the_torch_generator():
-    """If it drew on `generator`, arm R's action sampling and scrambles would diverge from
-    arm G's and the two arms would differ in more than which episodes updated."""
-    gen = torch.Generator().manual_seed(0)
-    before = gen.get_state().clone()
+    """RandomGate must draw only from its own `random.Random` stream, never from torch's.
+
+    The real risk is not a generator explicitly handed to the gate (nothing hands it one) -
+    it is a gate that calls something like `torch.rand(...)` internally, which perturbs the
+    GLOBAL torch RNG that `dist.sample()` draws on elsewhere in the same process. That would
+    make arm R's action sampling and scrambles diverge from arm G's, so the two arms would
+    differ in more than which episodes updated.
+
+    Snapshots the GLOBAL torch RNG state (not an unused local Generator) before and after
+    many gate calls and asserts bit-equality. Verified this fails if the gate is made to call
+    `torch.rand(1)` internally (see the test-strength note in CLAUDE.md)."""
+    torch.manual_seed(0)
+    before = torch.get_rng_state().clone()
     gate = RandomGate(0.5, random.Random(0))
     for _ in range(100):
         gate(0.0, 0.0)
-    assert torch.equal(gen.get_state(), before)
+    assert torch.equal(torch.get_rng_state(), before)
 
 
 @pytest.mark.slow
 def test_run_uses_the_configured_rate_for_its_seed(tmp_path):
+    """Spec section 4.2 item 6: the realized rate must be within a tolerance of the rate it
+    was given. At 60 episodes and p=0.5 the binomial sd is 0.065 (sqrt(0.5*0.5/60)), so
+    `abs(rate - 0.5) < 0.25` is about a 4sd threshold - tight enough to catch an off-by-one
+    or an inverted comparison, loose enough not to flake at n=60. Do not tighten further."""
     rec = run_cube_baseline(_cfg(tmp_path, encoder_lr=1e-3, plasticity_gate="random",
                                  gate_rate_by_seed=((0, 0.5),)))
-    assert 0.0 < rec["gate_rate"] < 1.0, (
-        f"gate_rate {rec['gate_rate']} is degenerate; a rate of 0.5 over 60 episodes should "
-        "open some and close some."
+    assert abs(rec["gate_rate"] - 0.5) < 0.25, (
+        f"gate_rate {rec['gate_rate']} is too far from the configured 0.5 over 60 episodes "
+        "(binomial sd 0.065, so this is roughly a 4sd tolerance)."
     )
 
 
