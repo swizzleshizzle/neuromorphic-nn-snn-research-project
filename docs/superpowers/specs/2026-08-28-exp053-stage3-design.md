@@ -129,12 +129,28 @@ One variable: **when the encoder is allowed to move.**
 
 ```
 per episode:
-    dopamine = mean_return - baseline          # Brain.learn(mean_return, baseline)
-    bus.set(dopamine=dopamine)                 # the bus gets its first writer in the cube loop
-    threshold  = running median of |dopamine| over all episodes so far
-    if bus.learning_enabled:  encoder_opt.step()
-    head_opt.step()                            # the head ALWAYS steps
+    bus.learning_threshold = running median of dopamine over all episodes so far
+    gate_open = Brain.learn(mean_return, baseline)   # dopamine = mean_return - baseline
+                                                     # returns bus.learning_enabled
+    if gate_open:  encoder_opt.step()
+    head_opt.step()                                  # the head ALWAYS steps
 ```
+
+> [!note] AMENDED 2026-08-28, before any run and before any number exists
+> This section originally gated on **`|dopamine|`** - surprise in either direction. It gates on
+> the **signed** dopamine above its running median instead: plasticity on better-than-expected
+> episodes.
+>
+> The reason is that `NeuromodBus.learning_enabled` is `dopamine >= learning_threshold`, which is
+> one-sided. A two-sided rule would have required either changing the bus's semantics or writing
+> a magnitude into a field that should hold a signed reward-prediction error. The signed form uses
+> `Brain.learn()` and `learning_enabled` **exactly as they are already written**, which is the
+> strongest available form of "the bus became load-bearing", and it is the literal phasic-dopamine
+> story rather than a generic surprise detector.
+>
+> The property the original wording was reaching for is preserved: a running **median** puts the
+> realized rate near 50% whether the quantity is signed or absolute, so arm R's rate-matching and
+> the whole of Claim 3 are unaffected.
 
 **`Brain.learn()` has no caller anywhere in the cube training loop today, and nothing in the
 codebase reads `bus.learning_enabled`.** Verified 2026-08-28: `rg '\.learn\(|bus\.'` over
@@ -143,9 +159,8 @@ codebase reads `bus.learning_enabled`.** Verified 2026-08-28: `rg '\.learn\(|bus
 **The threshold is a running median, not a constant.** `NeuromodBus.learning_threshold` defaults to
 0.5, which is meaningless against a return scale set by `solve_reward=10.0` and
 `step_penalty=-1.0`. A quantile self-calibrates, needs no tuned number, and puts the realized
-update rate near 50% by construction. `|dopamine|` rather than signed dopamine, so the gate fires
-on **surprise in either direction**, which is what a plasticity gate should do and what keeps the
-rate stable as `baseline` tracks.
+update rate near 50% by construction, and tracks the distribution as `baseline` moves rather than
+drifting shut.
 
 **Warmup: the first 100 episodes always update** (1% of the run), because the median is undefined
 before there is history. Warmup episodes enter the median history.
