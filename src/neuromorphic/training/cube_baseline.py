@@ -45,6 +45,14 @@ The threshold is a running median and is undefined before there is history. 100 
 episodes is 1% of the run. Warmup episodes DO enter the median history.
 """
 
+GATE_RNG_OFFSET = 90_000
+"""Offset applied to `train_seed` for arm R's gate stream (EXP-053).
+
+A DEDICATED `random.Random`, never the torch `generator` and never the env's stream. If the
+gate drew on either, arm R's action sampling and scrambles would diverge from arm G's and the
+two arms would differ in more than which episodes updated.
+"""
+
 
 @dataclass
 class CubeConfig:
@@ -136,6 +144,12 @@ class CubeConfig:
     # first caller of `Brain.learn()` in a training loop. Requires `encoder_lr`: gating
     # plasticity that does not exist would silently do nothing.
     plasticity_gate: str | None = None
+    # EXP-053 arm R. Per-seed update rates as ((seed, rate), ...), taken from arm G's
+    # realized `gate_rate` so the two arms perform the same NUMBER of encoder updates and
+    # differ only in WHICH episodes got them. Required when `plasticity_gate="random"`;
+    # a missing seed is an error rather than a default, because defaulting to 1.0 would
+    # silently turn arm R back into arm G's always-on control.
+    gate_rate_by_seed: tuple[tuple[int, float], ...] = ()
     # EXP-042. Per-depth TRAINING step-budget overrides as ((depth, steps), ...).
     #
     # EXP-041 found the trap this exists to close: `max_steps_for(d) = 2d+3` gives depth 1 a
@@ -644,6 +658,23 @@ class DopamineGate:
         return self.brain.learn(mean_return, baseline)
 
 
+class RandomGate:
+    """Opens on a coin flip at a fixed rate, blind to the dopamine value (EXP-053 arm R).
+
+    The control for `DopamineGate`. It holds the update RATE fixed and varies only WHICH
+    episodes are chosen, which is the single thing the neuromodulatory claim rests on.
+    """
+
+    def __init__(self, rate: float, rng: random.Random):
+        if not 0.0 <= rate <= 1.0:
+            raise ValueError(f"gate rate must be in [0, 1], got {rate}")
+        self.rate = rate
+        self.rng = rng
+
+    def __call__(self, _mean_return: float, _baseline: float) -> bool:
+        return self.rng.random() < self.rate
+
+
 def run_cube_baseline(cfg: CubeConfig) -> dict:
     """One (arm, depth, seed, sigma) run. Returns a JSON-safe record."""
     torch.set_num_threads(1)
@@ -789,6 +820,14 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             gate_fn = DopamineGate(agent)
         elif cfg.plasticity_gate == "always":
             gate_fn = lambda _mean_return, _baseline: True   # noqa: E731 - test seam only
+        elif cfg.plasticity_gate == "random":
+            rates = dict(cfg.gate_rate_by_seed)
+            if cfg.seed not in rates:
+                raise ValueError(
+                    f"plasticity_gate='random' but no gate rate for seed {cfg.seed}; arm R "
+                    "is rate-matched to arm G per seed and must not silently default."
+                )
+            gate_fn = RandomGate(rates[cfg.seed], random.Random(train_seed + GATE_RNG_OFFSET))
         gate_opens, gate_calls = 0, 0
         # Per-stage telemetry (week 19 diagnosis). `mean_train_entropy` is one number for the
         # whole run, which cannot say WHEN a policy collapsed - and EXP-040 produced two seeds
