@@ -57,3 +57,21 @@ def test_claim3_calls_a_flat_result_refuted_not_deferred():
     verdict = m.claim3_verdict(g_vs_control=(0.005, 0.9), g_vs_r=(0.002, 0.95))
     assert "REFUTED" in verdict
     assert "deferred" not in verdict.lower().replace("not deferred", "")
+
+
+def test_a_large_but_nonsignificant_result_is_ambiguous_not_refuted():
+    """Underpowered is not the same as null. Reporting an unresolved +0.10 as a
+    refutation is the EXP-050 Claim 4 error, which this project has made once already."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.10, 0.06), g_vs_r=(0.02, 0.5))
+    assert "AMBIGUOUS" in verdict
+    assert "REFUTED" not in verdict
+
+
+def test_a_genuinely_flat_result_is_still_refuted():
+    """The escape hatch stays closed. A small delta with no significance is a real null
+    and must still read REFUTED, or the ambiguity branch has swallowed the whole table."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.005, 0.9), g_vs_r=(0.002, 0.95))
+    assert "REFUTED" in verdict
+    assert "AMBIGUOUS" not in verdict

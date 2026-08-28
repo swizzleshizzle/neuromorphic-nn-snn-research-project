@@ -93,6 +93,15 @@ def claim3_verdict(g_vs_control: tuple[float, float],
     if g_wins and not beats_r:
         return ("CLAIM 2 CONFIRMED, CLAIM 3 NOT. Fewer encoder updates is the whole effect. "
                 "Report as an efficiency finding. The neuromorphic claim is NOT made.")
+    # A delta that clears the bar but misses significance is NOT a null result. Calling it
+    # one would repeat EXP-050's Claim 4 error: the pre-registered condition was satisfied
+    # and the inference drawn from it was still wrong. Underpowered and measured-null are
+    # different states of the world and this table must not collapse them.
+    if abs(gd) >= BAR and gp > ALPHA:
+        return ("CLAIM 2 AMBIGUOUS. The delta clears the bar at " + f"{gd:+.4f}" + " but does "
+                "not reach significance (p " + f"{gp:.4f}" + "). This is UNDERPOWERED, not a "
+                "null result, and it must not be reported as a refutation. Report the delta, "
+                "the p-value and the seed count, and state that n=12 could not resolve it.")
     return ("CLAIM 2 NOT CONFIRMED and CLAIM 3 NOT CONFIRMED. Encoder updates are redundant "
             "at this rate. The neuromorphic claim is REFUTED, not deferred. "
             "'We need a better gate' is NOT an available conclusion from this experiment.")

@@ -261,11 +261,27 @@ Fixed in advance, and binding:
 |---|---|---|
 | G wins | G beats R | **The neuromodulatory gate works.** The bus is load-bearing and the signal is doing the work. |
 | G wins | G ~ R | **Fewer encoder updates is the whole effect.** Report as an efficiency finding. The neuromorphic claim is NOT made. |
-| G ~ control | G ~ R | **Encoder updates are redundant at this rate.** The neuromorphic claim is **refuted, not deferred.** |
 | G loses | any | The gate costs. Report the loss and the size. |
+| **G ambiguous** (`\|delta\| >= 0.05` but `p > 0.05`) | any | **UNDERPOWERED, not null.** Report the delta, the p-value and n=12, and state that n=12 could not resolve it. This row takes precedence over the row below whenever it applies. |
+| G ~ control | G ~ R | **Encoder updates are redundant at this rate.** The neuromorphic claim is **refuted, not deferred.** |
 
 **"G ~ R, so we need a better gate" is not an available conclusion from this experiment.** It is
 the escape hatch this table exists to close.
+
+> [!note] AMENDED 2026-08-28, before any run and before any number exists
+> The table originally had four rows, and the last one - "G ~ control, G ~ R, refuted" - was
+> reachable by anything that was not a significant win or a significant loss. That includes a
+> delta that clears the `+0.05` bar but misses `p <= 0.05`, which is a different state of the
+> world from a truly flat one: `(gd=0.10, gp=0.06)` was falling into the same branch as
+> `(gd=0.005, gp=0.9)`.
+>
+> This conflates "underpowered, ambiguous" with "measured and null," and declaring a
+> refutation from an underpowered result is the exact error this project already made once:
+> EXP-050's Claim 4 had its pre-registered condition satisfied and the conclusion built on it
+> was still wrong. The fifth row above splits the two states apart. It does not move the `0.05`
+> bar, the `0.03` attribution bar, or the `0.05` alpha, and it does not change what any of the
+> other four rows may claim - it only narrows which inputs reach the "refuted" row to inputs
+> that are actually small AND non-significant, not merely non-significant.
 
 ### Claim 4 - MECHANISM. `revisit_rate` and `optimality`, paired, both contrasts.
 
