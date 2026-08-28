@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import random
+import statistics
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,13 @@ from neuromorphic.training.reinforce import (
 
 CUBE_N_OBS = 144      # 24 facelets x 6 colors
 CUBE_OBS_WIDTH = 24   # raw facelets
+
+GATE_WARMUP = 100
+"""Episodes at the start of a run during which the gate is forced open (EXP-053).
+
+The threshold is a running median and is undefined before there is history. 100 of 10,000
+episodes is 1% of the run. Warmup episodes DO enter the median history.
+"""
 
 
 @dataclass
@@ -115,6 +123,19 @@ class CubeConfig:
     # Monte-Carlo, not TD: `train_episode` already computes returns-to-go, so `G_t - V(s_t)`
     # is the smaller change and carries no bootstrapping bias. See the spec section 2.1.
     critic_lr: float | None = None
+    # EXP-053. Gates ENCODER plasticity on the neuromodulatory bus.
+    #
+    #   None         the encoder steps every episode (EXP-047's behaviour, and the control)
+    #   "dopamine"   it steps only when `Brain.learn()` reports `bus.learning_enabled`
+    #   "random"     it steps on a coin flip at a rate supplied per seed (the CONTROL for
+    #                "dopamine", because a gated arm also does FEWER updates)
+    #   "always"     test-only. Forces the gate open, so the split-optimizer machinery can be
+    #                proved mathematically identical to the single two-group Adam it replaces.
+    #
+    # This is the first code in the project to READ `NeuromodBus.learning_enabled`, and the
+    # first caller of `Brain.learn()` in a training loop. Requires `encoder_lr`: gating
+    # plasticity that does not exist would silently do nothing.
+    plasticity_gate: str | None = None
     # EXP-042. Per-depth TRAINING step-budget overrides as ((depth, steps), ...).
     #
     # EXP-041 found the trap this exists to close: `max_steps_for(d) = 2d+3` gives depth 1 a
@@ -583,6 +604,46 @@ def evaluate_states(
     }
 
 
+class DopamineGate:
+    """Opens encoder plasticity when the reward-prediction error clears its running median.
+
+    EXP-053. One call per episode, after the episode has been rolled out:
+
+        bus.learning_threshold = median(dopamine seen so far)
+        gate_open              = Brain.learn(mean_return, baseline)
+
+    `Brain.learn` writes `mean_return - baseline` into `bus.dopamine` and returns
+    `bus.learning_enabled`, both exactly as they were written in L11. Nothing about the bus
+    changes here; it simply acquires its first reader.
+
+    **Why a running median and not `NeuromodBus`'s default 0.5.** That default is meaningless
+    against a return scale set by `solve_reward=10.0` and `step_penalty=-1.0`. A quantile
+    self-calibrates, needs no tuned constant, puts the realized update rate near 50% by
+    construction, and tracks the distribution as the EMA `baseline` moves rather than drifting
+    shut.
+
+    **Why signed and not absolute.** `learning_enabled` is `dopamine >= threshold`, which is
+    one-sided. Gating on better-than-expected episodes uses it as written and is the literal
+    phasic-dopamine story. See the amendment note in the spec, section 2.2.
+    """
+
+    def __init__(self, brain, warmup: int = GATE_WARMUP):
+        self.brain = brain
+        self.warmup = warmup
+        self.history: list[float] = []
+
+    def __call__(self, mean_return: float, baseline: float) -> bool:
+        dopamine = mean_return - baseline
+        self.history.append(dopamine)
+        if len(self.history) <= self.warmup:
+            # Force it open, but still write the bus so the record is honest about what the
+            # signal was during warmup.
+            self.brain.learn(mean_return, baseline)
+            return True
+        self.brain.bus.learning_threshold = statistics.median(self.history)
+        return self.brain.learn(mean_return, baseline)
+
+
 def run_cube_baseline(cfg: CubeConfig) -> dict:
     """One (arm, depth, seed, sigma) run. Returns a JSON-safe record."""
     torch.set_num_threads(1)
@@ -626,6 +687,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         stage_trace: list[dict] = []
         trainable_params = 0   # the chance floor has no policy to train
         critic = None   # the chance floor has no critic either
+        gate_opens, gate_calls = 0, 0   # the chance floor has no encoder to gate either
     else:
         agent = make_agent(cfg)
         torch.manual_seed(train_seed)  # head init and sampling stream matched across arms
@@ -640,6 +702,16 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # unchanged. Fine-tuning ADDS a second parameter group rather than merging the two,
         # which keeps the head's lr and the encoder's separate quantities.
         finetune = cfg.encoder_lr is not None
+        gated = cfg.plasticity_gate is not None
+        if gated and not finetune:
+            raise ValueError(
+                f"plasticity_gate requires encoder_lr (got {cfg.plasticity_gate!r} with "
+                "encoder_lr=None): gating plasticity that does not exist does nothing."
+            )
+        if gated and cfg.plasticity_gate not in ("dopamine", "random", "always"):
+            raise ValueError(f"unknown plasticity_gate {cfg.plasticity_gate!r}")
+
+        encoder_optimizer = None
         if finetune:
             if cfg.arm != "regionalized":
                 raise ValueError(
@@ -654,10 +726,22 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     f"encoder_lr requires readout='concept' (got {cfg.readout!r}): MemoryReadout "
                     "detaches the concept, so the encoder would train on nothing."
                 )
-            optimizer = torch.optim.Adam([
-                {"params": list(policy_parameters(head)), "lr": cfg.lr},
-                {"params": list(agent.sensory.parameters()), "lr": cfg.encoder_lr},
-            ])
+            if gated:
+                # SEPARATE optimizers (EXP-053). Adam applies `exp_avg` on every `step()`, so
+                # zeroing the encoder group's gradients inside a shared optimizer would still
+                # move the encoder. Skipping a separate optimizer's `step()` is the only way
+                # to actually withhold an update. Adam state is per-parameter, so this is
+                # mathematically identical to the single two-group Adam while the gate is
+                # open, which `test_always_open_gate_reproduces_the_single_optimizer_run`
+                # asserts to 1e-6.
+                optimizer = torch.optim.Adam(list(policy_parameters(head)), lr=cfg.lr)
+                encoder_optimizer = torch.optim.Adam(
+                    list(agent.sensory.parameters()), lr=cfg.encoder_lr)
+            else:
+                optimizer = torch.optim.Adam([
+                    {"params": list(policy_parameters(head)), "lr": cfg.lr},
+                    {"params": list(agent.sensory.parameters()), "lr": cfg.encoder_lr},
+                ])
         else:
             optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
         # EXP-053. A SEPARATE optimizer, not a third parameter group, so the head's Adam
@@ -684,10 +768,13 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         trainable_params = sum(
             p.numel() for group in optimizer.param_groups for p in group["params"]
         )
-        if critic_optimizer is not None:
-            trainable_params += sum(
-                p.numel() for group in critic_optimizer.param_groups for p in group["params"]
-            )
+        # Task 2 added a critic-only version of this. Both optimizers are folded into one
+        # loop so the count stays "what is ACTUALLY being trained" with no double-counting.
+        for opt in (critic_optimizer, encoder_optimizer):
+            if opt is not None:
+                trainable_params += sum(
+                    p.numel() for group in opt.param_groups for p in group["params"]
+                )
         # One stage when no curriculum is set, so the environment is constructed exactly
         # once from random.Random(train_seed) as before and the default path is unchanged.
         stages = curriculum_schedule(
@@ -697,6 +784,12 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         entropies = []
+        gate_fn = None
+        if cfg.plasticity_gate == "dopamine":
+            gate_fn = DopamineGate(agent)
+        elif cfg.plasticity_gate == "always":
+            gate_fn = lambda _mean_return, _baseline: True   # noqa: E731 - test seam only
+        gate_opens, gate_calls = 0, 0
         # Per-stage telemetry (week 19 diagnosis). `mean_train_entropy` is one number for the
         # whole run, which cannot say WHEN a policy collapsed - and EXP-040 produced two seeds
         # that ended at entropy 0.04 with modal 1.000 while their encoders measured completely
@@ -739,6 +832,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     store=use_memory, recall=use_memory, feature_fn=readout,
                     grad_brain=finetune,
                     critic=critic, critic_optimizer=critic_optimizer,
+                    encoder_optimizer=encoder_optimizer, gate_fn=gate_fn,
                 )
                 baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
                 entropies.append(stats["mean_entropy"])
@@ -748,6 +842,9 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 revisits += len(env.visited) - len(set(env.visited))
                 stored_counts.append(agent.hippo.n_stored if use_memory else 0)
                 unshuffled_steps += readout.unshuffled_steps
+                if encoder_optimizer is not None:
+                    gate_calls += 1
+                    gate_opens += int(stats["gate_open"])
                 if critic is not None:
                     for k in stage_fit:
                         stage_fit[k] += stats[k]
@@ -790,6 +887,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # EXP-053. Additive: absent from every prior record. The FINAL stage's figure, which
         # is the deepest one and the regime the critic lr was selected in.
         **({"critic_ev": stage_trace[-1]["critic_ev"]} if critic is not None else {}),
+        # EXP-053. The realized fraction of episodes on which the encoder actually stepped.
+        # Arm R is rate-matched to this per seed, and a rate far from 0.5 is itself
+        # diagnostic - it would mean the median threshold is not tracking the distribution.
+        **({"gate_rate": gate_opens / gate_calls if gate_calls else 0.0}
+           if cfg.plasticity_gate is not None else {}),
         "is_heldout": is_heldout,
         "n_train": len(train_states),
         # EXP-036. `train_success_rate` is scored on `n_train_eval` states drawn from the
