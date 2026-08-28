@@ -133,3 +133,55 @@ def test_with_features_is_opt_in():
     three = action_distribution(brain, head, obs, generator=gen, with_features=True)
     assert len(three) == 3
     assert three[2].shape == (brain.content,)
+
+
+def test_the_critic_does_not_leak_gradient_into_the_encoder():
+    """With grad_brain=True, the critic's own MSE loss must not reach the encoder.
+
+    An earlier version of this test compared the encoder gradient of a critic-using run
+    against a no-critic run and asserted exact equality. That comparison cannot work: ANY
+    critic with a nonzero weight makes `v` (hence `advantages = returns - v.detach()`)
+    depend on the state, which legitimately changes the encoder gradient through the POLICY
+    loss alone (nothing to do with a leak) versus a constant `baseline=0.0`. And a critic
+    with a zero weight can never leak in the first place, since `d(v)/d(features) == 0`
+    regardless of whether `features` is detached. Measured directly: even with today's
+    correct (detached) code, a default-init critic moved the encoder's max |grad| from 1.81
+    (no critic) to 1.76 (critic) - already not equal, so `torch.equal` failed on CORRECT
+    code, not just buggy code. That confound was in the test, not the fix.
+
+    This version isolates the leak instead of comparing against a mismatched baseline: scale
+    one critic's weight and bias by 1000x so its residual against the realized returns is
+    large, then check the encoder gradient's raw magnitude stays bounded. Measured over this
+    seeded episode: correctly detached, max |grad| on `fc1.weight` is ~891; with the detach
+    removed (features fed to the critic un-detached), the SAME setup measures ~401,682 - a
+    ~450x jump, because the critic's large-residual MSE gradient backprops through `features`
+    into the encoder in addition to the (much smaller) policy-loss contribution. The
+    threshold below sits with an 11x margin above the correct value and a 40x margin below
+    the leaked one.
+    """
+    brain, env = _brain(), _env()
+    head = make_policy_head(brain)
+    opt = torch.optim.Adam(head.parameters(), lr=1e-2)
+    critic = make_critic(brain)
+    with torch.no_grad():
+        # Deliberately large and off-target so a leaked gradient would be unmistakable; a
+        # critic near its default init doesn't have enough residual to show the effect (see
+        # docstring above - the confound this replaces failed even on correct code).
+        critic.weight.mul_(1000.0)
+        critic.bias.fill_(1000.0)
+    critic_opt = torch.optim.Adam(critic.parameters(), lr=1e-2)
+    enc_opt = torch.optim.Adam(brain.sensory.parameters(), lr=1e-3)
+    gen = torch.Generator().manual_seed(0)
+
+    train_episode(brain, head, env, opt, gamma=0.99, baseline=0.0,
+                  generator=gen, max_steps=4, grad_brain=True,
+                  critic=critic, critic_optimizer=critic_opt,
+                  encoder_optimizer=enc_opt)
+
+    max_grad = brain.sensory.fc1.weight.grad.detach().abs().max().item()
+    assert max_grad < 10_000.0, (
+        f"encoder fc1.weight.grad max magnitude was {max_grad:.1f}, expected roughly 900 "
+        "(the policy-loss-only scale). A jump toward ~400,000 means the critic's MSE loss "
+        "against a deliberately large residual is backpropagating through `features` into "
+        "the encoder - `features` is not detached where the critic reads it."
+    )

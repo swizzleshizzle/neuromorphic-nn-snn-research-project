@@ -229,7 +229,12 @@ def train_episode(
             dist, _ = stepped
         else:
             dist, _, features = stepped
-            values.append(critic(features).squeeze(-1))
+            # DETACHED: with grad_brain=True `features` carries gradient history back to the
+            # encoder. Without this detach the critic's MSE loss would backprop into the
+            # encoder too, not just the critic's own weights, contradicting make_critic's
+            # docstring guarantee. No caller combines critic and grad_brain yet, but the
+            # guarantee must hold unconditionally, not just when grad_brain=False.
+            values.append(critic(features.detach()).squeeze(-1))
         action = dist.sample()
         log_probs.append(dist.log_prob(action))
         entropies.append(dist.entropy())
