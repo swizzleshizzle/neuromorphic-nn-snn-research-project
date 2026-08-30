@@ -64,6 +64,46 @@ asserts this on one cell.
 has **27**, against 8,969 at depth 6. Their per-shell means are noisy, `N_PER_SHELL` cannot rescue
 them, and no claim rests on a single shell pair.
 
+> [!note] AMENDED 2026-08-30, before any run and before any number exists
+> **`S` is a shell-separability statistic, and the write-up must name it that rather than
+> "distance-graded" or "sequence-ordered".** It is fitted over ALL pairs `d1 <= d2`, including
+> `|d1 - d2| = 0`, the within-shell term - so a high `S` can mean either "similarity falls off
+> steadily with distance" (a genuine gradient) or "shells are tight clusters that happen to sit
+> apart" (clustering with no ordering among them). Those are different claims and `S` alone
+> cannot tell them apart.
+>
+> Measured on this repo's own `_shell_structured` test fixture - shell centres that are
+> **independent random directions with NO distance ordering at all** - `S` computes to
+> **0.26708**, while the identical fit restricted to `|d1 - d2| >= 1` computes to **0.02318**.
+> So on a fixture that only clusters and is not graded by distance, `S` is roughly **91%**
+> driven by the `|dd| = 0` term alone. A high `S` is therefore only weak evidence of genuine
+> distance-ordering by itself.
+>
+> **Fix: `S_cross` - the same negated-slope fit, restricted to `|d1 - d2| >= 1` - is reported
+> beside `S` as an EQUALLY PROMINENT quantity**, not a footnote, in every summary table this
+> experiment produces. It is computed from the same stored `sim` dict `S` already uses, so
+> this required no re-run and changes no existing record.
+>
+> **`S` ITSELF IS NOT CHANGED.** It is pre-registered and stays exactly as defined above,
+> computed exactly as defined above. Claim 1 still runs on `S` exactly as pre-registered; this
+> amendment adds a second, equally-visible number, it does not alter the first.
+>
+> **The consequence for interpretation: if `S` falls with epochs while `S_cross` does not,
+> the sequence-blindness hypothesis is NOT confirmed** - a falling `S` with a flat `S_cross`
+> would mean the within-shell clustering term is what changed, not the cross-shell distance
+> gradient, and only the split makes that distinguishable. Claim 1's pass/fail threshold on
+> `S` is unchanged; this only changes what a pass is allowed to be read as meaning.
+>
+> **The collapse control.** A second, separate risk is representational collapse: if
+> pretraining drives every cosine toward a constant, both `S` and `S_cross` fall toward zero
+> with zero sequence-blindness in the mechanism sense - the code has lost distance structure
+> only because it has lost ALL structure, not because it selectively lost the sequence-related
+> part of it. A `level` statistic - the grand mean of all stored similarities in a record,
+> across every separation including `|dd| = 0` - is reported beside `S` and `S_cross` for
+> exactly this reason. **A fall in `S` accompanied by a fall in `level` is consistent with
+> representational collapse rather than with selective loss of distance structure**, and the
+> write-up must check `level` before reading a falling `S` as confirming the hypothesis.
+
 ## 2. Design
 
 **Five arms, 12 seeds each, 60 encoders. All already on disk. Nothing is trained and nothing runs
@@ -80,6 +120,20 @@ on the laptop.**
 **The 0-epoch arm is mandatory**, per the standing rule to measure the floor rather than assume
 it. It is reconstructed from `encoder_seed` rather than loaded, because a random init is exactly
 reproducible and no file was ever saved.
+
+> [!note] AMENDED 2026-08-30, before any run and before any number exists
+> **E80 is warm-started, not trained 80 epochs from scratch, and Claim 1's third contrast must
+> be read accordingly.** `experiments/050_objective_vs_gradient/extend_pretrain.py:89` loads the
+> already-trained E40 encoder and runs 40 more epochs with a **fresh optimizer** - it does not
+> continue E40's optimizer state, and it is not an encoder that saw 80 epochs of pretraining
+> under one continuous schedule. E10, E20 and E40 all come from scratch, via EXP-052's sweep;
+> only E80 is built this way.
+>
+> So the **40 to 80** adjacent contrast in Claim 1 is actually "40 epochs, then 40 more with an
+> optimizer reset" - not a clean extension of the same run - and the 10/20/40 contrasts are not
+> directly comparable to it on that axis. This is inherited from EXP-050 and EXP-052 and is not
+> a defect introduced by this branch, but the write-up must state it plainly so the 40-to-80
+> contrast is not over-read as "what 40 more epochs of continuous pretraining does".
 
 ## 3. The prediction, and the trap named in advance
 

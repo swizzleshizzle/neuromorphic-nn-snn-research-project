@@ -11,6 +11,7 @@ an answer rather than against itself.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from neuromorphic.analysis.sequence_sensitivity import (
@@ -158,6 +159,52 @@ def test_shell_concepts_do_not_retain_an_autograd_graph():
     for d, m in concepts.items():
         assert not m.requires_grad, f"shell {d} concepts still carry a graph"
         assert m.grad_fn is None, f"shell {d} concepts still have grad_fn {m.grad_fn}"
+
+
+def test_s_cross_matches_hand_arithmetic():
+    """Pins `sensitivity_from_similarity(sim, min_separation=1)` - S_cross - against a slope
+    computed by hand on a 3-shell toy `sim` dict.
+
+    sim = {(1,1): 1.0, (2,2): 1.0, (3,3): 1.0, (1,2): 0.8, (2,3): 0.4, (1,3): -1.0}
+
+    Full S (all six pairs, including the three |dd|=0 within-shell entries):
+      xs = [0, 0, 0, 1, 1, 2], ys = [1, 1, 1, 0.8, 0.4, -1.0]
+      slope = -0.88  ->  S = 0.88
+
+    S_cross (dropping the |dd|=0 entries, leaving only (1,2), (2,3), (1,3)):
+      xs = [1, 1, 2], ys = [0.8, 0.4, -1.0]
+      slope = -1.6  ->  S_cross = 1.6
+
+    Both were checked independently in Python before being pinned here; this test exists so a
+    future change to the fit or the filter has an exact number to break against.
+    """
+    sim = {(1, 1): 1.0, (2, 2): 1.0, (3, 3): 1.0, (1, 2): 0.8, (2, 3): 0.4, (1, 3): -1.0}
+    s = sensitivity_from_similarity(sim)
+    s_cross = sensitivity_from_similarity(sim, min_separation=1)
+    assert s == pytest.approx(0.88)
+    assert s_cross == pytest.approx(1.6)
+
+
+def test_s_cross_differs_from_s_on_a_fixture_that_clusters_without_ordering():
+    """THE WHOLE POINT of S_cross. `_shell_structured`'s shell centres are INDEPENDENT RANDOM
+    DIRECTIONS - shells are tight clusters, but nothing orders them by distance. On exactly
+    this fixture, `S` measures 0.26708 while `S_cross` measures 0.02318: `S` is about 91%
+    driven by the |dd|=0 within-shell term alone, and a code that merely clusters (rather than
+    being gradiently ordered by distance) scores near zero once that term is excluded.
+
+    This test must FAIL if S_cross accidentally still includes the |dd|=0 term - in that case
+    it would equal S, not differ sharply from it.
+    """
+    depths = (1, 2, 3, 4, 5, 6)
+    sim = similarity_matrix(_shell_structured(depths))
+    s = sensitivity_from_similarity(sim)
+    s_cross = sensitivity_from_similarity(sim, min_separation=1)
+    assert s == pytest.approx(0.26708, abs=1e-4)
+    assert s_cross == pytest.approx(0.02318, abs=1e-4)
+    assert s_cross < s / 5, (
+        f"S_cross ({s_cross:.4f}) is not much smaller than S ({s:.4f}); it may still include "
+        "the |dd|=0 within-shell term"
+    )
 
 
 def test_a_degenerate_similarity_map_raises_rather_than_reporting_zero():

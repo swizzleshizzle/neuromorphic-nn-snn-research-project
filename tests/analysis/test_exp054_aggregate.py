@@ -58,6 +58,47 @@ def test_a_mixed_within_arm_picture_does_not_silently_pass():
     assert "RETIRED" not in verdict
 
 
+def test_arm_summary_reports_mean_policy_not_an_arbitrary_seed():
+    """THE HEADLINE BUG. The printed `policy` column used to be
+    `next(iter(by_arm[arm].values()))["policy_success"]` - whichever seed's JSON file the
+    filesystem glob yielded first, not the arm's actual mean. E10 seed 0 is 0.285 against an
+    arm mean of 0.2012; that arbitrary-seed number is what used to print in Claim 2's
+    deliverable column.
+
+    Two synthetic records with clearly different `policy_success` values: the reported figure
+    must be their mean, and must not equal either individual value (which is what an
+    arbitrary-element bug would produce for dict iteration order in either direction).
+    """
+    m = _module()
+    records = {0: {"policy_success": 0.1}, 1: {"policy_success": 0.9}}
+    result = m.arm_policy_mean(records)
+    assert result == pytest.approx(0.5)
+    assert result not in (pytest.approx(0.1), pytest.approx(0.9))
+
+
+def test_arm_trips_alone_flags_an_opposing_arm_even_when_others_agree():
+    """Descriptive, does not change the verdict: one arm at +0.881 against an opposite
+    between-arm sign is exactly the precedent the spec cites (the entropy trace within
+    EXP-044 arm A). It must be visible per-arm even though claim4_verdict's aggregate
+    disqualifier requires ALL FOUR within-arm signs to agree before it fires at all.
+    """
+    m = _module()
+    assert m.arm_trips_alone(0.881, -0.5) is True
+    assert m.arm_trips_alone(0.881, 0.5) is False
+    assert m.arm_trips_alone(-0.2, -0.5) is False
+
+
+def test_s_cross_reads_a_stored_record_the_same_as_the_tuple_keyed_form():
+    """`s_cross(record)` parses the on-disk `{"d1_d2": value}` sim dict and must land on the
+    same number as calling `sensitivity_from_similarity` directly on the tuple-keyed form -
+    this pins the string-key parsing (`sim_from_record`) against a hand-computed answer, the
+    same 0.88 / 1.6 pair used in test_sequence_sensitivity.py.
+    """
+    m = _module()
+    record = {"sim": {"1_1": 1.0, "2_2": 1.0, "3_3": 1.0, "1_2": 0.8, "2_3": 0.4, "1_3": -1.0}}
+    assert m.s_cross(record) == pytest.approx(1.6)
+
+
 def test_separation_table_averages_within_seed_then_across_seeds():
     """Pins the two-level averaging and the "{d1}_{d2}" key parsing against hand
     arithmetic. A future edit to either would otherwise have nothing to catch it.

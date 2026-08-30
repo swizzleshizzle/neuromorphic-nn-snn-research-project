@@ -101,7 +101,7 @@ def similarity_matrix(concepts, *, centre=True):
     return sim
 
 
-def sensitivity_from_similarity(sim):
+def sensitivity_from_similarity(sim, *, min_separation=0):
     """`S` = the negated least-squares slope of similarity against `|d1 - d2|`.
 
     Positive `S` means similarity falls as shells get further apart, i.e. the code carries
@@ -111,13 +111,25 @@ def sensitivity_from_similarity(sim):
     states of the world. Unreachable in practice for real runs (depths 1..6 with at least 6
     states per shell always produce multiple separations); it exists so a misconfiguration
     is loud instead of quiet.
+
+    `min_separation` restricts the fit to pairs with `|d1 - d2| >= min_separation`. The
+    default, 0, includes the `|dd| = 0` within-shell term and is the pre-registered `S`
+    exactly as it has always been computed - this default must never change. Passing 1 drops
+    that term and gives `S_cross`: measured on this repo's own `_shell_structured` test
+    fixture, whose shell centres are independent random directions with NO distance ordering
+    at all, `S` comes out to 0.26708 while `S_cross` on the same fixture is 0.02318. So on a
+    fixture that only clusters and is not graded by distance, `S` is about 91% driven by the
+    `|dd| = 0` term alone. `S_cross` is the part of `S` that cannot be explained by within-shell
+    tightness, and is reported beside it for exactly that reason (see the EXP-054 spec
+    amendment).
     """
-    xs = [float(abs(d2 - d1)) for (d1, d2) in sim]
-    ys = [sim[k] for k in sim]
+    pairs = [(d1, d2) for (d1, d2) in sim if abs(d2 - d1) >= min_separation]
+    xs = [float(abs(d2 - d1)) for (d1, d2) in pairs]
+    ys = [sim[k] for k in pairs]
     if len(set(xs)) < 2:
         raise ValueError(
-            f"fewer than two distinct shell separations in sim ({sorted(set(xs))}); "
-            "a slope is undefined"
+            f"fewer than two distinct shell separations in sim ({sorted(set(xs))}) at "
+            f"min_separation={min_separation}; a slope is undefined"
         )
     n = len(xs)
     mx = sum(xs) / n
@@ -148,3 +160,16 @@ def sequence_sensitivity(sensory, provider, *, depths=DEPTHS, n_per_shell=N_PER_
         "sim": {f"{d1}_{d2}": v for (d1, d2), v in sim.items()},
         "n_by_shell": {d: len(s) for d, s in shells.items()},
     }
+
+
+def sim_from_record(sim: dict) -> dict:
+    """Parse a stored record's `{"d1_d2": value}` sim dict back into the `{(d1, d2): value}`
+    form `sensitivity_from_similarity` expects. The inverse of the serialization above, so an
+    aggregator reading records off disk can recompute `S_cross` (or any other separation-
+    filtered variant) without re-running anything.
+    """
+    out = {}
+    for key, value in sim.items():
+        d1, d2 = key.split("_")
+        out[(int(d1), int(d2))] = value
+    return out
