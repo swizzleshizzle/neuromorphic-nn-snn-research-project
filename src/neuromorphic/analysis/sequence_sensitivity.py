@@ -53,11 +53,18 @@ def shell_concepts(sensory, shells, *, generator=None, num_steps=DEFAULT_T):
     """`{depth: [n_d, content]}` concept rates, one batched forward per shell.
 
     `concept_rates` is batched, which is what makes this experiment minutes rather than hours.
+
+    Wrapped in `torch.no_grad()` because no gradient is ever taken here - this is a read-only
+    measurement, not training. Without it, `SensoryCortex.forward` retains the full LIF/BPTT
+    autograd graph for `num_steps=32` timesteps per shell, which at driver scale (60 encoders
+    x 6 shells) is pure waste: retained backward-pass activations for a backward pass that
+    never happens.
     """
-    return {
-        d: concept_rates(sensory, states_to_obs(states), num_steps=num_steps, generator=generator)
-        for d, states in shells.items()
-    }
+    with torch.no_grad():
+        return {
+            d: concept_rates(sensory, states_to_obs(states), num_steps=num_steps, generator=generator)
+            for d, states in shells.items()
+        }
 
 
 def similarity_matrix(concepts, *, centre=True):
@@ -98,19 +105,29 @@ def sensitivity_from_similarity(sim):
     """`S` = the negated least-squares slope of similarity against `|d1 - d2|`.
 
     Positive `S` means similarity falls as shells get further apart, i.e. the code carries
-    distance structure. Zero means it does not. Returns 0.0 when fewer than two distinct
-    separations are present, because a slope is undefined there.
+    distance structure. Zero means it does not. Raises `ValueError` when fewer than two
+    distinct separations are present, because a slope is undefined there and a silent 0.0
+    would be indistinguishable from a genuine "no decay" measurement - those are different
+    states of the world. Unreachable in practice for real runs (depths 1..6 with at least 6
+    states per shell always produce multiple separations); it exists so a misconfiguration
+    is loud instead of quiet.
     """
     xs = [float(abs(d2 - d1)) for (d1, d2) in sim]
     ys = [sim[k] for k in sim]
     if len(set(xs)) < 2:
-        return 0.0
+        raise ValueError(
+            f"fewer than two distinct shell separations in sim ({sorted(set(xs))}); "
+            "a slope is undefined"
+        )
     n = len(xs)
     mx = sum(xs) / n
     my = sum(ys) / n
     denom = sum((x - mx) ** 2 for x in xs)
     if denom == 0.0:
-        return 0.0
+        raise ValueError(
+            "zero variance in shell separations despite multiple distinct values; "
+            "a slope is undefined"
+        )
     slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom
     return -slope
 

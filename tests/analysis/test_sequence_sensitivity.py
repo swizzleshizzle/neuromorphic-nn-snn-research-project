@@ -140,3 +140,32 @@ def test_real_encoder_is_deterministic(tmp_path):
     assert a["n_by_shell"] == {1: 6, 2: 12, 3: 12}, (
         f"shell sampling changed: {a['n_by_shell']}. Depth 1 has only 6 states in total."
     )
+
+
+def test_shell_concepts_do_not_retain_an_autograd_graph():
+    """60 encoders x 6 shells, each retaining 32 timesteps of LIF activations for a
+    gradient nobody takes, is pure waste. It is also a warning generator downstream.
+    """
+    from neuromorphic.analysis.sequence_sensitivity import shell_concepts, sample_shells
+    from neuromorphic.envs.cube_distance import ExactBFSDistance
+    from neuromorphic.training.encoder_pretrain import make_sensory
+    import random, torch
+
+    provider = ExactBFSDistance(max_depth=2)
+    shells = sample_shells(provider, (1, 2), 6, rng=random.Random(0))
+    concepts = shell_concepts(make_sensory(0), shells,
+                              generator=torch.Generator().manual_seed(0))
+    for d, m in concepts.items():
+        assert not m.requires_grad, f"shell {d} concepts still carry a graph"
+        assert m.grad_fn is None, f"shell {d} concepts still have grad_fn {m.grad_fn}"
+
+
+def test_a_degenerate_similarity_map_raises_rather_than_reporting_zero():
+    """A single separation cannot define a slope. Returning 0.0 there would be
+    indistinguishable from a real 'no decay' measurement, and those are different
+    states of the world.
+    """
+    import pytest
+    from neuromorphic.analysis.sequence_sensitivity import sensitivity_from_similarity
+    with pytest.raises(ValueError):
+        sensitivity_from_similarity({(1, 1): 0.9})
