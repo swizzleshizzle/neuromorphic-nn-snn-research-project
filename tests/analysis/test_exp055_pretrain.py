@@ -60,3 +60,28 @@ def test_it_reuses_exp052_pretrain_one_rather_than_reimplementing():
         "this module appears to build its own training pairs; the leakage exclusions live in "
         "pretrain_one and must not be re-derived here"
     )
+
+
+def test_exp052_pretrain_one_still_carries_the_leakage_exclusions():
+    """BEHAVIOURAL, not a grep. The test above only checks EXP-055's own source for the
+    absence of `build_pairs`; it says nothing about whether the protection EXP-055 is relying
+    on still exists in the function it calls. If EXP-052's `pretrain_one` were edited tomorrow
+    to drop its `rl_heldout_union` exclusions or their assertions, that grep would stay green
+    while EXP-055 silently started training on leaked RL held-out states. This inspects the
+    live source of `exp052.pretrain_one` itself and asserts on both pair endpoints, so a
+    regression in the function being reused - not just in EXP-055's own file - fails this
+    test."""
+    import inspect
+
+    m = _module()
+    src = inspect.getsource(m.exp052.pretrain_one)
+    assert "rl_heldout_union" in src, (
+        "exp052.pretrain_one no longer references rl_heldout_union; EXP-040's leakage "
+        "exclusions may have been dropped"
+    )
+    assert "forbidden & {p[0] for p in pairs}" in src, (
+        "exp052.pretrain_one no longer asserts on the source endpoint of each training pair"
+    )
+    assert "forbidden & {p[2] for p in pairs}" in src, (
+        "exp052.pretrain_one no longer asserts on the successor endpoint of each training pair"
+    )

@@ -63,16 +63,28 @@ Paired by seed, exact permutation over all `2**12` sign flips (4096; no scipy in
 
 **`e10 - e1`. CONFIRMED at `>= +0.05` with `p <= 0.05`**: epochs 2 through 10 buy something real.
 
-> [!important] IF IT IS NOT SIGNIFICANT, THE OUTPUT IS A BOUND, NOT AN EQUIVALENCE
-> A non-significant difference is **not** evidence that the two are equal. If the contrast is not
-> significant and `|delta| < 0.05`, the required wording is:
+> [!important] IF IT IS NOT SIGNIFICANT, THE OUTPUT IS AN INTERVAL, NOT AN EQUIVALENCE, AND NOT A
+> BOUND
+> A non-significant difference is **not** evidence that the two are equal. The paired-difference
+> sd measured on this project's real arms is 0.10-0.14 (e10 vs e20 sd 0.137, se 0.040; e10 vs e40
+> sd 0.102, se 0.029), which at n=12 makes a non-significant result consistent with true effects
+> up to roughly **+0.09** - nearly twice the +0.05 bar. Reporting that case as "bounds the effect
+> below +0.05" is false, not conservative: n=12 is under-powered for this contrast (see Power,
+> below), and the honest statement admits that.
 >
-> *"indistinguishable at n=12, which bounds the additional value of epochs 2 through 10 below
-> +0.05 at this power"*
+> If the contrast is not significant and `|delta| < 0.05`, the required output reports `delta` and
+> an approximate 95% interval (`mean +/- 2.201 * se`, the two-sided t multiplier at df=11), and
+> says plainly that n=12 does not resolve the question and that the interval includes effects
+> larger than the bar.
 >
-> It may **not** be reported as "one epoch is as good as ten". This project has a standing habit of
-> converting a null into a claim, and n=12 is exactly the sample size where that is tempting and
-> wrong.
+> It may **not** be reported as "one epoch is as good as ten", and it may **not** be reported as a
+> bound the data cannot support. This project has a standing habit of converting a null into a
+> claim, and n=12 is exactly the sample size where that is tempting and wrong.
+>
+> The claim is also directional (`e10 - e1 >= +0.05`), not `|e10 - e1| >= 0.05`. A significant
+> difference at or beyond the bar in the **opposite** direction is a real result but is not a
+> confirmation of this claim, and must be reported as a significant result running the other way,
+> not as "CONFIRMED".
 
 ### Claim 2 - THE FLOOR, and the potential headline. `e1` against 0 epochs.
 
@@ -105,8 +117,11 @@ means alone.
 
 ### Claim 4 - DO THE TWO CURVES SATURATE TOGETHER?
 
-`S` across 1, 2, 3, 5, under the same significance gate as Claim 3, reported beside the policy
-curve.
+`S` across 1, 2, 3, 5, under the same KIND of significance gate as Claim 3 - no shape word without
+significance - but its own family and its own Bonferroni threshold (see Multiplicity), reported
+beside the policy curve. `S` is also near-deterministic per seed, so a trivially small paired delta
+can still be significant; the within-arm sd is reported alongside so a trivial-but-significant
+delta reads as trivial rather than as a shape.
 
 Both `S` and policy are known to be flat from 10 onward. This asks whether they **turn over at the
 same point**. A dissociation - `S` saturating at 1 epoch while policy keeps rising to 5, or the
@@ -118,9 +133,32 @@ reported beside it per that experiment's amendment. Neither carries a bar.
 
 ### Multiplicity, stated before the numbers
 
-**Six pre-registered comparisons**: Claim 1, plus four adjacent contrasts, plus the `e1` floor.
-A Bonferroni threshold is **p <= 0.0083**. Claim 1 keeps its 0.05 bar as the single primary; the
-other five are read against 0.0083 whenever one of them is used to name a shape.
+**Two families, counted separately.** The `e1` floor (Claim 2) is descriptive - EXP-036's
+zero-epoch arm has no variance, so there is no p-value to correct for - and belongs to neither
+count.
+
+**Policy family: five pre-registered comparisons** - Claim 1 (the primary, `e10 - e1`) plus the
+four adjacent contrasts in Claim 3. Claim 1 keeps its own 0.05 bar as the single primary. The
+four Claim 3 contrasts are read against a Bonferroni threshold of **p <= 0.01** (0.05 / 5)
+whenever one of them is used to name a shape.
+
+**S family: four pre-registered comparisons** - the Claim 4 adjacent contrasts on `S`. This is a
+separate family from the policy tests, not folded into the same count, because it tests a
+different statistic. Read against a Bonferroni threshold of **p <= 0.0125** (0.05 / 4) whenever
+one of them is used to name a shape.
+
+### Power, stated before the numbers
+
+At a paired-difference sd of about 0.11 (measured on this project's real arms: e10 vs e20 sd
+0.137, e10 vs e40 sd 0.102), n=12 gives roughly **28% power** for Claim 1's own +0.05 effect, and
+roughly **10% power** at the Bonferroni threshold for an adjacent Claim 3 step of the same size.
+Four "indistinguishable" verdicts in Claim 3 are the likely outcome whatever the true shape is,
+and must **not** be read as evidence that the window is flat.
+
+The experiment is well powered for the outcome it cares about most instead: if `e1` is near zero,
+`e10 - e1` is about +0.20, where power is near 1.00. It is badly powered for fine shape inside the
+window, and that asymmetry is worth stating before any number exists rather than discovering it
+in four rows of "indistinguishable".
 
 ## 3. What would refute the premise
 
