@@ -103,3 +103,41 @@ def test_significant_sub_bar_negative_delta_is_a_small_cost_not_refuted():
     assert "REFUTED" not in verdict
     assert "cost" in verdict.lower()
     assert "NOT CONFIRMED" in verdict
+
+
+def test_the_added_row_fires_when_g_loses_to_its_control_but_beats_r():
+    """THE ROW THE PRE-REGISTERED TABLE LACKED. "G does not beat its control, yet G beats R"
+    had no row: every Claim-2-did-not-confirm branch returned immediately and threw the R
+    contrast away, so this case printed the flat REFUTED catch-all and the attribution result
+    vanished. Against the pre-fix code this returned "...REFUTED, not deferred..." with no
+    mention of R at all."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.01, 0.60), g_vs_r=(0.06, 0.01))
+    assert "ATTRIBUTION WITHOUT A PERFORMANCE RESULT" in verdict
+    assert "REFUTED" not in verdict, "an attribution win is not a refutation of the gate"
+    assert "NOT THE NEUROMORPHIC CLAIM CONFIRMED" in verdict
+    assert "RATE and not SPACING" in verdict, "must carry the limitation that bounds the reading"
+
+
+def test_the_added_row_also_fires_from_the_ambiguous_claim_2_state():
+    """The row must not sit in only ONE of the four Claim-2-did-not-confirm states. A delta
+    that clears the bar without reaching significance is still "G does not beat its control",
+    so an R win must survive that branch too."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.10, 0.06), g_vs_r=(0.06, 0.01))
+    assert "CLAIM 2 AMBIGUOUS" in verdict
+    assert "ATTRIBUTION WITHOUT A PERFORMANCE RESULT" in verdict
+
+
+def test_adding_the_row_did_not_change_what_exp053_itself_reported():
+    """THE POINT OF ADDING IT NOW. EXP-053's measured contrasts are G vs control +0.0304 at
+    p 0.1323 and G vs R +0.0350 at p 0.1167. The R contrast clears the +0.03 attribution bar
+    but is NOT significant, so `beats_r` is False and the new row cannot fire. Editing a
+    pre-registration after an arm has reported is the outcome-dependent editing the
+    pre-registration exists to prevent; this pins that it did not happen."""
+    m = _module()
+    verdict = m.claim3_verdict(g_vs_control=(0.0304, 0.1323), g_vs_r=(0.0350, 0.1167))
+    assert verdict == (
+        "CLAIM 2 NOT CONFIRMED and CLAIM 3 NOT CONFIRMED. Encoder updates are redundant "
+        "at this rate. The neuromorphic claim is REFUTED, not deferred. "
+        "'We need a better gate' is NOT an available conclusion from this experiment.")

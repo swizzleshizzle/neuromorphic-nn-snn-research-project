@@ -93,36 +93,66 @@ def claim3_verdict(g_vs_control: tuple[float, float],
     if g_wins and not beats_r:
         return ("CLAIM 2 CONFIRMED, CLAIM 3 NOT. Fewer encoder updates is the whole effect. "
                 "Report as an efficiency finding. The neuromorphic claim is NOT made.")
+    # --- Claim 2 did not confirm. What Claim 2 may say is settled FIRST, and the R
+    #     comparison is appended afterwards, because they are separate questions. The table
+    #     as pre-registered could not express "G does not beat its control, yet G beats R":
+    #     every Claim-2-did-not-confirm row returned immediately and the R contrast was
+    #     discarded. Adding the row as another early return would have reintroduced the same
+    #     hole one row over, since it could only sit in ONE of the four Claim 2 states.
+    #
+    #     ADDED 2026-08-31, and it does not fire on EXP-053's own data: G beat R by +0.0350
+    #     at p 0.1167, which is not significant, so `beats_r` is False and every string below
+    #     is byte-identical to what that run printed. A regression test pins that.
+    #
     # A delta that clears the bar but misses significance is NOT a null result. Calling it
     # one would repeat EXP-050's Claim 4 error: the pre-registered condition was satisfied
     # and the inference drawn from it was still wrong. Underpowered and measured-null are
     # different states of the world and this table must not collapse them.
     if abs(gd) >= BAR and gp > ALPHA:
-        return ("CLAIM 2 AMBIGUOUS. The delta clears the bar at " + f"{gd:+.4f}" + " but does "
-                "not reach significance (p " + f"{gp:.4f}" + "). This is UNDERPOWERED, not a "
-                "null result, and it must not be reported as a refutation. Report the delta, "
-                "the p-value and the seed count, and state that n=12 could not resolve it.")
+        claim2 = ("CLAIM 2 AMBIGUOUS. The delta clears the bar at " + f"{gd:+.4f}" + " but does "
+                  "not reach significance (p " + f"{gp:.4f}" + "). This is UNDERPOWERED, not a "
+                  "null result, and it must not be reported as a refutation. Report the delta, "
+                  "the p-value and the seed count, and state that n=12 could not resolve it.")
     # A delta that is SIGNIFICANT but does not clear the bar is a different state of the
     # world again, and the fifth row's fix did not cover it: `(gd=+0.03, gp=0.02)` used to
     # fall all the way to the catch-all below and print "REFUTED", which contradicts the
     # p-value describing it. A significant nonzero delta is a real effect, just a small one.
     # The pre-registered +0.05 bar was not met, so Claim 2 is still not confirmed - but that
     # is "bar not met", not "no effect", and the word REFUTED belongs only to a genuine null.
-    if gp <= ALPHA and abs(gd) < BAR:
+    elif gp <= ALPHA and abs(gd) < BAR:
         if gd > 0:
-            return ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and "
-                    f"POSITIVE at {gd:+.4f} (p {gp:.4f}), but below the pre-registered +{BAR} "
-                    "bar. This is a real but small effect, not a null: the encoder updates "
-                    "did something, just not enough to confirm Claim 2. Report the delta, "
-                    "the p-value and the bar it missed.")
-        return ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and NEGATIVE "
-                f"at {gd:+.4f} (p {gp:.4f}), with magnitude below the pre-registered {BAR} "
-                "bar. This is a real but small cost, not a null: the encoder updates hurt, "
-                "just not by enough to call it a loss. Report the delta, the p-value and the "
-                "bar it missed.")
-    return ("CLAIM 2 NOT CONFIRMED and CLAIM 3 NOT CONFIRMED. Encoder updates are redundant "
-            "at this rate. The neuromorphic claim is REFUTED, not deferred. "
-            "'We need a better gate' is NOT an available conclusion from this experiment.")
+            claim2 = ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and "
+                      f"POSITIVE at {gd:+.4f} (p {gp:.4f}), but below the pre-registered +{BAR} "
+                      "bar. This is a real but small effect, not a null: the encoder updates "
+                      "did something, just not enough to confirm Claim 2. Report the delta, "
+                      "the p-value and the bar it missed.")
+        else:
+            claim2 = ("CLAIM 2 NOT CONFIRMED (bar not met). The delta is significant and NEGATIVE "
+                      f"at {gd:+.4f} (p {gp:.4f}), with magnitude below the pre-registered {BAR} "
+                      "bar. This is a real but small cost, not a null: the encoder updates hurt, "
+                      "just not by enough to call it a loss. Report the delta, the p-value and the "
+                      "bar it missed.")
+    elif beats_r:
+        claim2 = ("CLAIM 2 NOT CONFIRMED. Encoder updates at this rate did not beat not "
+                  "updating.")
+    else:
+        claim2 = ("CLAIM 2 NOT CONFIRMED and CLAIM 3 NOT CONFIRMED. Encoder updates are redundant "
+                  "at this rate. The neuromorphic claim is REFUTED, not deferred. "
+                  "'We need a better gate' is NOT an available conclusion from this experiment.")
+
+    if not beats_r:
+        return claim2
+
+    # THE ROW THE PRE-REGISTERED TABLE LACKED.
+    return claim2 + (
+        " CLAIM 3 ATTRIBUTION WITHOUT A PERFORMANCE RESULT. G does not beat its own control, "
+        f"yet it beats the rate-matched random gate R by {rd:+.4f} at p {rp:.4f}. The gate's "
+        "TIMING therefore carries information that opening at random with the same rate does "
+        "not, while gating as a whole did not beat not gating. Per this experiment's own "
+        "limitation note, arm R controls for RATE and not SPACING, so this licenses 'the "
+        "gate's timing carries information' and NOT 'the dopamine signal is what matters'. "
+        "THIS IS NOT THE NEUROMORPHIC CLAIM CONFIRMED. A signal that reorders trajectories "
+        "without moving success is a lead, and it must be written up as one.")
 
 
 def report_contrast(name: str, arm: dict, control: dict, bar: float) -> tuple[float, float]:

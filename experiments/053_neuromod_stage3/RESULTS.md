@@ -125,6 +125,24 @@ which is close to what happened (+0.0350 over R, above the bar, below significan
 reported is the outcome-dependent editing it exists to prevent. The gap is recorded here as a
 limitation of the design, and any successor should add that row **before** running anything.
 
+> [!note] THE ROW WAS ADDED 2026-08-31, WITH NOTHING PENDING THAT COULD USE IT, AND THIS RUN'S
+> VERDICT IS UNCHANGED.
+> It fires only when `beats_r` is true, which requires the G-vs-R contrast to clear the +0.03
+> attribution bar **and** reach significance. This run's is +0.0350 at **p 0.1167**, so it does not
+> fire, and `claim3_verdict` still returns the same catch-all string byte for byte. Re-running the
+> aggregator on these records confirms it, and a regression test pins the exact string against the
+> measured pair `(+0.0304, 0.1323)` and `(+0.0350, 0.1167)` so a later edit cannot quietly move it.
+>
+> The row is **not** another early return. Every Claim-2-did-not-confirm branch used to return
+> immediately and discard the R contrast, so putting the new row in any one of them would have left
+> the same hole one row over. The Claim 2 verdict is now settled first and the R comparison is
+> appended, which covers all four states.
+>
+> What it may say is bounded by this experiment's own limitation note: **arm R controls for RATE,
+> not SPACING**, so an R win licenses "the gate's timing carries information" and never "the
+> dopamine signal is what matters". The row says so in its own text, and says explicitly that a
+> signal which reorders trajectories without moving success is a lead rather than a result.
+
 ## Claim 6 - compute, priced
 
 Per-cell wall clock, measured by the instrument added at `e3881fd` (Claim 6 had no instrument at
