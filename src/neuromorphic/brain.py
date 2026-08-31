@@ -213,11 +213,15 @@ class Brain:
     def learn(self, reward: float, baseline: float = 0.0) -> bool:
         """Wire a reward onto the dopamine bus (the R-STDP third factor).
 
-        Sets ``dopamine = reward - baseline`` (reward-minus-expectation). Actual
-        plasticity is **deferred** (R-STDP designed in L11; eligibility-trace taste in
-        EXP-021) — this is the hook the future weight update reads.
+        Sets ``dopamine = reward - baseline`` (reward-minus-expectation) and returns whether
+        that clears ``bus.learning_threshold``.
 
-        Returns whether learning would be enabled (``dopamine >= learning_threshold``).
+        **EXP-053 gave this method its first caller in a training loop.**
+        ``cube_baseline.DopamineGate`` calls it once per episode with the episode's mean
+        discounted return, sets ``bus.learning_threshold`` to the running median of the
+        dopamine seen so far, and uses the returned flag to decide whether the sensory
+        encoder's optimizer steps. R-STDP weight-level plasticity (designed in L11) is still
+        deferred; what is gated here is gradient-based encoder fine-tuning.
         """
         self.bus.set(dopamine=float(reward - baseline))
         return self.bus.learning_enabled

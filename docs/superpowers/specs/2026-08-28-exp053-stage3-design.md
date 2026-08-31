@@ -200,6 +200,32 @@ you named.** There, `memory` beat a shuffle-null by 10.8 points and the amnesic 
 the primary comparison had been measuring the harm of incorrect memory rather than the benefit of
 correct memory. Two arms would have published a false positive. Three did not.
 
+> [!note] AMENDED 2026-08-28, before any run and before any number exists
+> **Arm R controls for update RATE, not update SPACING, and that gap is recorded now rather than
+> discovered after a result exists.**
+>
+> Arm G's opens are **temporally autocorrelated**: dopamine is `mean_return - baseline` against a
+> beta=0.1 EMA, so a good episode raises the bar the next episode has to clear, and opens cluster
+> against the shape of learning progress rather than falling independently. Arm R's opens are
+> **i.i.d. Bernoulli** at the matched rate - independent draws with no memory of the previous
+> episode.
+>
+> So if G beats R, two explanations stay live: "the reward-prediction error selected the
+> informative episodes" and "anti-correlated (or merely differently-clustered) update spacing
+> helps on its own, independent of what the signal is tracking." **A G-over-R win licenses "the
+> gate's timing carries information" but NOT specifically "the dopamine signal is what matters"** -
+> that stronger claim needs a further, spacing-matched control (for example a random gate whose
+> draws are yoked to reproduce G's autocorrelation structure at the same rate), which this
+> experiment does not run. Claim 3's table is written to license only the weaker claim.
+>
+> **A smaller, related asymmetry:** arm G force-opens its first 100 episodes as warmup (section
+> 2.2), because the running median has no history before then. Arm R has no such requirement - it
+> draws at G's realized rate from episode 1. So roughly 50 of arm G's ~5,000 realized updates (at a
+> ~50% rate over 10,000 episodes) are placed in the first 100 episodes by construction, while arm
+> R's corresponding ~50 updates in that window fall wherever the Bernoulli draw happens to land.
+> That is a difference in placement concentrated at the highest-leverage point of the curriculum -
+> the start of training - and it is not corrected for.
+
 ### 2.4 What arm G's absolute number may and may not be compared to
 
 Depth 6 carries several numbers and they are not interchangeable. Recorded here so the write-up
@@ -261,11 +287,27 @@ Fixed in advance, and binding:
 |---|---|---|
 | G wins | G beats R | **The neuromodulatory gate works.** The bus is load-bearing and the signal is doing the work. |
 | G wins | G ~ R | **Fewer encoder updates is the whole effect.** Report as an efficiency finding. The neuromorphic claim is NOT made. |
-| G ~ control | G ~ R | **Encoder updates are redundant at this rate.** The neuromorphic claim is **refuted, not deferred.** |
 | G loses | any | The gate costs. Report the loss and the size. |
+| **G ambiguous** (`\|delta\| >= 0.05` but `p > 0.05`) | any | **UNDERPOWERED, not null.** Report the delta, the p-value and n=12, and state that n=12 could not resolve it. This row takes precedence over the row below whenever it applies. |
+| G ~ control | G ~ R | **Encoder updates are redundant at this rate.** The neuromorphic claim is **refuted, not deferred.** |
 
 **"G ~ R, so we need a better gate" is not an available conclusion from this experiment.** It is
 the escape hatch this table exists to close.
+
+> [!note] AMENDED 2026-08-28, before any run and before any number exists
+> The table originally had four rows, and the last one - "G ~ control, G ~ R, refuted" - was
+> reachable by anything that was not a significant win or a significant loss. That includes a
+> delta that clears the `+0.05` bar but misses `p <= 0.05`, which is a different state of the
+> world from a truly flat one: `(gd=0.10, gp=0.06)` was falling into the same branch as
+> `(gd=0.005, gp=0.9)`.
+>
+> This conflates "underpowered, ambiguous" with "measured and null," and declaring a
+> refutation from an underpowered result is the exact error this project already made once:
+> EXP-050's Claim 4 had its pre-registered condition satisfied and the conclusion built on it
+> was still wrong. The fifth row above splits the two states apart. It does not move the `0.05`
+> bar, the `0.03` attribution bar, or the `0.05` alpha, and it does not change what any of the
+> other four rows may claim - it only narrows which inputs reach the "refuted" row to inputs
+> that are actually small AND non-significant, not merely non-significant.
 
 ### Claim 4 - MECHANISM. `revisit_rate` and `optimality`, paired, both contrasts.
 

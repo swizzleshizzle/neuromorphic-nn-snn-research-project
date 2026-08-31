@@ -93,7 +93,12 @@ def test_train_episode_updates_head_but_not_the_frozen_brain():
         generator=torch.Generator().manual_seed(0), max_steps=10,
     )
 
-    assert set(stats) == {"steps", "total_reward", "mean_return", "loss", "reached_goal", "mean_entropy"}
+    # EXP-053 adds "gate_open" unconditionally (True when no encoder_optimizer is passed,
+    # as here); the critic-only keys stay absent because no critic was passed.
+    assert set(stats) == {
+        "steps", "total_reward", "mean_return", "loss", "reached_goal", "mean_entropy",
+        "gate_open",
+    }
     assert stats["steps"] >= 1
     assert isinstance(stats["reached_goal"], bool)
     # the head learned; the brain stayed frozen (v1)
