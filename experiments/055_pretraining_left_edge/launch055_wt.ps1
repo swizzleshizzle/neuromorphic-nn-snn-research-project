@@ -2,7 +2,13 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase check
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase pretrain -Workers 8
-#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase rl -Epochs 1 -Workers 6
+#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase rl -Epochs 1,2,3,5 -Workers 8
+#
+# All four arms go in ONE call. run.py submits every cell to a single pool, so the pool keeps
+# refilling across arm boundaries instead of draining to a two-wave tail four separate times,
+# and a dropped ssh cannot leave the sequence half-dispatched. Add -SkipExisting to resume:
+# records already on disk are skipped, and seeded runs are byte-identical, so a resumed sweep
+# is indistinguishable from an uninterrupted one.
 #
 # WHY A WORKTREE-SPECIFIC LAUNCHER EXISTS, AND WHY IT IS NOT launch055.ps1
 #
@@ -19,8 +25,9 @@
 
 param(
     [Parameter(Mandatory=$true)][ValidateSet("check","pretrain","rl")][string]$Phase,
-    [ValidateSet(1,2,3,5)][int]$Epochs = 0,
-    [int]$Workers = 0
+    [ValidateSet(1,2,3,5)][int[]]$Epochs = @(),
+    [int]$Workers = 0,
+    [switch]$SkipExisting
 )
 
 $wt   = "C:\Users\mlgbr\wt-exp053"
@@ -65,11 +72,12 @@ if ($Phase -eq "pretrain") {
     $cliArgs = @("--workers", $Workers)
     $log = Join-Path $wt "experiments\055_pretraining_left_edge\phase1_pretrain.log"
 } else {
-    if ($Epochs -eq 0) { Write-Error "-Phase rl requires -Epochs (1, 2, 3 or 5)"; exit 1 }
+    if ($Epochs.Count -eq 0) { Write-Error "-Phase rl requires -Epochs, e.g. -Epochs 1,2,3,5"; exit 1 }
     if ($Workers -eq 0) { $Workers = 6 }
     $script = "experiments\055_pretraining_left_edge\run.py"
-    $cliArgs = @("--epochs", $Epochs, "--workers", $Workers)
-    $log = Join-Path $wt "experiments\055_pretraining_left_edge\phase3_e$Epochs.log"
+    $cliArgs = @("--epochs") + $Epochs + @("--workers", $Workers)
+    if ($SkipExisting) { $cliArgs += "--skip-existing" }
+    $log = Join-Path $wt ("experiments\055_pretraining_left_edge\phase3_e" + ($Epochs -join "_") + ".log")
 }
 
 "script    = $script $cliArgs"
