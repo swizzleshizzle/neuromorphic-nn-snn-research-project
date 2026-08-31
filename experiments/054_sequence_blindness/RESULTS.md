@@ -106,6 +106,22 @@ is a rank correlation over noise, and it would have produced some sign no matter
 > nothing. **Fix before reuse: gate Claim 4's between-arm comparison on the arms being
 > distinguishable.**
 
+> [!note] THE FIX LANDED 2026-08-31. Re-running the aggregator on these same records now prints
+> **CLAIM 4 UNEVALUATED**, not PASSED.
+> `axis_is_resolvable` tests the widest available contrast on each axis by exact paired
+> permutation, and `claim4_verdict` now takes `between_resolvable` as a REQUIRED argument checked
+> before any sign is compared. On these records:
+>
+> ```
+> S:      widest contrast E40 vs E20, p 0.6553 -> NOT separable
+> policy: widest contrast E10 vs E80, p 0.0063 -> separable
+> ```
+>
+> The Spearman had one real axis and one noise axis, which is precisely the failure and is now
+> visible in the output rather than only in this file. The gate fails safe in BOTH directions: an
+> unresolvable axis can no more retire `S` than clear it, so it is checked ahead of the within-arm
+> coherence branch. **The numbers in this document are unchanged; only the verdict wording is.**
+
 **`S` is therefore neither cleared nor retired by this run.** It is unevaluated as a policy
 predictor, because the epoch series does not vary it.
 

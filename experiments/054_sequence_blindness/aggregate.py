@@ -52,13 +52,59 @@ def spearman(x, y) -> float:
     return num / den if den else 0.0
 
 
-def claim4_verdict(within: dict, between: float) -> str:
+def axis_is_resolvable(by_arm: dict, arms, key: str, alpha: float = ALPHA):
+    """Can the arms be ranked on `key` at all, or is the ordering noise?
+
+    A Spearman over four arm MEANS carries information only if those means are separable. When
+    they are not, the rank correlation still returns a number, and its sign is decided by noise.
+    This tests the widest contrast available - the arm with the highest mean against the arm
+    with the lowest - by exact paired permutation over the shared seeds. If even that pair is
+    not significant, no ordering of the four is resolvable and none of the ranks mean anything.
+
+    Returns `(resolvable, hi_arm, lo_arm, p)`.
+    """
+    arms = [a for a in arms if a in by_arm and by_arm[a]]
+    if len(arms) < 2:
+        return False, None, None, 1.0
+    means = {a: st.mean([by_arm[a][seed][key] for seed in by_arm[a]]) for a in arms}
+    hi = max(means, key=means.__getitem__)
+    lo = min(means, key=means.__getitem__)
+    shared = sorted(set(by_arm[hi]) & set(by_arm[lo]))
+    if hi == lo or len(shared) < 2:
+        return False, hi, lo, 1.0
+    diffs = [by_arm[hi][seed][key] - by_arm[lo][seed][key] for seed in shared]
+    pval = permutation_p(diffs)
+    return pval <= alpha, hi, lo, pval
+
+
+def claim4_verdict(within: dict, between: float, between_resolvable: bool,
+                   why_unresolvable: str = "") -> str:
     """The pre-registered disqualifier, as a function rather than a paragraph.
 
     Encoding it removes the step where a human re-derives the rule while looking at the
     numbers. EXP-050's Claim 4 was satisfied and its inference was still wrong; EXP-052's
     aggregator named a shape from indistinguishable means. This is the response to both.
+
+    `between_resolvable` IS NOT OPTIONAL, and it is checked first. On the 2026-08-29 run this
+    function printed CLAIM 4 PASSED from a between-arm Spearman over four `S` means whose
+    spread was 0.08x their own within-arm sd - a rank correlation over noise, which would have
+    produced some sign whatever the data said. That is EXP-052's process failure reappearing
+    inside the aggregator written to prevent it: the shape gate was applied to Claim 1 and
+    never to Claim 4. The disqualifier failed safe and never issued a false RETIRED, but a
+    meaningless PASSED is how "S was checked and cleared" gets into a later spec.
+
+    So an unresolvable between-arm axis returns UNEVALUATED before any sign is compared. It is
+    deliberately checked ahead of the within-arm coherence branch: a sign drawn from noise can
+    no more retire the metric than clear it.
     """
+    within = {k: round(v, 3) for k, v in within.items()}
+    if not between_resolvable:
+        return ("CLAIM 4 UNEVALUATED. S IS NEITHER CLEARED NOR RETIRED. The between-arm "
+                f"correlation ({between:+.3f}) is a rank correlation over arm means that are "
+                f"not separable{why_unresolvable}, so its sign is decided by noise and cannot "
+                f"be compared against the within-arm correlations ({within}). This is NOT a "
+                "pass, and it must never be cited as S having been checked and cleared. To "
+                "evaluate S, vary it: this design does not.")
     signs = {k: (1 if v > 0 else -1 if v < 0 else 0) for k, v in within.items()}
     nonzero = [s for s in signs.values() if s != 0]
     if not nonzero or len(set(nonzero)) > 1:
@@ -261,6 +307,20 @@ def main() -> None:
         [st.mean([by_arm[a][s]["S"] for s in by_arm[a]]) for a in arms_present],
         [st.mean([by_arm[a][s]["policy_success"] for s in by_arm[a]]) for a in arms_present],
     )
+    s_ok, s_hi, s_lo, s_p = axis_is_resolvable(by_arm, arms_present, "S")
+    p_ok, p_hi, p_lo, p_p = axis_is_resolvable(by_arm, arms_present, "policy_success")
+    between_resolvable = s_ok and p_ok
+    why = ""
+    if not s_ok:
+        why = (f" (widest S contrast {s_hi} vs {s_lo}: p {s_p:.4f}, not significant)")
+    elif not p_ok:
+        why = (f" (widest policy contrast {p_hi} vs {p_lo}: p {p_p:.4f}, not significant)")
+    print(f"  RESOLVABILITY GATE - a Spearman needs BOTH axes to be rankable.")
+    print(f"    S:      widest contrast {s_hi} vs {s_lo}, p {s_p:.4f} -> "
+          f"{'separable' if s_ok else 'NOT separable'}")
+    print(f"    policy: widest contrast {p_hi} vs {p_lo}, p {p_p:.4f} -> "
+          f"{'separable' if p_ok else 'NOT separable'}")
+
     if not within:
         print("  NO within-arm correlation could be computed: every arm's policy is constant "
               "across seeds. That should not happen now that records carry per-seed policy, so "
@@ -275,7 +335,7 @@ def main() -> None:
             flag = ("WOULD TRIP the disqualifier alone" if arm_trips_alone(corr, between)
                     else "agrees with (or is neutral to) the between-arm sign")
             print(f"    {arm}: within-arm {corr:+.3f} vs between-arm {between:+.3f} -> {flag}")
-        print("  " + claim4_verdict(within, between))
+        print("  " + claim4_verdict(within, between, between_resolvable, why))
 
 
 if __name__ == "__main__":

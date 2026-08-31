@@ -38,14 +38,16 @@ def test_opposite_signs_retire_the_metric():
     """THE DISQUALIFIER. Within-arm positive, between-arm negative - exactly how the entropy
     trace behaved - must retire S on the spot, in the headline and not in a caveat."""
     verdict = _module().claim4_verdict(
-        within={"E10": 0.7, "E20": 0.6, "E40": 0.8, "E80": 0.5}, between=-0.9)
+        within={"E10": 0.7, "E20": 0.6, "E40": 0.8, "E80": 0.5}, between=-0.9,
+        between_resolvable=True)
     assert "RETIRED" in verdict
     assert "fifth inverted instrument" in verdict
 
 
 def test_agreeing_signs_keep_the_metric():
     verdict = _module().claim4_verdict(
-        within={"E10": 0.7, "E20": 0.6, "E40": 0.8, "E80": 0.5}, between=0.9)
+        within={"E10": 0.7, "E20": 0.6, "E40": 0.8, "E80": 0.5}, between=0.9,
+        between_resolvable=True)
     assert "RETIRED" not in verdict
 
 
@@ -53,9 +55,57 @@ def test_a_mixed_within_arm_picture_does_not_silently_pass():
     """If the within-arm correlations disagree with EACH OTHER, there is no coherent within
     sign to compare against, and the aggregator must say so rather than pick one."""
     verdict = _module().claim4_verdict(
-        within={"E10": 0.7, "E20": -0.6, "E40": 0.8, "E80": -0.5}, between=0.9)
+        within={"E10": 0.7, "E20": -0.6, "E40": 0.8, "E80": -0.5}, between=0.9,
+        between_resolvable=True)
     assert "INCONCLUSIVE" in verdict
     assert "RETIRED" not in verdict
+
+
+def _synthetic_arm(s_vals, pol_vals):
+    return {i: {"S": s_vals[i], "policy_success": pol_vals[i]} for i in range(len(s_vals))}
+
+
+def test_an_unresolvable_between_arm_axis_cannot_pass():
+    """THE CLAIM 4 GATE. On the 2026-08-29 run this printed CLAIM 4 PASSED from a Spearman over
+    four S means whose spread was 0.08x the within-arm sd. Agreeing signs are not a pass when
+    one of the two signs came from noise. Against the pre-fix code this case returned
+    "CLAIM 4 PASSED ... S is not disqualified"."""
+    verdict = _module().claim4_verdict(
+        within={"E10": -0.119, "E20": -0.245, "E40": -0.329, "E80": -0.147}, between=-0.600,
+        between_resolvable=False, why_unresolvable=" (widest S contrast E40 vs E20: p 0.8394)")
+    assert "UNEVALUATED" in verdict
+    assert "CLAIM 4 PASSED" not in verdict
+    assert "CLAIM 4 TRIPPED" not in verdict and "S IS RETIRED" not in verdict
+    assert "neither cleared nor retired" in verdict.lower()
+    assert "checked and cleared" in verdict.lower(), "must name the misquote it is preventing"
+
+
+def test_an_unresolvable_between_arm_axis_cannot_retire_either():
+    """The gate must fail SAFE in both directions. A sign drawn from noise can no more retire
+    the metric than clear it, so opposite signs over indistinguishable means are not a trip."""
+    verdict = _module().claim4_verdict(
+        within={"E10": 0.7, "E20": 0.6, "E40": 0.8, "E80": 0.5}, between=-0.9,
+        between_resolvable=False)
+    assert "UNEVALUATED" in verdict
+    assert "CLAIM 4 TRIPPED" not in verdict and "S IS RETIRED" not in verdict
+
+
+def test_axis_is_resolvable_separates_a_real_gap_from_noise():
+    """The gate is only worth having if it can tell the two apart. Identical arms up to an
+    alternating 1e-4 wobble must be unresolvable; a flat +0.05 shift on every seed must not."""
+    m = _module()
+    base = [0.20 + 0.01 * (i % 5) for i in range(12)]
+    noise = [b + (0.0001 if i % 2 == 0 else -0.0001) for i, b in enumerate(base)]
+    shifted = [b + 0.05 for b in base]
+
+    ok, hi, lo, pval = m.axis_is_resolvable(
+        {"A": _synthetic_arm(base, base), "B": _synthetic_arm(noise, noise)}, ["A", "B"], "S")
+    assert not ok and pval > 0.05, f"noise was called separable at p {pval}"
+
+    ok, hi, lo, pval = m.axis_is_resolvable(
+        {"A": _synthetic_arm(base, base), "B": _synthetic_arm(shifted, shifted)}, ["A", "B"], "S")
+    assert ok and pval <= 0.05, f"a flat +0.05 shift was called noise at p {pval}"
+    assert (hi, lo) == ("B", "A"), "hi/lo must name the widest contrast, not an arbitrary pair"
 
 
 def test_arm_summary_reports_mean_policy_not_an_arbitrary_seed():
