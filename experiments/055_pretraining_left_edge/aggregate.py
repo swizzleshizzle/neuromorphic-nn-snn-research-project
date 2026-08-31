@@ -68,6 +68,13 @@ def describe_contrast(diffs, p: float, bar: float = BAR, alpha: float = ALPHA) -
     Claim 1 is directional (`e10 - e1 >= +0.05`), so confirmation requires `delta >= bar`, not
     `abs(delta) >= bar`. A significant delta at or beyond the bar in the OPPOSITE direction is a
     real finding but is not a confirmation of this claim, and must never be reported as one.
+
+    The interval sentence is COMPUTED from `lo`/`hi`, not asserted. It used to say "the interval
+    includes effects larger than the bar" unconditionally, which happens to be true for every
+    paired-difference sd this project has measured and is therefore invisible until it is not.
+    That is the same defect as the bound wording it replaced: a sentence about the data that
+    never consults the data. If the interval really does stay inside the bar, n=12 HAS resolved
+    the question at that size, and saying otherwise understates the result.
     """
     n = len(diffs)
     delta = st.mean(diffs)
@@ -85,10 +92,15 @@ def describe_contrast(diffs, p: float, bar: float = BAR, alpha: float = ALPHA) -
                 f"than the +{bar} the claim required.")
 
     if abs(delta) < bar:
-        return (f"indistinguishable at n={n}: delta {delta:+.4f}, p {p:.4f}, approx 95% "
-                f"interval [{lo:+.4f}, {hi:+.4f}]. n={n} does not resolve this: the interval "
-                f"includes effects larger than the +{bar} bar. This is NOT evidence that the "
-                f"two arms behave identically.")
+        head = (f"indistinguishable at n={n}: delta {delta:+.4f}, p {p:.4f}, approx 95% "
+                f"interval [{lo:+.4f}, {hi:+.4f}]. ")
+        if hi >= bar or lo <= -bar:
+            return head + (f"n={n} does not resolve this: the interval reaches the +{bar} bar. "
+                           f"This is NOT evidence that the two arms behave identically.")
+        return head + (f"the interval stays inside the +{bar} bar in both directions, so this "
+                       f"contrast IS resolved against an effect that large. It is still NOT "
+                       f"evidence that the two arms behave identically: a real effect smaller "
+                       f"than the bar remains consistent with it.")
     return (f"unresolved: delta {delta:+.4f} exceeds the +{bar} bar but p {p:.4f} misses "
             f"significance. Nothing is confirmed and nothing is settled; n={n} cannot "
             f"resolve it.")

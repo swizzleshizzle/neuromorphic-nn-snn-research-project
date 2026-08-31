@@ -3,14 +3,18 @@
 Two rules here are responses to specific failures in this project's own history, and both are
 implemented as CONDITIONS rather than as conventions in the prose:
 
-  - a non-significant contrast is reported as a BOUND, never as an equivalence
+  - a non-significant contrast is described from its COMPUTED interval, never as an
+    equivalence and never with an interval claim the interval does not support
   - a shape word may not be emitted for a contrast that is not significant
 """
 
 from __future__ import annotations
 
 import importlib.util
+import statistics as st
 from pathlib import Path
+
+import statistics as st
 
 import pytest
 
@@ -75,6 +79,31 @@ def test_a_large_but_non_significant_contrast_is_not_a_bound_below_the_bar():
     out = _module().describe_contrast([0.09] * 12, p=0.30, bar=0.05, alpha=0.05)
     assert "unresolved" in out.lower()
     assert "bound" not in out.lower()
+
+
+def test_a_tight_non_significant_interval_is_not_told_it_reaches_the_bar():
+    """THE INTERVAL SENTENCE MUST BE COMPUTED. The pre-fix branch printed "the interval includes
+    effects larger than the bar" unconditionally, without ever consulting the `hi` it had just
+    calculated. That is true for every paired-difference sd this project has measured, which is
+    exactly why it survived review, and it is the same defect as the bound wording it replaced.
+    Here the interval genuinely stays inside the bar, so the old sentence is false. This must
+    fail against the pre-fix code."""
+    diffs = [0.004, -0.003, 0.005, -0.004, 0.003, -0.002,
+             0.004, -0.005, 0.002, -0.003, 0.004, -0.001]
+    m = _module()
+    n = len(diffs)
+    delta = st.mean(diffs)
+    hi = delta + m.T95_DF11 * st.stdev(diffs) / (n ** 0.5)
+    assert hi < 0.05, "fixture must keep the interval inside the bar to hit this branch"
+
+    out = m.describe_contrast(diffs, p=0.60, bar=0.05, alpha=0.05)
+    assert "indistinguishable" in out.lower()
+    assert "does not resolve" not in out.lower(), f"the interval does not reach the bar: {out}"
+    assert "stays inside" in out.lower()
+    # Resolving against a LARGE effect is not equivalence, and must not be worded as one.
+    for forbidden in ("as good as", "equal", "equivalent", "no different", "bounds the"):
+        assert forbidden not in out.lower(), f"the wording claims equivalence: {out}"
+    assert "not evidence" in out.lower()
 
 
 def test_shape_word_is_refused_when_a_contrast_is_not_significant():
