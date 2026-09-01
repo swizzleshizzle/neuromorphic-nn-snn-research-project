@@ -2,7 +2,13 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase check
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase pretrain -Workers 8
-#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase rl -Epochs 1,2,3,5 -Workers 8
+#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\launch055_wt.ps1 -Phase rl -AllArms -Workers 8
+#
+# USE -AllArms, NOT -Epochs 1,2,3,5. Over ssh the remote shell is cmd.exe, which treats commas
+# as argument separators, so `-Epochs 1,2,3,5` arrives as the single token `1235` and
+# ValidateSet rejects it. That failure exits ZERO, so the dispatching ssh looks successful
+# while nothing started. A switch has no comma to eat. Verify a launch by probing for records
+# and worker processes, never by the ssh exit code.
 #
 # All four arms go in ONE call. run.py submits every cell to a single pool, so the pool keeps
 # refilling across arm boundaries instead of draining to a two-wave tail four separate times,
@@ -26,9 +32,12 @@
 param(
     [Parameter(Mandatory=$true)][ValidateSet("check","pretrain","rl")][string]$Phase,
     [ValidateSet(1,2,3,5)][int[]]$Epochs = @(),
+    [switch]$AllArms,
     [int]$Workers = 0,
     [switch]$SkipExisting
 )
+
+if ($AllArms) { $Epochs = @(1, 2, 3, 5) }
 
 $wt   = "C:\Users\mlgbr\wt-exp053"
 $py   = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project\.venv\Scripts\python.exe"
@@ -72,7 +81,7 @@ if ($Phase -eq "pretrain") {
     $cliArgs = @("--workers", $Workers)
     $log = Join-Path $wt "experiments\055_pretraining_left_edge\phase1_pretrain.log"
 } else {
-    if ($Epochs.Count -eq 0) { Write-Error "-Phase rl requires -Epochs, e.g. -Epochs 1,2,3,5"; exit 1 }
+    if ($Epochs.Count -eq 0) { Write-Error "-Phase rl requires -AllArms, or -Epochs with a single value"; exit 1 }
     if ($Workers -eq 0) { $Workers = 6 }
     $script = "experiments\055_pretraining_left_edge\run.py"
     $cliArgs = @("--epochs") + $Epochs + @("--workers", $Workers)
