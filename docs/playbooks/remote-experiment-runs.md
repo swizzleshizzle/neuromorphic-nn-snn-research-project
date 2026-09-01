@@ -202,6 +202,19 @@ and 0.157 s/step at 10 workers, right on it. The formula was.
 **divides the cell count** - 12 cells on 6 workers is 2 clean waves and each cell runs faster
 than it would at 10.
 
+> [!warning] STOP EXPECTING WALL-CLOCK RETURNS FROM MORE WORKERS. Measured 2026-09-01, EXP-055
+> phase 3: 48 depth-6 cells, 10,000 episodes, frozen encoder.
+> The pre-registration estimated **17.2 h at 6 workers**. Running it at **8 took 18.0 h**, about
+> 2h45m per cell. Per-cell time rises with contention roughly as fast as the extra workers add
+> throughput, so the two configurations are the same wall clock inside the noise, and the larger
+> one was marginally worse.
+>
+> **Choose the worker count from MEMORY HEADROOM, and treat wall clock as fixed.** That is what
+> the choice of 8 was actually for here: RL workers measured **1.05 GB private each**, so 10 would
+> have put system commit at 34.0 GB against this box's 32.7 GB half-limit line. The rule of thumb
+> in the section above gave exactly 10.0 with zero margin, which is a reason to go lower, not a
+> licence to go to 10.
+
 ### PRETRAINING is far more contended than RL. Measured 2026-08-25.
 
 EXP-050's phase 1 ran 12 encoder-pretraining jobs at 10 workers, so wave 1 had **10 concurrent**
