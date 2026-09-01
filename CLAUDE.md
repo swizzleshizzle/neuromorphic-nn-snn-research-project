@@ -20,29 +20,50 @@ Always run python via the venv, never a bare `python`. One test is marked `slow`
 
 **`ExactBFSDistance(max_depth=N)` is not the slow path.** A bounded build is near free (depth 6 is 11,913 states, about 0.04s). Only `max_depth=None` costs the 67s. Do not restructure code to avoid constructing a bounded provider; that optimisation buys nothing.
 
-Full suite is 370 tests as of 2026-07-30; 521 as of 2026-08-28 (EXP-053 added 55).
+**MEASURED PER-FILE RUNTIMES (re-measured 2026-09-01, this VPS), because the
+600 s Bash ceiling is the binding constraint on this suite, not agent
+discipline. The 2026-08-28 table this replaces was wrong in both directions and
+its chunking recipe no longer completes.**
 
-**MEASURED PER-FILE RUNTIMES (2026-08-28, this VPS), because the 600 s Bash
-ceiling is now the binding constraint on this suite, not agent discipline:**
+The slow files under `-m "not slow"` are NOT the ones the old table named:
 
-| file | `-m "not slow"` | whole file |
+| file | `-m "not slow"` | note |
 |---|---|---|
-| `test_encoder_finetune_seam.py` | 51 s (3 of 8) | **519 s** |
-| `test_cube_baseline.py` | 378 s | 378 s |
-| `test_critic_seam.py` | (fast subset only) | 251 s |
-| `test_encoder_seam.py` | (fast subset only) | 223 s |
-| `test_plasticity_gate.py` | 4 s | 273 s, split `-k always_open` |
+| `test_cube_baseline.py` | **355 s** | run alone |
+| `test_ablation_run_smoke.py` | **258 s** | ONE test, `test_mint_and_cell_smoke` |
+| `test_curriculum.py` | **246 s** | 3 tests over 47 s each |
+| `test_seed_split.py` | **158 s** | |
+| `test_ablation_hook.py` | **135 s** | |
+| `test_encoder_finetune_seam.py` | **1.3 s** (2 of 8) | the old table said 51 s and "must be run alone"; both are wrong under `not slow` |
 
-`test_encoder_finetune_seam.py` must be run **alone**. Two or more of these
-files in one call exceeds the ceiling and the harness auto-backgrounds it.
+Everything else in `tests/training` is seconds. The old table's `test_critic_seam.py`
+and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected.
 
-The fast suite is ~13 min and **cannot complete in a single call at any
-timeout.** Run it in chunks; six worked here:
+**Counts:** 370 tests 2026-07-30, 521 2026-08-28, **561 as of 2026-09-01 (546 not
+slow, 15 slow)**.
+
+**A chunking that actually works.** The `tests/training` remainder is ~837 s and
+**cannot** fit in one call at any timeout, so background it deliberately and let
+the harness re-invoke on exit:
 
 ```bash
-.venv/bin/python -m pytest tests/ -q -m "not slow" --ignore=tests/training   # 278, 41 s
-# then tests/training in five batches, keeping the four files above apart
+.venv/bin/python -m pytest tests/ -q -m "not slow" --ignore=tests/training      # 326, 42 s
+.venv/bin/python -m pytest tests/training/test_cube_baseline.py -q -m "not slow" # 31, 355 s
+# the rest of tests/training, ~837 s: RUN IN BACKGROUND, not in a foreground call
 ```
+
+**To find the expensive files rather than bisecting**, loop with a per-file
+timeout inside ONE call; whatever gets killed is the culprit and 12 files fit
+comfortably under the ceiling:
+
+```bash
+for f in tests/training/test_*.py; do
+  timeout 40 .venv/bin/python -m pytest "$f" -q -m "not slow" >/dev/null 2>&1 || echo "SLOW: $f"
+done
+```
+
+The 15 slow-marked tests are a separate `-m slow` run and also belong in the
+background.
 
 Always pass an explicit tool timeout: the Bash default is 120 s, so even a
 250 s file auto-backgrounds without one. See the global CLAUDE.md gotcha.
