@@ -216,6 +216,21 @@ That is **2.86 effective cores from 10 workers** - far worse than the ~7.4 the R
 still wins on total throughput (5.15 seeds/h against 2 workers' 3.61) but the returns are brutal,
 and the phase took **2.49 h against a 1.7 h estimate** because of it.
 
+**Third point, measured 2026-09-01 (EXP-055 phase 1, 48 encoders at 1/2/3/5 epochs). The knee is
+BELOW 8, not between 8 and 10.** Normalising to seconds per epoch per seed, since these arms train
+for different epoch counts:
+
+| concurrency | s/epoch/seed | |
+|---|---|---|
+| 10 | 87.3 | EXP-050 phase 1, back-solved from 6,985 s at 80 epochs |
+| **8** | **86.7** | EXP-055 phase 1, mean over the four arms |
+| 2 | 24.9 | EXP-050 phase 1, back-solved from 1,995 s at 80 epochs |
+
+**8 and 10 are indistinguishable**, so dropping from 10 to 8 buys throughput back only in
+proportion to the workers removed, and 10 remains the better choice when memory allows. Choose 8
+for commit-limit headroom, not for speed. Whatever the knee is, it sits between 2 and 8 and is
+still unmeasured.
+
 **Estimate pretraining separately from RL.** The 0.153 s/step constant and the ~7.4 effective
 cores are RL-cell figures; inverse-model pretraining is much more memory-bandwidth-bound. Somewhere
 around 4-6 workers is probably the knee, but only 2 and 10 have been measured - **do not
