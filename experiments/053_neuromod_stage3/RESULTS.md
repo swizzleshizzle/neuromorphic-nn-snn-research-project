@@ -43,14 +43,46 @@ approximately 6% and 0.4% respectively. This is a confirmation, and it is not a 
 | revisit_rate, paired | -0.0177, p 0.9189 |
 | optimality, paired | +0.0569, p 0.6011 |
 
-An explained variance of 0.002 means `V(s)` is **no better than a constant**. So "a learned
-state-dependent baseline reduces gradient variance" is **not** supported by this experiment, even
-though "a learned critic raises depth-7 success" is.
+An explained variance of 0.002 means that **at depth 7** `V(s)` is no better than a constant. So
+"a learned state-dependent baseline reduces gradient variance **at the evaluated depth**" is not
+supported, even though "a learned critic raises depth-7 success" is.
 
-**The leading alternative explanation, stated because it is testable and cheap.** If `V(s)` is
-effectively constant, then the advantage is `G_t` minus a constant fitted by MSE over the episode,
-against an EMA baseline with `beta=0.1` that **lags**. The critic may simply be a better-calibrated
-constant, not a state-dependent one. That is a one-arm experiment and nobody has run it.
+> [!warning] CORRECTED 2026-09-02: "THE MECHANISM IS ABSENT" WAS GENERALISED FROM ONE STAGE, AND
+> THE BY-STAGE NUMBERS WERE IN THESE RECORDS THE WHOLE TIME.
+> The table above is labelled "final stage" and is accurate. The sentence that followed it was not:
+> it read a depth-7 number as a statement about the critic, and a later handoff hardened that into
+> "its mechanism is measurably absent". **The critic is strongly predictive in the early
+> curriculum.** `stage_trace[i]["critic_ev"]`, mean over the same 12 seeds:
+>
+> | depth | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+> |---|---|---|---|---|---|---|---|
+> | critic explained variance | **+0.4702** | **+0.2054** | +0.0983 | -0.0292 | -0.0668 | -0.0577 | +0.0021 |
+> | seeds with ev > 0 | 12/12 | 12/12 | 12/12 | 3/12 | 0/12 | 0/12 | 8/12 |
+> | steps per episode | 1.22 | 2.50 | 4.15 | 6.76 | 9.77 | 12.55 | 15.57 |
+>
+> **This is systematic, not noise**: every seed is positive at depths 1 to 3 and every seed is
+> negative at depths 5 and 6. `V(s)` explains 47% of return variance at depth 1, where episodes are
+> 1.22 steps long and 78% are solved, and stops explaining anything from depth 4 on.
+>
+> **Claim 1 evaluates depth-7 success after training through the WHOLE curriculum**, so the
+> critic's benefit is free to originate in the stages where it genuinely predicts. "The mechanism
+> is absent" is not an available reading. What is established is narrower: the mechanism is absent
+> **at the final stage**.
+
+**The leading alternative, restated after the correction.** Two candidates now, not one:
+
+1. **Calibration, not state-dependence.** The advantage is `G_t` minus a constant fitted by MSE
+   over the episode, against an EMA baseline with `beta=0.1` that **lags**. The critic may simply
+   be a better-calibrated constant.
+2. **Early-curriculum shaping.** The critic really is state-dependent where it matters, at depths
+   1 to 3, and that advantage carries forward through the curriculum.
+
+**A per-episode batch-mean baseline does NOT separate these, and must not be used to.** That arm
+forms `G_t - mean(G)`, which is **exactly zero for a one-step episode** - and depth 1 averages 1.22
+steps per episode. It would be starved of gradient precisely in the stages where the critic
+predicts best, so a loss against the critic would be uninterpretable: the confound is aligned with
+the hypothesis. **EXP-056 flattens the critic's prediction to its own episode mean instead**, which
+holds calibration and fitting fixed and removes only within-episode state-dependence.
 
 **Claim 5 - dead seeds. 0/12 against the control's 1/12.** The critic rescued the seed that died
 outright. The spec pre-registered this precisely because a change that rescues a dead seed while
