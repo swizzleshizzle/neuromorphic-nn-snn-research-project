@@ -131,6 +131,11 @@ class CubeConfig:
     # Monte-Carlo, not TD: `train_episode` already computes returns-to-go, so `G_t - V(s_t)`
     # is the smaller change and carries no bootstrapping bias. See the spec section 2.1.
     critic_lr: float | None = None
+    # EXP-056. Replaces `V(s_t)` with its episode mean when forming advantages, removing the
+    # critic's WITHIN-EPISODE state-dependence while leaving calibration and fitting untouched.
+    # Default False is a strict no-op: every cube run before EXP-056 forms advantages against
+    # the per-timestep prediction. Requires `critic_lr`; it is meaningless without a critic.
+    flatten_critic: bool = False
     # EXP-053. Gates ENCODER plasticity on the neuromodulatory bus.
     #
     #   None         the encoder steps every episode (EXP-047's behaviour, and the control)
@@ -497,6 +502,17 @@ def encoder_filename(cfg) -> str:
     return record_filename(cfg).replace(".json", "_encoder.pt")
 
 
+def within_rms(fit: dict, key: str) -> float:
+    """RMS of a within-episode centred sum, over a whole curriculum stage (EXP-056).
+
+    `critic_fit_terms` centres each episode against its OWN mean before summing, so this is a
+    pooled within-episode spread and never picks up between-episode variation. That distinction
+    is the whole point: flattening removes within-episode variation only.
+    """
+    n = fit.get("critic_n", 0)
+    return (fit[key] / n) ** 0.5 if n else 0.0
+
+
 def critic_filename(cfg) -> str:
     """Name of the trained CRITIC a run writes (EXP-053), beside its JSON record.
 
@@ -857,7 +873,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
             stage_ents: list[float] = []
             stage_solved = 0
             stage_fit = {"critic_sse": 0.0, "return_sum": 0.0,
-                         "return_sq_sum": 0.0, "critic_n": 0}
+                         "return_sq_sum": 0.0, "critic_n": 0,
+                         "critic_within_ss": 0.0, "return_within_ss": 0.0}
             for _ in range(stage_episodes):
                 readout.reset()
                 if use_memory:
@@ -871,6 +888,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     store=use_memory, recall=use_memory, feature_fn=readout,
                     grad_brain=finetune,
                     critic=critic, critic_optimizer=critic_optimizer,
+                    flatten_critic=cfg.flatten_critic,
                     encoder_optimizer=encoder_optimizer, gate_fn=gate_fn,
                 )
                 baseline = ema(baseline, stats["mean_return"], cfg.baseline_beta)
@@ -897,7 +915,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     "entropy_min": min(stage_ents),
                     "train_solved_frac": stage_solved / len(stage_ents),
                     **({"critic_ev": explained_variance(stage_fit),
-                        "critic_n": stage_fit["critic_n"]}
+                        "critic_n": stage_fit["critic_n"],
+                        # EXP-056 validity gate: how much within-episode variation does `V`
+                        # actually have, against the returns it is subtracted from?
+                        "critic_within_rms": within_rms(stage_fit, "critic_within_ss"),
+                        "return_within_rms": within_rms(stage_fit, "return_within_ss")}
                        if critic is not None else {}),
                 })
         result = evaluate_states(
