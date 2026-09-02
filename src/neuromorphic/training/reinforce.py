@@ -171,11 +171,19 @@ def critic_fit_terms(values: torch.Tensor, returns: torch.Tensor) -> dict:
     sums; `cube_baseline` accumulates them per stage and forms the ratio once.
     """
     resid = returns - values
+    # WITHIN-EPISODE spread of both series, for EXP-056's validity gate. Flattening `V` to its
+    # episode mean removes exactly this variation, so if it is negligible the intervention
+    # removed nothing and a null result from it means nothing. Accumulated as sums so
+    # `cube_baseline` can form a per-stage RMS the same way it forms explained variance.
+    v_centered = values - values.mean()
+    r_centered = returns - returns.mean()
     return {
         "critic_sse": float((resid * resid).sum()),
         "return_sum": float(returns.sum()),
         "return_sq_sum": float((returns * returns).sum()),
         "critic_n": int(returns.numel()),
+        "critic_within_ss": float((v_centered * v_centered).sum()),
+        "return_within_ss": float((r_centered * r_centered).sum()),
     }
 
 
@@ -197,6 +205,7 @@ def train_episode(
     grad_brain: bool = False,
     critic: nn.Module | None = None,
     critic_optimizer=None,
+    flatten_critic: bool = False,
     encoder_optimizer=None,
     gate_fn=None,
 ) -> dict:
@@ -260,7 +269,15 @@ def train_episode(
         v = torch.stack(values)
         # DETACHED: the policy gradient must not flow into the critic, or the critic would be
         # trained to make the advantage small rather than to predict the return.
-        advantages = returns - v.detach()
+        #
+        # `flatten_critic` (EXP-056) subtracts the critic's own EPISODE MEAN instead of its
+        # per-timestep prediction. That holds calibration, fitting dynamics and between-episode
+        # state-dependence fixed and removes only the across-timestep variation of `V`. It is
+        # NOT the same as subtracting `returns.mean()`, which would be the disqualified
+        # batch-mean baseline: that collapses to exactly zero on a one-step episode, and depth 1
+        # averages 1.22 steps per episode. See the EXP-056 spec section 0.
+        baseline_term = v.detach().mean() if flatten_critic else v.detach()
+        advantages = returns - baseline_term
         critic_stats = critic_fit_terms(v.detach(), returns)
     if normalize_advantages:
         advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
