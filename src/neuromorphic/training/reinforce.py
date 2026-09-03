@@ -16,6 +16,8 @@ See ADR-0001 and its amendments.
 
 from __future__ import annotations
 
+import math
+
 import contextlib
 
 import torch
@@ -74,6 +76,41 @@ def make_critic(brain) -> nn.Module:
     `test_the_critic_does_not_leak_gradient_into_the_encoder`).
     """
     return nn.Linear(brain.content, 1)
+
+
+class ConstantCritic(nn.Module):
+    """A STATE-BLIND baseline: one learned scalar, fitted by the same MSE loss (EXP-057).
+
+    One parameter against `make_critic`'s 65. It differs from the state-dependent critic in
+    exactly one way, that it cannot see the state, and from the scalar EMA baseline in exactly
+    one way, that it is FITTED rather than exponentially averaged. That pair of "exactly one
+    way"s is what makes it a control for calibration.
+
+    It is NOT the per-episode batch mean. That arm forms `G_t - mean(G)`, which is exactly zero
+    on a one-step episode, and depth 1 averages 1.22 steps per episode; it was disqualified
+    before running. A learned scalar is not the episode's own mean, so no advantage collapses.
+
+    Because every timestep of an episode reads the same scalar, `critic_within_rms` must be
+    exactly 0.0 for this module. EXP-057's Claim 4 gate checks that, and a non-zero value means
+    the arm is not what its spec describes.
+    """
+
+    def __init__(self, fan_in: int):
+        super().__init__()
+        # `nn.Linear` draws its bias from U(-1/sqrt(fan_in), +1/sqrt(fan_in)). Matching that
+        # distribution keeps initialisation from being a SECOND difference against arm B.
+        bound = 1.0 / math.sqrt(fan_in)
+        self.value = nn.Parameter(torch.empty(1).uniform_(-bound, bound))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Mirror `nn.Linear`'s trailing-dimension convention so the read site needs no special
+        # case: (concept,) -> (1,), and (N, concept) -> (N, 1).
+        return self.value.expand(*x.shape[:-1], 1)
+
+
+def make_constant_critic(brain) -> nn.Module:
+    """EXP-057's arm C. Same fan-in only so the init distribution matches arm B's bias."""
+    return ConstantCritic(brain.content)
 
 
 def concept_rate(out: dict) -> torch.Tensor:

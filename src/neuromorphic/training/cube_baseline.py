@@ -31,6 +31,7 @@ from neuromorphic.training.reinforce import (
     ema,
     greedy_action,
     make_critic,
+    make_constant_critic,
     policy_parameters,
     train_episode,
 )
@@ -136,6 +137,10 @@ class CubeConfig:
     # Default False is a strict no-op: every cube run before EXP-056 forms advantages against
     # the per-timestep prediction. Requires `critic_lr`; it is meaningless without a critic.
     flatten_critic: bool = False
+    # EXP-057. Replaces the state-dependent critic with a single learned scalar, fitted by the
+    # same MSE loss at the same rate. Requires `critic_lr`; meaningless without a critic.
+    # Default False is a strict no-op: every critic run before EXP-057 reads the state.
+    constant_critic: bool = False
     # EXP-053. Gates ENCODER plasticity on the neuromodulatory bus.
     #
     #   None         the encoder steps every episode (EXP-047's behaviour, and the control)
@@ -806,7 +811,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     f"critic_lr requires readout='concept' (got {cfg.readout!r}): "
                     "MemoryReadout detaches the concept, so the critic would train on nothing."
                 )
-            critic = make_critic(agent)
+            critic = make_constant_critic(agent) if cfg.constant_critic else make_critic(agent)
             critic_optimizer = torch.optim.Adam(critic.parameters(), lr=cfg.critic_lr)
         # Counted from the optimizer rather than from the config, so it reports what is
         # ACTUALLY being trained. 390 on every frozen run since EXP-029; 27,206 fine-tuned.

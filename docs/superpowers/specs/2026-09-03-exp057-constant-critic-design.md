@@ -99,13 +99,23 @@ nothing".**
 ### Claim 4, THE VALIDITY GATE - is the critic actually constant?
 
 **A CONDITION, not a report.** EXP-056 added `critic_within_rms`, the pooled within-episode RMS of
-`V`. For a state-blind critic it must be **exactly 0.0 at every stage**, because every timestep in
-an episode reads the same scalar.
+`V`. For a state-blind critic every timestep in an episode reads the same scalar, so it must be
+**below 1e-6 at every stage**.
 
-**If any stage reports a non-zero `critic_within_rms`, the arm is not what this spec describes and
-every claim above is void.** The aggregator checks this first and refuses the rest otherwise. This
-costs nothing, reuses instrumentation that already exists, and would catch a wiring error that
-otherwise produces a perfectly plausible number.
+> [!note] AMENDED 2026-09-03, BEFORE ANY NUMBER EXISTS. This clause originally said "exactly 0.0",
+> which is unachievable in floating point: `v.mean()` over identical floats reassociates, and the
+> implementation measures **6.8e-10** in a smoke run. The same effect was measured in EXP-056,
+> where a constant critic drifted 1.34e-07 in head weights while a real one moved 1.80e-01.
+>
+> **1e-6 sits about three orders above that noise floor and six orders below any genuine
+> variation**: arm B's measured within-episode RMS is 0.65 to 2.20. The gate keeps all of its
+> discriminating power. Amended in the same commit as the test that measured it, and no
+> experimental number existed at the time.
+
+**If any stage reports `critic_within_rms` at or above 1e-6, the arm is not what this spec
+describes and every claim above is void.** The aggregator checks this first and refuses the rest
+otherwise. This costs nothing, reuses instrumentation that already exists, and would catch a wiring
+error that otherwise produces a perfectly plausible number.
 
 Also reported, descriptively: `critic_ev` by stage. A constant predictor should explain
 approximately none of the pooled stage-level return variance, and **that is expected rather than
