@@ -36,7 +36,7 @@ Depth 6 is the opposite case, and two experiments now say so:
 | evidence | value |
 |---|---|
 | EXP-036, depth 6 held-out success | **0.0000** on all 12 seeds |
-| EXP-036, depth 6 modal action fraction | **0.975** (uniform floor 0.354) |
+| EXP-036, depth 6 modal action fraction | **0.975** (uniform floor **0.309**, see Correction 1) |
 | EXP-037, depth 6 at 3x the episodes | **0.0000**, modal **0.982** |
 
 EXP-037 Claim 4 also removed the competing explanation: tripling the episodes at depth 6 moved
@@ -251,6 +251,20 @@ steps and depth 5 runs 13, so neither is 0.354. EXP-036's random arms measure it
 Using 0.354 would have compared depth-6 policies against a depth-3 constant. This is the same
 shape as the six instrument bugs of week 18: **a reference value that does not apply to the case
 it is being applied to.**
+
+> [!note] AUDIT COMPLETED 2026-09-04 (`^bbd0`). Every citation of the modal floor in the repo was
+> checked against the depth it was applied to. **Two were wrong and both are now fixed**: this
+> spec's own evidence table above (which carried 0.354 for depth 6 while this correction sat 200
+> lines below it), and EXP-037's Claim 5, whose table is depth 4. **Neither changes a conclusion** -
+> in both cases the correct, lower floor makes the policy look *more* collapsed, not less.
+>
+> **Clean, and checked:** EXP-031 (depth 3, and it explicitly discards depth 1 for early
+> termination), EXP-035 (depth 3 only), EXP-032 (uses a 0.60 threshold, not a floor), EXP-045
+> (depth 7, cites no floor). **False positives:** EXP-049's spec and `RESUME-EXP-049.md` mention
+> 0.354, but as a predicted *success rate*, not a modal anchor.
+>
+> The recurrence fix is in `modal_action_fraction`'s docstring, which now carries the full
+> budget-by-depth table instead of two loose figures.
 
 ### Correction 2: entropy saturates while greedy modal fraction does not, so the original instrument check was unreachable
 

@@ -530,10 +530,29 @@ def critic_filename(cfg) -> str:
 def modal_action_fraction(actions) -> float:
     """Fraction of a rollout spent on its single most-common action.
 
-    A policy that has collapsed to a constant action scores 1.0. A uniform policy over
-    the 6 cube moves averages 0.354 over a 9-step budget and 0.429 over 5 steps (measured
-    over 20,000 simulated rollouts, 2026-07-31), so collapse is well separated from
-    chance even on the short budgets used here.
+    A policy that has collapsed to a constant action scores 1.0.
+
+    THE UNIFORM FLOOR IS BUDGET-DEPENDENT, AND QUOTING ONE NUMBER FOR IT IS A KNOWN BUG HERE.
+    An episode at depth `d` runs up to `2d+3` steps, and the floor FALLS as the budget grows,
+    so a value taken from one depth understates collapse at a deeper one. This docstring used
+    to give only the 9-step and 5-step figures, and "0.354" was then quoted at depth 4 and
+    depth 6, where it is wrong. Audited 2026-09-04; see the EXP-038 spec's Correction 1.
+
+    | depth | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+    |---|---|---|---|---|---|---|---|
+    | budget `2d+3` | 5 | 7 | 9 | 11 | 13 | 15 | 17 |
+    | simulated | 0.4288 | 0.3804 | 0.3537 | 0.3352 | 0.3202 | 0.3103 | 0.3010 |
+    | EXP-036 random arms | - | - | 0.3554 | 0.3375 | 0.3214 | 0.3089 | - |
+
+    Simulated over 20,000 uniform rollouts per budget (2026-09-04, seed 20260904); it
+    reproduces the original 2026-07-31 figures and agrees with EXP-036's independently
+    measured random arms to within 0.002 at every depth those cover.
+
+    The two columns are not interchangeable. The simulated row assumes every episode runs its
+    full budget; the EXP-036 row is empirical and includes early termination, which INFLATES
+    the fraction (an episode solved in one move scores 1.0 by construction). Prefer the
+    measured row where it exists, and see EXP-031's confound section before using this metric
+    at a depth where episodes end early.
     """
     if not actions:
         return 0.0
