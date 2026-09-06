@@ -94,6 +94,45 @@ Practical consequences:
 - **Never weaken a passing threshold to make another fix land.** If a change would require that, stop and say so.
 - If a plan hands an implementer a test body, that body carries the plan author's errors verbatim. Review test bodies as carefully as production code.
 
+## The gate-calibration rule
+
+Companion to the test-strength rule above. That one says never write an assertion that cannot
+**fail**. This one says never write a validity gate that cannot **pass**, and never set its
+threshold in a regime other than the one it will run in.
+
+A validity gate is the pre-registered condition that decides whether an experiment's claims may be
+read at all. **Two of the three experiments that have used one got it wrong**, both in 2026-09:
+
+| gate | required | what happened |
+|---|---|---|
+| EXP-057 Claim 4 | `critic_within_rms < 1e-6` | Calibrated on a **depth-3** smoke run measuring 6.8e-10, evaluated at **depth 7**, where 15.6 steps per episode against a return RMS of 4.42 push float reassociation to 5.0e-07. **Passed with 2.0x margin**, not the three orders the spec claimed. A near-miss false VOID. |
+| EXP-058 Claim 3 | `mean_n_stored > 10` | `mean_n_stored` is bounded above by episode length, and depth-6 episodes average **7.76 steps** because the policy solves them before the 15-step cap. **Unsatisfiable by construction.** It voided the experiment. |
+
+**Both are the same shape: a threshold chosen in one regime and applied in another.**
+
+Practical consequences:
+
+- **Compute the gate's maximum attainable value before committing it.** `mean_n_stored` cannot
+  exceed `mean_steps`; one line of arithmetic would have caught it. If the maximum is below the
+  threshold, the gate cannot pass and the experiment is dead before it starts.
+- **Calibrate at the depth, budget and scale it will actually run at.** Both failures came from a
+  cheap proxy measurement standing in for the real regime. A smoke run is the wrong instrument for
+  setting a threshold, however convenient it is.
+- **Prefer a RATIO to an absolute.** EXP-057's gate would have had six orders of margin instead of
+  two as `critic_within_rms / return_within_rms`. A ratio is scale-free; an absolute silently
+  tracks episode length and signal magnitude.
+- **Gate the quantity that DISCRIMINATES the arms.** EXP-058 gated on storing, but its arms differ
+  at the READ site: `use_memory = (readout != "concept")` means all three arms store, and the
+  amnesic arm zeroes `W_rec` on read. Arm A's 6.02 against arm M's 6.17 is the same quantity
+  measured twice. Ask what the arms actually differ in, and measure that.
+- **A gate is more expensive to get wrong than an assertion, and it gets less review**, because it
+  reads like bookkeeping next to the claims. Give it the same scrutiny as the claim it guards.
+- **Amending a gate is legitimate only before a number exists.** EXP-057's threshold was amended
+  that way and the amendment is dated in its spec. EXP-058's was not amended, deliberately: by then
+  the numbers existed, and editing it would have been the outcome-dependent editing the whole
+  practice exists to prevent. **A gate you got wrong costs an experiment. Rewriting it afterwards
+  costs the method.**
+
 ## Architecture invariants
 
 - **`recall=False` means only the sensory region is on the policy path.** The policy head reads the sensory concept, which is computed upstream of the hippocampus, so 318 of the five-region brain's 510 neurons are off-path. Any "does architecture X help?" comparison must first establish what is actually on the policy path, or it measures width rather than topology.
