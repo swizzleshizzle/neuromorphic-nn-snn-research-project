@@ -83,6 +83,30 @@ claim above is void**. The aggregator checks this first and refuses the rest.
 Also gated: arm `S`'s `unshuffled_frac` must be **below 0.20**. If the shuffled query mostly
 coincides with the true one, the shuffle-null is not a null and Claim 4 means nothing.
 
+> [!warning] 2026-09-06: THIS GATE FAILED, AND THE FAULT IS IN THIS SPEC. Recorded before any
+> decision about the claims, and **no threshold is edited here** - numbers now exist, so editing
+> one would be the outcome-dependent editing pre-registration exists to prevent.
+>
+> **The gate was UNSATISFIABLE BY CONSTRUCTION.** `mean_n_stored` counts stores in one episode and
+> the hippocampus is cleared per episode, so it is bounded above by that episode's step count.
+> Depth-6 episodes average **7.76 steps**, because this policy solves most of them well before the
+> 15-step cap. Requiring `> 10` therefore required a mean episode longer than any this arm
+> produces. Measured: arm M stores 6.17 over 7.75 steps, **0.796 stores per step**.
+>
+> **It also does not discriminate between the arms it was meant to validate.** `cube_baseline` sets
+> `use_memory = (cfg.readout != "concept")`, so all three arms store; the amnesic arm zeroes
+> `W_rec` at the READ site only. Arm A stores 6.02 and arm M stores 6.17. That is the same quantity
+> measured twice, not a difference.
+>
+> **What the gate was FOR is nonetheless satisfied.** It existed to catch the historical
+> `Hippocampus.store()` bug, which held exactly one pattern. 0.8 stores per step is not that. But
+> "the thing I was worried about did not happen" is not the same as "the condition I wrote passed",
+> and this spec's contract says a failed gate voids the claims.
+>
+> **A correct gate would verify RECALL differs between M and A**, not that storing happens - for
+> instance a non-zero norm of the recall block in M against an exactly-zero one in A. That is what
+> a re-specification should use, decided with these numbers set aside.
+
 ### Claim 4, SECONDARY - `M` minus `S`
 
 **The harm of INCORRECT memory, and it is not evidence about the benefit of correct memory.**
