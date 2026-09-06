@@ -106,8 +106,15 @@ action. **The lever at depth 6 is EXP-031/032 territory, not the curriculum.**
 | 50% | 0.735 | 0.230 | 0.1078 |
 | 75% | 0.757 | 0.249 | 0.0921 |
 
-The uniform floor is 0.354. **The best arm is the least collapsed**, and modal fraction rises
+The uniform floor is **0.3375**. **The best arm is the least collapsed**, and modal fraction rises
 monotonically with share from 25% upward, exactly tracking the decline in success.
+
+> [!note] CORRECTED 2026-09-04 (audit `^bbd0`). This said **0.354**, which is the **depth-3**
+> figure at a 9-step budget. **This table is depth 4**, which runs `2d+3 = 11` steps, and the floor
+> there is **0.3375** (EXP-036's random arms; 0.3352 simulated). **No conclusion changes**: Claim 5
+> is a within-table comparison of 0.685 against 0.757, and the floor is context for how collapsed
+> those are. If anything the correct floor makes every arm here slightly *more* collapsed relative
+> to chance, which strengthens the claim rather than weakening it.
 
 This is a coherent mechanism rather than a bare score: **time spent at the deepest stage pushes
 the policy toward a constant action.** Deep states give sparser reward, so more of the budget
