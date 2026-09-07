@@ -6,63 +6,64 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project, start of Week 23. Nothing is running, the laptop
-is idle, and main is clean at 08c60bd with no branches and no open PRs.
+Picking up the neuromorphic cube project, Week 23. Nothing is running, the laptop is idle, and
+main is clean at 99dcfdd with no branches and no open PRs.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-09-03.md first, then CLAUDE.md. IGNORE the 08-31
-handoff. It is three experiments out of date AND its item 2 proposes an arm that the data
-has since disqualified - following it would spend six hours building a control that cannot
-answer its own question.
+Read docs/handoffs/SESSION-HANDOFF-2026-09-07.md first, then CLAUDE.md. IGNORE the 09-03
+handoff (out of date) and DO NOT ACT ON the 08-31 one at all: its item 2 proposes an arm that
+is disqualified, and building it would waste six hours on a control whose confound is aligned
+with its own hypothesis.
 
-Where we are: a spiking network solves 2x2 cubes at depth 6 around 0.30. Five facts shape
+Where we are: a spiking network solves 2x2 cubes at depth 6 around 0.36. Five facts shape
 everything:
 
-1. THE CRITIC'S BENEFIT IS ITS WITHIN-EPISODE STATE-DEPENDENCE, and this reverses what
-   EXP-053 wrote down. That experiment reported "the mechanism is measurably absent" from a
-   critic explained variance of 0.0021 - but that number is the FINAL STAGE ONLY. By stage
-   it is +0.4702 at depth 1 and +0.2054 at depth 2, every seed positive at depths 1-3.
-   EXP-056 then flattened V(s_t) to its own episode mean and lost 0.0646 at p 0.0234,
-   collapsing the arm to the EMA baseline it was meant to beat. Do NOT build the
-   batch-mean-baseline arm the 08-31 handoff proposes: it forms G_t - mean(G), which is
-   exactly zero on a one-step episode, and depth 1 averages 1.22 steps per episode.
+1. READ "THE GATE-CALIBRATION RULE" IN CLAUDE.md BEFORE WRITING A VALIDITY GATE. Two of the
+   three experiments that used one got it wrong this month, both the same shape: a threshold
+   chosen in one regime and applied in another. EXP-058 is VOID because its gate required
+   mean_n_stored > 10, a quantity bounded by episode length, in a setting where episodes
+   average 7.76 steps. Unsatisfiable by construction. Compute a gate's maximum attainable
+   value before committing it.
 
-2. FIVE INSTRUMENTS NOW MOVE AGAINST POLICY QUALITY: the EXP-033 probe, pretraining
-   move-accuracy, the entropy trace, S (refuted outright by EXP-055, not merely
-   unevaluated), and critic_ev. Use revisit_rate and optimality. critic_ev MUST NOT gate
-   critic work - EXP-056's worse-performing arm had the BETTER-fitting critic at every
-   stage. Do not put a probe number, an entropy number, an S number, or a critic_ev number
-   in a new spec.
+2. THE CRITIC QUESTION IS CLOSED. Its benefit is within-episode state-dependence, not
+   calibration. EXP-056 showed flattening V(s_t) to its episode mean costs -0.0646; EXP-057
+   showed a state-blind fitted constant beats the lagging EMA by only +0.0088 at p 0.7822.
+   Everything without within-episode dependence sits 0.1358-0.1558; the full critic sits at
+   0.2004. That is a SHAPE across two experiments, not a resolved decomposition.
 
-3. THE PRETRAINING LEFT EDGE IS REAL AND THE EXP-039/040 FRAMING SURVIVES. One epoch
-   reaches 0.0854, only 42.5% of the plateau, and e10 - e1 is +0.1158 at p 0.0098. Roughly
-   42.5% of the benefit is escaping random init and 57.5% is the objective. Only e1 -> e2
-   resolves (+0.0629); the other adjacent steps are UNRESOLVED at ~10% power, not flat.
+3. FIVE INSTRUMENTS MOVE AGAINST POLICY QUALITY: the EXP-033 probe, pretraining move-accuracy,
+   the entropy trace, S, and critic_ev. Use revisit_rate and optimality. Do not put any of the
+   five in a new spec. And remember unanimity at p 0.0005 measures an instrument's consistency,
+   not its link to the outcome - the probe was unanimous at every depth and still ranked seeds
+   no better than chance.
 
 4. THE LAPTOP IS NOT READY TO DISPATCH. Its worktree C:\Users\mlgbr\wt-exp053 is on
-   exp-056-flattened-critic at e7e0d73, one commit behind a branch that no longer exists on
-   origin. Sync it to main with sync_repo.ps1 (-Repo and -Branch are parameters), never a
-   bare checkout. Expect untracked files to move to an attic; 114 already did. THE WORKTREE
-   HAS NO .venv, so the only interpreter imports the MAIN checkout's src unless PYTHONPATH
-   overrides it - that failure is silent and produces a complete, plausible, wrong result.
-   Both launch055_wt.ps1 and launch056_wt.ps1 refuse to start unless neuromorphic.__file__
-   resolves under the worktree. Copy that gate.
+   exp-058-memory-reask at 4a96137, two commits behind a branch that no longer exists on
+   origin. Sync it to main with sync_repo.ps1 (-Repo and -Branch are parameters), never a bare
+   checkout. THE WORKTREE HAS NO .venv, so the only interpreter imports the MAIN checkout's src
+   unless PYTHONPATH overrides it, silently and plausibly. Copy the gate in any launch0NN_wt.ps1.
 
-5. THE BASH TOOL DEFAULT TIMEOUT IS 120s AND 600s IS A HARD CEILING. Always pass an
-   explicit timeout. Split any suite so no single call approaches 600s; the tests/training
-   remainder is ~837s and must be backgrounded. Never put "run the whole suite" in a
-   task-scoped brief. And NEVER pass comma-separated arguments over ssh: cmd.exe eats the
-   commas, and the resulting failure EXITS ZERO. Verify a launch by probing for records and
-   worker processes, never by the ssh exit code.
+5. OPERATIONAL: the Bash default timeout is 120 s and 600 s is a hard ceiling, so always pass
+   an explicit timeout and split suites. NEVER pass comma-separated arguments over ssh - cmd.exe
+   eats the commas and the failure EXITS ZERO. Verify a launch by probing for records and worker
+   processes, never by an exit code. Long background commands get killed here around 2-3 h with
+   empty output; foreground chunks under 600 s are reliable.
 
-Highest-value open item: the CONSTANT-CRITIC arm, already pre-registered in EXP-056's spec
-section 5. A single learned scalar with no state input, fitted by the same MSE loss at the
-same rate. It differs from arm B in exactly one way and from the EMA baseline in exactly one
-way, and it has no one-step degeneracy. It separates calibration from between-episode
-state-dependence, which EXP-056 deliberately could not. About 4-6 h on the idle laptop.
+Highest-value open item, and it needs a design decision BEFORE any dispatch: a successor to
+EXP-058. Its claim thresholds were never contaminated and can be reused, but THE SEEDS ARE
+BURNED - runs here are byte-identical, so re-running seeds 0-11 under a corrected gate
+reproduces exactly the void records, which is laundering rather than replication. An
+uncontaminated re-test needs new seeds (expensive: E2 encoders exist only for seeds 0-11, so it
+means re-running the EXP-047 and EXP-049 chains first) or a different measurement, such as the
+same question at another depth on a base config whose encoders already exist more widely. The
+second is cheaper and is genuinely new rather than a repeat.
 
-Also open: repeating EXP-056 at higher n (p 0.0234 against a 0.025 threshold is thin for a
-result this load-bearing), and the memory re-ask, which needs the full three-arm design at
-depth 6, roughly 15 h, and its own pre-registration.
+Its prior: the effects to detect are about -0.03 for memory vs amnesic and -0.045 for shuffled
+vs amnesic, both under the +0.05 bar EXP-058 set. Raise n or lower the bar deliberately and say
+which first. Gate on RECALL differing between arms, not on storing.
+
+Also open: repeating EXP-056 at higher n (~25 h, not the ~6 h an earlier note claimed, because
+14 h of it is re-manufacturing encoders), EXP-055's two leads, and a standing note on the five
+retired instruments.
 
 Both are yours to schedule; nothing decays if they wait.
 ```
@@ -71,22 +72,21 @@ Both are yours to schedule; nothing decays if they wait.
 
 ## Why it is shaped that way
 
-It opens by disowning the 08-31 handoff, because that document does not merely go stale, it
-carries an **actively wrong instruction**. Its item 2 proposes the per-episode batch-mean arm,
-which EXP-053's corrected by-stage numbers disqualify: the arm loses gradient exactly where the
-critic predicts best, so the confound is aligned with the hypothesis.
+It opens on the gate-calibration rule rather than on a result, because that is the failure mode
+actively costing experiments: **EXP-058 spent 20.2 hours and produced nothing reportable**, and the
+cause was one arithmetic check nobody did before committing the spec.
 
 Three things most likely to be lost otherwise:
 
-**`critic_ev` is retired, and it is the fifth instrument to go.** The pattern is now consistent
-enough that a new spec citing any single-number instrument as evidence about policy quality should
-be treated as suspect by default. EXP-056's own pilot predicted the wrong answer from `critic_ev`,
-and running the pre-registered arm anyway is what caught it.
+**The seeds are burned, and that is not obvious.** Byte-identical seeded runs are normally an asset
+here, used as a correctness check. After a void experiment they become a liability: the obvious
+"fix the gate and re-run" produces the same records and licenses nothing. A fresh session will
+reach for it immediately.
 
-**The laptop's worktree is stale in a way that does not error.** It sits on a deleted branch, one
-commit behind, with 114 files in an attic. A bare checkout will either fail or, worse, run the
-wrong library and produce a plausible number.
+**EXP-058's void run still reproduced EXP-030's trap.** Memory beat the shuffle-null and did not
+beat the amnesic control, exactly as in 2026-07 on a policy 15x worse. The same two-arm design
+would have reported a win both times. That is the reason the successor keeps three arms.
 
-**"Unanimous at p 0.0005" is not evidence of behavioural relevance.** The probe re-analysis found
-the probe unanimous at every depth and still unable to rank the seeds better than chance. That
-phrase appears in several older `RESULTS.md` files and reads far stronger than it is.
+**The EXP-056 repeat is ~25 h, not ~6 h.** An earlier handoff priced it by costing the arm and
+forgetting it has neither controls nor encoders at new seeds. Anyone re-deriving that estimate
+should check what exists at which seed before quoting a number.
