@@ -16,7 +16,7 @@ at `1ba9089` before any number existed. **No threshold has been edited**, before
 | | |
 |---|---|
 | Run | `SwizzlesDuo`, worktree at `4a96137`, 6 workers, launched 2026-09-04 20:02 |
-| Arms | A (amnesic) **12/12**, M (memory) **12/12**, S (shuffled) pending at time of writing |
+| Arms | A (amnesic), M (memory), S (shuffled), **all 12/12. Run completed 2026-09-06 17:59.** |
 | Cost, measured | **3.37 h per cell** (6 workers x 13.46 CPU-hours over 4 cells each) |
 | Projected total | 6 waves x 3.37 h = **~20.2 h**, inside the spec's stated 17-30 h |
 | Interruption | the laptop slept in transit for ~26 h of the 39.7 h wall clock. **No work was lost**: the process tree survived and resumed on wake, and no record was corrupted. |
@@ -57,17 +57,46 @@ But *"the failure I was guarding against did not occur"* is not *"the condition 
 Treating them as equivalent, after seeing the numbers, is precisely the reasoning a pre-registration
 exists to prevent. **So the claims stay void.**
 
+## Claim 3's SECOND gate passed
+
+The spec gated two things. The `mean_n_stored > 10` condition failed as described above. The other
+condition, that arm S's `unshuffled_frac` stay **below 0.20** so the shuffle-null is genuinely a
+null, **PASSED**: mean 0.1652, worst seed 0.1727. **The shuffle machinery works.** Only the
+storing gate failed, and only because it was mis-specified.
+
 ## The numbers, which this document does NOT license anyone to interpret
 
-Recorded for provenance only. **They carry no CONFIRMED or REFUTED status, and must not be cited as
+Recorded for provenance only. **They carry no CONFIRMED or REFUTED status and must not be cited as
 a result.**
 
-| | arm M | arm A | delta | W-L-T | p |
-|---|---|---|---|---|---|
-| success_rate | 0.3154 | 0.3425 | -0.0271 | 4-7-1 | 0.2246 |
-| revisit_rate | 0.2620 | 0.2541 | +0.0079 | 9-3-0 | 0.1479 |
+| arm | success | revisit_rate | mean_steps | mean_n_stored |
+|---|---|---|---|---|
+| A, amnesic | **0.3425** | 0.2541 | 7.76 | 6.02 |
+| M, memory | 0.3154 | 0.2620 | 7.75 | 6.17 |
+| S, shuffled | 0.2979 | 0.2613 | 7.82 | 6.06 |
+
+| contrast | delta | W-L-T | p |
+|---|---|---|---|
+| M - A (would have been Claim 1) | -0.0271 | 4-7-1 | 0.2246 |
+| M - A on `revisit_rate` (Claim 2) | +0.0079 | 9-3-0 | 0.1479 |
+| M - S (would have been Claim 4) | +0.0175 | 7-5-0 | 0.5659 |
+| S - A (not a claim) | **-0.0446** | 3-9-0 | 0.0859 |
 
 Context, not a control: `exp049_fresh2_d6` (concept readout) = 0.3579.
+
+> [!important] THE ORDERING REPRODUCES EXP-030'S TRAP EXACTLY, AND THAT IS WORTH RECORDING EVEN
+> FROM A VOID RUN.
+> **Memory beats the shuffle-null (+0.0175) and does NOT beat the amnesic control (-0.0271).**
+> EXP-030 found the identical structure: +10.8 points over the shuffle-null, +1.2 over amnesic.
+> Six years of cube experiments apart, on a policy 15x better, **the same two-arm design would
+> have reported memory as a win both times.**
+>
+> The largest contrast here is **S - A at -0.0446, p 0.0859**, the closest thing to a signal in the
+> table: *incorrect* memory hurts. That is what a memory-versus-shuffle-null comparison actually
+> measures, and it is why the spec fixed M vs A as primary before any number existed. **That
+> decision was vindicated even though the gate that would have licensed reading it was not.**
+>
+> None of this is a result. It is a reason to run the successor.
 
 ## What a correct gate would be
 
@@ -99,8 +128,12 @@ result a test.
 
 ## What this experiment did establish
 
-- **The memory machinery runs at depth 6 on a working policy**, at 0.796 stores per step, and the
-  three-arm design executes end to end. That was never true before: EXP-030 ran it on a 2.2% policy.
+- **The memory machinery runs at depth 6 on a working policy**, at 0.796 stores per step, with the
+  shuffle-null verified genuinely null at `unshuffled_frac` 0.1652. The three-arm design executes
+  end to end. That was never true before: EXP-030 ran it on a 2.2% policy.
+- **The successor has a concrete prior**: if the ordering above holds, the effect to detect is
+  around -0.03 for M vs A and -0.045 for S vs A, both well under the +0.05 bar the spec set. A
+  successor should either raise n or lower the bar deliberately, and say which before running.
 - **The cost is now measured**: 3.37 h per cell, ~20.2 h for 36 cells at 6 workers.
 - **A long run survives a laptop sleeping in transit.** 26 h of the 39.7 h wall clock was sleep; the
   process tree resumed and no record was lost or corrupted.
