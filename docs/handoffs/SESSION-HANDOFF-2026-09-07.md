@@ -159,5 +159,5 @@ Same trap as last time, and it does not error.
 - `docs/superpowers/specs/2026-09-04-exp058-memory-reask-design.md` - the gate diagnosis is
   annotated in place
 - `experiments/probe_reanalysis/RESULTS.md` - why unanimity is not relevance
-- Vault: `experiment-log.md` (current through EXP-057 plus three dated corrections),
+- Vault: `experiment-log.md` (current through EXP-058 plus four dated corrections),
   `road-to-a-solved-cube.md`
