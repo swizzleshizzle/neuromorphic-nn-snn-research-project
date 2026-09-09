@@ -304,15 +304,22 @@ and leave workers computing into the void?) and **effective cores sampled inside
 > cheap signal that separates the three causes, which otherwise look identical from the client:
 >
 > ```bash
-> tailscale status | grep swizzlesduo          # trailing field is last-seen, or "-" if online now
+> tailscale status | grep swizzlesduo
 > tailscale ping swizzlesduo                   # routing vs sshd
 > ```
 >
-> | last seen | meaning |
+> Both real forms, observed on this host:
+>
+> ```
+> 100.120.6.78   swizzlesduo   mlgbro64@   windows   -
+> 100.120.6.78   swizzlesduo   mlgbro64@   windows   offline, last seen 1d ago
+> ```
+>
+> | trailing field | meaning |
 > |---|---|
-> | online now | the peer is up. Your client died, not the job. Reconnect and probe. |
-> | minutes to hours ago | **the machine slept**, most likely a laptop lid in transit. The job is paused, not dead, and resumes on wake. |
-> | days ago, or absent | genuinely offline. Only now is "the run is gone" worth considering. |
+> | `-` | the peer is up. **Your client died, not the job.** Reconnect and probe. |
+> | `offline, last seen` minutes to hours | **the machine slept**, most likely a laptop lid in transit. The job is paused, not dead, and resumes on wake. |
+> | `offline, last seen` days, or the peer absent | genuinely offline. Only now is "the run is gone" worth considering. |
 >
 > **Sleep is the common case and it is invisible in wall clock.** EXP-058 slept **26 h of its 39.7 h**
 > and finished correctly. Judge progress by **CPU-hours per worker**
