@@ -22,3 +22,14 @@ gymnasium>=0.29
 jupyter>=1.0
 ipykernel>=6.29
 pytest>=8.0
+
+# The project itself, plus the dashboard/server extra.
+#
+# WHY THIS LINE EXISTS. Without it a fresh checkout cannot even COLLECT `tests/server`: those
+# tests import `fastapi` and `starlette.testclient`, and a collection error fails the WHOLE
+# pytest run rather than just those 7 tests. The same line installs `neuromorphic` editable,
+# which every other test needs to import at all.
+#
+# It references pyproject's `[project.optional-dependencies] server` rather than restating
+# fastapi/uvicorn/httpx here, so the two files cannot drift apart.
+-e .[server]

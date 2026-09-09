@@ -290,10 +290,34 @@ and leave workers computing into the void?) and **effective cores sampled inside
 > "the run is at 15% and probably broken" when a controlled 60-second sample said 7.34 effective
 > cores, i.e. 73%, matching the documented 74.2%.
 
-> [!note] Client-side exit 124 or 255 says nothing about the job - verified 2026-08-07
+> [!note] Client-side exit 124, 143 or 255 says nothing about the job - verified repeatedly
 > EXP-038's dispatching ssh hit its own 50-minute client timeout (exit 124). The whole process
 > tree survived, launcher powershell included. `ssh -n` plus no `Start-Process` is what makes
 > that hold. Probe before reacting.
+>
+> **2026-09: this happened five more times and the run was healthy every time.** EXP-055 reported
+> **exit 143** because the controller's own `timeout 64800` fired **one minute before** the job
+> wrote its final line; EXP-057 and EXP-058 the same. `143` is SIGTERM, which is what `timeout`
+> sends, so it usually means YOUR timeout fired, not that anything went wrong remotely.
+>
+> **BEFORE CONCLUDING ANYTHING, CHECK THE TAILSCALE PEER'S LAST-SEEN TIMESTAMP.** It is the one
+> cheap signal that separates the three causes, which otherwise look identical from the client:
+>
+> ```bash
+> tailscale status | grep swizzlesduo          # trailing field is last-seen, or "-" if online now
+> tailscale ping swizzlesduo                   # routing vs sshd
+> ```
+>
+> | last seen | meaning |
+> |---|---|
+> | online now | the peer is up. Your client died, not the job. Reconnect and probe. |
+> | minutes to hours ago | **the machine slept**, most likely a laptop lid in transit. The job is paused, not dead, and resumes on wake. |
+> | days ago, or absent | genuinely offline. Only now is "the run is gone" worth considering. |
+>
+> **Sleep is the common case and it is invisible in wall clock.** EXP-058 slept **26 h of its 39.7 h**
+> and finished correctly. Judge progress by **CPU-hours per worker**
+> (`Get-Process ... | ForEach-Object { $_.CPU }`), never by elapsed time: 6 workers at 13.46
+> CPU-hours over 4 completed cells is 3.37 h per cell regardless of how long the laptop was shut.
 
 ### Manual probe (the older recipe)
 
@@ -370,10 +394,17 @@ correctness check: if a re-run diverges, the seeding discipline is broken, not t
 
 In rough order of what to try:
 
-1. `tailscale status` on the VPS. Is the laptop listed and online?
-2. Is the laptop awake? Check whether it has suspended; sleep is the most common cause.
+1. `tailscale status` on the VPS. Is the laptop listed, and **what is its last-seen timestamp?**
+   That field is the decisive one: online-now means your client died, a gap of minutes to hours
+   means the machine slept, and days means genuinely offline. See the exit-code note in section 6.
+2. Is the laptop awake? Sleep is the most common cause **and it does not reboot the machine**, so
+   `LastBootUpTime` will look untouched. Check that before assuming a shutdown.
 3. `tailscale ping swizzlesduo` from the VPS to distinguish a routing problem from an SSH problem.
 4. Fall back to the LAN address only if the session is physically on the home network.
+
+**If a run was in flight, do not assume it died.** A slept laptop resumes it. Probe with
+`probe_run.ps1` and compare **CPU-hours per worker** against completed cells; wall clock includes
+the sleep and will badly understate progress.
 
 Do not silently drop to `StrictHostKeyChecking=no` or force-add keys to get past an error. A host key
 mismatch on a tailnet address deserves a look, not a workaround.
