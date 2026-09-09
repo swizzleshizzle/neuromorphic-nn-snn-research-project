@@ -44,6 +44,31 @@ ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.N
 | 04:16 | 0.43 h | 0.42 | 0 |
 | 05:50 | 2.00 h | 1.72 | 0 |
 | 07:23 | 3.55 h | **3.21** | **0** |
+| 08:41 | 4.85 h | unreachable | unreachable |
+
+**2026-09-09 08:41 UTC: THE LAPTOP IS ASLEEP. The run is PAUSED, not dead.** All three probes
+returned `ssh exit 255`, and the peer field is the thing that distinguishes the causes:
+
+```
+100.120.6.78  swizzlesduo  mlgbro64@  windows  active; relay "iad"; offline, last seen 1h ago, tx 1716 rx 0
+```
+
+`offline, last seen 1h ago` is the **slept** row of the playbook's table, not the dead one. It ran
+to roughly 07:41 UTC and suspended there. Windows sleep suspends the worker processes; it does not
+kill them, so **nothing needs re-dispatching and no work is lost on wake** - EXP-058 slept 26 h of
+its 39.7 h and finished correctly.
+
+> [!warning] **A SHUTDOWN, UNLIKE A SLEEP, WOULD LOSE EVERYTHING SO FAR.**
+> Records are written only on cell completion, and **no cell has completed**. So the ~3.3 CPU-h on
+> each of 6 workers exists only in process memory. A sleep preserves it; a reboot or shutdown
+> discards all of it and `--skip-existing` would have nothing to skip.
+>
+> This is the one point in the run where the loss from a shutdown is maximal, and it stays that way
+> until wave 1 lands. **If the laptop must be restarted, it costs ~20 CPU-hours.**
+
+**Per-cell cost is therefore still unpinned at `>3.21 CPU-h`.** The wall-clock ETA is now
+indeterminate because it depends on when the laptop wakes; what is determinate is the remaining
+work, **at least 35 CPU-h per worker** of the >=38.5 total.
 
 **CPU tracks wall clock at 0.904, so the laptop has not slept.** Six workers advance in lockstep;
 the two processes at 0 CPU are the launcher and its parent.
