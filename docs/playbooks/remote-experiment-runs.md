@@ -382,6 +382,28 @@ per-process `WorkingSet64` before you panic:
 ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Name + \" ws_mb=\" + [math]::Round($_.WorkingSet64/1MB,0) }"'
 ```
 
+**NEVER PASS COMMA-SEPARATED ARGUMENTS OVER SSH, and this one exits ZERO.** `cmd.exe` treats
+commas as argument separators, so `-Epochs 1,2,3,5` arrives at PowerShell as the single token
+`1235`. EXP-055 lost a dispatch to exactly that: `ValidateSet` refused it correctly, but
+**PowerShell parameter binding fails BEFORE the script body runs and sets no exit code**, so the
+dispatching ssh returned 0 and the harness reported the background task "completed" while nothing
+had started. Use a switch (`-AllArms`) instead of a list, and **verify a launch by probing for
+records and worker processes, never by an exit code.**
+
+**Long background commands are killed in this environment, repeatedly, around the 2-3 hour mark.**
+Observed at least six times across 2026-09 with empty output and no OOM evidence: dispatching ssh
+calls, `-m slow` pytest runs, and a polling watcher. **It never cost work** - the Windows run always
+survived, because Windows has no SIGHUP semantics - **but it does cost the completion
+notification.** Consequences:
+
+- **Foreground chunks under 600 s are reliable**; prefer them for anything you need a result from.
+- **A polling watcher works only if it is sized under the limit.** One that polls every 5 minutes
+  survives about 33 polls.
+- **`| tail` buffers everything until the process exits**, so a killed piped command prints
+  NOTHING and tells you nothing about how far it got. Redirect to a file on the remote side
+  (`Tee-Object`) if you need to know.
+- **Do not re-launch the same long background command hoping for a different outcome.** Split it.
+
 **Quoting through `cmd.exe` is the main source of wasted cycles.** Three specific traps:
 
 - A trailing backslash before a closing quote gets eaten, so `$d + "file.log"` silently becomes
