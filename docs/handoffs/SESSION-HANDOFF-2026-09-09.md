@@ -4,7 +4,8 @@
 > clock runs a day behind the VPS's; do not read that as a stale timestamp). 72 cells, 6 workers,
 > **estimated ~30 h**, so it spans at least one laptop sleep.
 >
-> **`main` is at `945133a`+ and clean. Work sits on branch `exp-059-memory-depth5`, unmerged.**
+> **`main` is at `60245b6` and clean. Work sits on branch `exp-059-memory-depth5` (`bbea390`, 5
+> commits ahead), unmerged and pushed.**
 
 ## 0. RESUMING THE RUN - do this first
 
