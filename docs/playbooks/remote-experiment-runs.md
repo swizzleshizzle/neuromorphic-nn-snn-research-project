@@ -340,13 +340,63 @@ and leave workers computing into the void?) and **effective cores sampled inside
 > | trailing field | meaning |
 > |---|---|
 > | `-` | the peer is up. **Your client died, not the job.** Reconnect and probe. |
-> | `offline, last seen` minutes to hours | **the machine slept**, most likely a laptop lid in transit. The job is paused, not dead, and resumes on wake. |
+> | `offline, last seen` minutes to hours | the machine is **unreachable**. Sleep and reboot look IDENTICAL here. See the warning below - do not call this "paused". |
 > | `offline, last seen` days, or the peer absent | genuinely offline. Only now is "the run is gone" worth considering. |
+
+> [!warning] **THE LAST-SEEN FIELD CANNOT DISTINGUISH A SLEEP FROM A REBOOT, AND THE DIFFERENCE IS
+> THE WHOLE RUN.** This table used to claim the middle row meant "the machine slept, the job is
+> paused, not dead". **That is false and it cost EXP-059.**
+>
+> On 2026-09-09 the laptop read `offline, last seen 1h ago` and was reported as sleeping, with
+> "nothing is lost", for **13 hours across five checks**. It had in fact been rebooted by Windows
+> Update at 07:35 UTC, ~3.75 h into the run. Every worker was gone, no cell had completed, and the
+> outputs directory was **empty** - about **19 CPU-hours destroyed**, with `--skip-existing`
+> having nothing to skip.
+>
+> **An unreachable peer is an UNKNOWN, not a paused job.** The verdict is only available once the
+> machine answers again, and it takes three readings together:
+>
+> ```bash
+> ssh -n laptop 'powershell -NoProfile -Command "\"UP_H=\" + [math]::Round(((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours,2); \"PY=\" + @(Get-Process | Where-Object { $_.ProcessName -match \"python\" }).Count"'
+> ```
+>
+> | uptime | python procs | verdict |
+> |---|---|---|
+> | larger than the run's age | > 0 | **slept and resumed.** This is the benign case the old table assumed was the only one. |
+> | **less than the run's age** | **0** | **REBOOTED. The run is dead.** Count the records to price the loss. |
+> | larger than the run's age | 0 | the process tree died without a reboot. Read the log tail for a traceback. |
+>
+> **Fast Startup makes `LastBootUpTime` untrustworthy on its own** - a hybrid shutdown preserves the
+> original boot time across a power cycle, so uptime can look continuous when the machine was off.
+> **Corroborate with the log's mtime and the record count**, which are on disk and cannot lie.
 >
 > **Sleep is the common case and it is invisible in wall clock.** EXP-058 slept **26 h of its 39.7 h**
 > and finished correctly. Judge progress by **CPU-hours per worker**
 > (`Get-Process ... | ForEach-Object { $_.CPU }`), never by elapsed time: 6 workers at 13.46
 > CPU-hours over 4 completed cells is 3.37 h per cell regardless of how long the laptop was shut.
+
+### BEFORE ANY LONG DISPATCH: check the laptop's pending Windows Updates
+
+**Windows Update killed EXP-059 3.75 h into a ~45 h run**, unprompted, with reason
+`Operating System: Upgrade (Planned)`:
+
+```
+09-09 03:35  id=1074  TrustedInstaller.exe has initiated the restart of computer SWIZZLESDUO
+             on behalf of NT AUTHORITY\SYSTEM: Operating System: Upgrade (Planned)
+```
+
+Read the reboot history before dispatching anything longer than a few hours:
+
+```bash
+ssh -n laptop 'powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName=\"System\"; Id=1074,6008,41} -MaxEvents 6 | ForEach-Object { $_.TimeCreated.ToString(\"MM-dd HH:mm\") + \" :: \" + ($_.Message -split \"`n\")[0] }"'
+```
+
+**A TrustedInstaller entry in the recent past means another one is coming.** Michael must defer or
+pause updates for the run's duration; that is his call to make, not something to work around.
+
+**This interacts badly with how records are written.** Nothing is durable until a cell COMPLETES,
+so a run always carries a rolling exposure of `workers x per-cell-hours` - about 20 CPU-h at 6
+workers and 3.3 h/cell. Before wave 1 lands, that exposure is the ENTIRE run.
 
 ### The laptop is on EDT, UTC-4. Convert before comparing any two timestamps.
 

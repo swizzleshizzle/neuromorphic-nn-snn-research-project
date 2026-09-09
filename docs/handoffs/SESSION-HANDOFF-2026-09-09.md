@@ -1,105 +1,59 @@
-# Session Handoff - 2026-09-09 (Week 23) - A RUN IS IN FLIGHT
+# Session Handoff - 2026-09-09 (Week 23) - EXP-059 WAS DESTROYED BY A WINDOWS UPDATE
 
-> **EXP-059 IS RUNNING ON THE LAPTOP.** Dispatched 2026-09-08 23:50 laptop-local, which is
-> **2026-09-09 03:50 UTC**. 72 cells, 6 workers. **The ~30 h estimate is REFUTED; measured cost
-> puts this at ~45 h, floor 42.6 h** - see the progress table in section 0. It spans at least one
-> laptop sleep.
+> **EXP-059 IS DEAD. Nothing is running. Nothing was salvaged.** Windows Update rebooted the laptop
+> at **2026-09-09 07:35 UTC**, 3.75 h into a ~45 h run, reason `Operating System: Upgrade
+> (Planned)`. No cell had completed, records are written only on completion, and the outputs
+> directory is **empty**. **About 19 CPU-hours are gone and `--skip-existing` has nothing to skip.**
 >
-> **CORRECTION, measured 2026-09-09 04:16 UTC: the laptop is on EDT, UTC-4. It is NOT "a day
-> behind", which an earlier draft of this document claimed.** Laptop 00:16 against VPS 04:16 is a
-> four-hour timezone offset, nothing more. Always convert before comparing a laptop timestamp to a
-> VPS one, and never subtract a day.
+> **No numbers exist, so nothing about the experiment is contaminated.** The spec, the calibrated
+> gate and the pre-registered claims are all untouched and re-dispatchable as they stand.
 >
-> **`main` is at `60245b6` and clean. Work sits on branch `exp-059-memory-depth5` (`bbea390`, 5
-> commits ahead), unmerged and pushed.**
+> **`main` is at `60245b6` and clean. Work sits on branch `exp-059-memory-depth5`, unmerged and
+> pushed.**
 
-## 0. RESUMING THE RUN - do this first
+## 0. WHAT HAPPENED, AND THE DIAGNOSIS THAT WAS WRONG FOR 13 HOURS
 
-**Check whether it finished before anything else:**
+| UTC | elapsed | CPU-h/worker | records | |
+|---|---|---|---|---|
+| 04:16 | 0.43 h | 0.42 | 0 | healthy |
+| 05:50 | 2.00 h | 1.72 | 0 | healthy |
+| 07:23 | 3.55 h | **3.21** | 0 | healthy, last good reading |
+| **07:35** | 3.75 h | - | - | **Windows Update reboot. Run destroyed.** |
+| 08:41 - 18:43 | - | unreachable | - | reported as "asleep, nothing lost" - **WRONG** |
+| 21:43 | - | **0 procs** | **0** | machine awake, empty outputs dir |
 
-```bash
-ssh -n laptop 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\mlgbr\probe_run.ps1 -OutDir "C:\Users\mlgbr\wt-exp053\experiments\059_memory_depth5\outputs"'
-ssh -n laptop 'powershell -NoProfile -Command "@(Get-ChildItem -Path \"C:\Users\mlgbr\wt-exp053\experiments\059_memory_depth5\outputs\" -Filter \"exp059_*.json\").Count"'
-```
+**The misdiagnosis is the durable lesson.** From 08:41 the laptop read `offline, last seen 1h ago`,
+and the playbook's own table said that meant "the machine slept, the job is paused, not dead". So
+it was reported as paused, five times over 13 hours. **The last-seen field cannot tell a sleep from
+a reboot**, and the difference is the entire run. The playbook table has been corrected, with the
+three-reading test (uptime, python process count, record count) that actually decides it.
 
-**72 records means done.** Then:
-
-```bash
-scp "laptop:C:/Users/mlgbr/wt-exp053/experiments/059_memory_depth5/outputs/exp059_*.json" experiments/059_memory_depth5/outputs/
-scp "laptop:C:/Users/mlgbr/wt-exp053/experiments/059_memory_depth5/outputs/*_head.pt" experiments/059_memory_depth5/outputs/
-```
-
-**JUDGE PROGRESS BY CPU-HOURS PER WORKER, NEVER BY WALL CLOCK.** EXP-058 slept **26 h of its
-39.7 h** in transit and finished correctly. A worker's CPU time divided by completed cells is the
-real per-cell cost:
-
-```bash
-ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Id.ToString() + \" \" + [math]::Round($_.CPU/3600,2) }"'
-```
-
-### Progress readings, and the ~30 h estimate is REFUTED
-
-| UTC | elapsed | CPU-h/worker | records |
-|---|---|---|---|
-| 04:16 | 0.43 h | 0.42 | 0 |
-| 05:50 | 2.00 h | 1.72 | 0 |
-| 07:23 | 3.55 h | **3.21** | **0** |
-| 08:41 | 4.85 h | unreachable | unreachable |
-
-**2026-09-09 08:41 UTC: THE LAPTOP IS ASLEEP. The run is PAUSED, not dead.** All three probes
-returned `ssh exit 255`, and the peer field is the thing that distinguishes the causes:
+**The evidence, once the machine answered:**
 
 ```
-100.120.6.78  swizzlesduo  mlgbro64@  windows  active; relay "iad"; offline, last seen 1h ago, tx 1716 rx 0
+BOOT   = 2026-09-09 03:35:58 laptop-local = 07:35:58 UTC   (uptime 14.12 h)
+PYPROC = 0        ALLPROC = 348        outputs dir = 0 files
+log mtime = 2026-09-08 23:50:22 laptop-local, i.e. unchanged since launch
+event 1074 = TrustedInstaller.exe ... "Operating System: Upgrade (Planned)"
 ```
 
-`offline, last seen 1h ago` is the **slept** row of the playbook's table, not the dead one. It ran
-to roughly 07:41 UTC and suspended there. Windows sleep suspends the worker processes; it does not
-kill them, so **nothing needs re-dispatching and no work is lost on wake** - EXP-058 slept 26 h of
-its 39.7 h and finished correctly.
+## 0b. THE DECISION MICHAEL NEEDS TO MAKE
 
-> [!warning] **A SHUTDOWN, UNLIKE A SLEEP, WOULD LOSE EVERYTHING SO FAR.**
-> Records are written only on cell completion, and **no cell has completed**. So the ~3.3 CPU-h on
-> each of 6 workers exists only in process memory. A sleep preserves it; a reboot or shutdown
-> discards all of it and `--skip-existing` would have nothing to skip.
->
-> This is the one point in the run where the loss from a shutdown is maximal, and it stays that way
-> until wave 1 lands. **If the laptop must be restarted, it costs ~20 CPU-hours.**
+**Re-dispatching costs ~45 h and would run into the same Windows Update pattern.** A second
+TrustedInstaller reboot is likely, and until wave 1 lands (~3.3 h) the exposure is again the whole
+run. So the re-dispatch is worth doing **only alongside deferring updates on the laptop**, which is
+Michael's to do.
 
-**Per-cell cost is therefore still unpinned at `>3.21 CPU-h`.** The wall-clock ETA is now
-indeterminate because it depends on when the laptop wakes; what is determinate is the remaining
-work, **at least 35 CPU-h per worker** of the >=38.5 total.
+Options, in the order they seem sensible:
 
-**CPU tracks wall clock at 0.904, so the laptop has not slept.** Six workers advance in lockstep;
-the two processes at 0 CPU are the launcher and its parent.
+1. **Defer Windows Update, then re-dispatch unchanged.** The spec and gate are intact. ~45 h.
+2. **Re-dispatch at 12 seeds instead of 24** (~22 h, half the exposure), accepting the power hit
+   the spec already documents: n=12 is roughly 30-40% powered at a 0.05 effect. **The spec's n=24
+   was chosen deliberately to halve the standard error**, so this is a real concession, not a
+   free saving.
+3. **Leave it.** Nothing decays. No numbers exist and no claim is pending.
 
-> [!warning] **THE 2.5 h/CELL ESTIMATE IS WRONG. This run is ~45 h, not ~30 h.**
-> At 3.21 CPU-h **no cell has finished**, so per-cell cost is **above 3.21 h**: already 28% over
-> the estimate and within 5% of EXP-058's measured depth-6 figure of 3.37 h.
->
-> **The estimate was derived by scaling EXP-058's 3.37 h DOWN**, on the reasoning that depth 5
-> runs a 13-step budget against 15 and one fewer curriculum stage. **That reasoning is wrong
-> because the episode count is fixed at 10,000 in both.** Fewer stages means 10,000 episodes split
-> 5 ways instead of 6, so the depth-5 run puts *more* episodes in each stage while losing only the
-> deepest one. Summed budget is roughly 90% of depth 6's, not 74%, and early-solving erodes the
-> rest of the gap.
->
-> **Revised: 12 waves at >=3.21 CPU-h is >=38.5 CPU-h, about 42.6 h wall at the measured ratio.**
-> That is a FLOOR. Expect ~44-48 h, finishing **2026-09-10 22:30 UTC at the earliest**, later by
-> however long the laptop sleeps.
->
-> **The record count is a sound progress signal**, verified rather than assumed: the record json is
-> written per cell at `cube_baseline.py:1058`, and the tee'd log at
-> `experiments\059_memory_depth5\phase_rl.log` has not been appended to since launch, which
-> independently confirms no `i/N` completion line has printed.
-
-**If it stopped early**, `--skip-existing` makes resuming free and lossless (seeded runs are
-byte-identical). Re-dispatch with the same launcher.
-
-**Still to do when it lands:** write `aggregate.py` against the pre-registered contract, produce
-`RESULTS.md`, run the suite in chunks, merge `--no-ff`, delete the branch, add the vault row.
-**There is no aggregator yet** - that is deliberate, so it can be written from the spec rather than
-from the numbers.
+**Do not re-dispatch without deferring updates.** That is the one combination that repeats this.
 
 ## 1. What EXP-059 is, and why the design is shaped this way
 
