@@ -1,8 +1,13 @@
 # Session Handoff - 2026-09-09 (Week 23) - A RUN IS IN FLIGHT
 
-> **EXP-059 IS RUNNING ON THE LAPTOP.** Dispatched 2026-09-08 23:50 laptop-local (the laptop's
-> clock runs a day behind the VPS's; do not read that as a stale timestamp). 72 cells, 6 workers,
-> **estimated ~30 h**, so it spans at least one laptop sleep.
+> **EXP-059 IS RUNNING ON THE LAPTOP.** Dispatched 2026-09-08 23:50 laptop-local, which is
+> **2026-09-09 03:50 UTC**. 72 cells, 6 workers, **estimated ~30 h**, so it spans at least one
+> laptop sleep.
+>
+> **CORRECTION, measured 2026-09-09 04:16 UTC: the laptop is on EDT, UTC-4. It is NOT "a day
+> behind", which an earlier draft of this document claimed.** Laptop 00:16 against VPS 04:16 is a
+> four-hour timezone offset, nothing more. Always convert before comparing a laptop timestamp to a
+> VPS one, and never subtract a day.
 >
 > **`main` is at `60245b6` and clean. Work sits on branch `exp-059-memory-depth5` (`bbea390`, 5
 > commits ahead), unmerged and pushed.**
@@ -30,6 +35,12 @@ real per-cell cost:
 ```bash
 ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Id.ToString() + \" \" + [math]::Round($_.CPU/3600,2) }"'
 ```
+
+**First reading, 2026-09-09 04:16 UTC, 26 min after dispatch:** 0 records, 8 python processes,
+**six workers at 0.42 CPU-h each** and two at 0. 0.42 h of CPU against 0.43 h of wall clock means
+the laptop has **not** slept yet and the workers have run continuously since launch. Wave 1 is
+about 17% through if the 2.5 h/cell estimate holds; that estimate is unconfirmed until wave 1's
+first record lands, which is the number that settles the ~30 h projection.
 
 **If it stopped early**, `--skip-existing` makes resuming free and lossless (seeded runs are
 byte-identical). Re-dispatch with the same launcher.

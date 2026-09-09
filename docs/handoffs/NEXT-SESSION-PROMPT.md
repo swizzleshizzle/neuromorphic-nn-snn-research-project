@@ -73,7 +73,8 @@ after seeing the numbers is how a contract gets bent. The spec is complete enoug
 
 **Wall clock lies on this laptop.** EXP-058 slept 26 of its 39.7 hours in transit and still
 finished correctly, and its records looked stalled for a full day. CPU-hours per worker is the only
-honest progress signal, and the laptop's clock also runs a day behind the VPS's.
+honest progress signal. The laptop is on **EDT, UTC-4** - an earlier draft called that "a day
+behind", which is wrong and would corrupt any ETA arithmetic built on it.
 
 **EXP-058's seeds are burned and EXP-059 exists because of it.** The reflex of "fix the gate and
 re-run" reproduces byte-identical records and licenses nothing. Changing venue to depth 5 is what

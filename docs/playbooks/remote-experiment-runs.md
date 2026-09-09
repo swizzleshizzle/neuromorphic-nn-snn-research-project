@@ -326,6 +326,23 @@ and leave workers computing into the void?) and **effective cores sampled inside
 > (`Get-Process ... | ForEach-Object { $_.CPU }`), never by elapsed time: 6 workers at 13.46
 > CPU-hours over 4 completed cells is 3.37 h per cell regardless of how long the laptop was shut.
 
+### The laptop is on EDT, UTC-4. Convert before comparing any two timestamps.
+
+Measured 2026-09-09: laptop `00:16:47` against VPS `04:16:48` UTC. A launch stamped `2026-09-08
+23:50` laptop-local is `2026-09-09 03:50` UTC, so it looks a **calendar day** stale from here while
+being 26 minutes old.
+
+**That is a four-hour offset and nothing more.** An EXP-059 handoff described it as "a day behind",
+which is wrong and would have corrupted every ETA built on it. The cheap check is to ask for both
+clocks in one call rather than reasoning about it:
+
+```bash
+ssh -n laptop 'powershell -NoProfile -Command "(Get-Date).ToString(\"yyyy-MM-dd HH:mm:ss\")"'; date -u
+```
+
+**CPU-hours versus wall clock is the cross-check that needs no timezone at all.** 0.42 CPU-h against
+0.43 h of elapsed wall clock proves the machine has not slept, whatever either clock reads.
+
 ### Manual probe (the older recipe)
 
 Record-file count is the real progress signal, not the log. Fighting shell quoting on every poll is a
