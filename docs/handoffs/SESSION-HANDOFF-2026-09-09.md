@@ -1,7 +1,8 @@
 # Session Handoff - 2026-09-09 (Week 23) - A RUN IS IN FLIGHT
 
 > **EXP-059 IS RUNNING ON THE LAPTOP.** Dispatched 2026-09-08 23:50 laptop-local, which is
-> **2026-09-09 03:50 UTC**. 72 cells, 6 workers, **estimated ~30 h**, so it spans at least one
+> **2026-09-09 03:50 UTC**. 72 cells, 6 workers. **The ~30 h estimate is REFUTED; measured cost
+> puts this at ~45 h, floor 42.6 h** - see the progress table in section 0. It spans at least one
 > laptop sleep.
 >
 > **CORRECTION, measured 2026-09-09 04:16 UTC: the laptop is on EDT, UTC-4. It is NOT "a day
@@ -36,11 +37,36 @@ real per-cell cost:
 ssh -n laptop 'powershell -NoProfile -Command "Get-Process | Where-Object { $_.Name -match \"^python\" } | ForEach-Object { $_.Id.ToString() + \" \" + [math]::Round($_.CPU/3600,2) }"'
 ```
 
-**First reading, 2026-09-09 04:16 UTC, 26 min after dispatch:** 0 records, 8 python processes,
-**six workers at 0.42 CPU-h each** and two at 0. 0.42 h of CPU against 0.43 h of wall clock means
-the laptop has **not** slept yet and the workers have run continuously since launch. Wave 1 is
-about 17% through if the 2.5 h/cell estimate holds; that estimate is unconfirmed until wave 1's
-first record lands, which is the number that settles the ~30 h projection.
+### Progress readings, and the ~30 h estimate is REFUTED
+
+| UTC | elapsed | CPU-h/worker | records |
+|---|---|---|---|
+| 04:16 | 0.43 h | 0.42 | 0 |
+| 05:50 | 2.00 h | 1.72 | 0 |
+| 07:23 | 3.55 h | **3.21** | **0** |
+
+**CPU tracks wall clock at 0.904, so the laptop has not slept.** Six workers advance in lockstep;
+the two processes at 0 CPU are the launcher and its parent.
+
+> [!warning] **THE 2.5 h/CELL ESTIMATE IS WRONG. This run is ~45 h, not ~30 h.**
+> At 3.21 CPU-h **no cell has finished**, so per-cell cost is **above 3.21 h**: already 28% over
+> the estimate and within 5% of EXP-058's measured depth-6 figure of 3.37 h.
+>
+> **The estimate was derived by scaling EXP-058's 3.37 h DOWN**, on the reasoning that depth 5
+> runs a 13-step budget against 15 and one fewer curriculum stage. **That reasoning is wrong
+> because the episode count is fixed at 10,000 in both.** Fewer stages means 10,000 episodes split
+> 5 ways instead of 6, so the depth-5 run puts *more* episodes in each stage while losing only the
+> deepest one. Summed budget is roughly 90% of depth 6's, not 74%, and early-solving erodes the
+> rest of the gap.
+>
+> **Revised: 12 waves at >=3.21 CPU-h is >=38.5 CPU-h, about 42.6 h wall at the measured ratio.**
+> That is a FLOOR. Expect ~44-48 h, finishing **2026-09-10 22:30 UTC at the earliest**, later by
+> however long the laptop sleeps.
+>
+> **The record count is a sound progress signal**, verified rather than assumed: the record json is
+> written per cell at `cube_baseline.py:1058`, and the tee'd log at
+> `experiments\059_memory_depth5\phase_rl.log` has not been appended to since launch, which
+> independently confirms no `i/N` completion line has printed.
 
 **If it stopped early**, `--skip-existing` makes resuming free and lossless (seeded runs are
 byte-identical). Re-dispatch with the same launcher.

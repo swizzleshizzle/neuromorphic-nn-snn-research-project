@@ -173,6 +173,28 @@ def steps(depth, episodes):
 Add the evaluations: each is `n_states * (2d+3)` steps, and since EXP-036 there are two of them
 per run (held-out and train-side).
 
+> [!warning] **DO NOT SCALE A MEASURED PER-CELL COST TO A NEW DEPTH BY HAND. Use `steps()` above.**
+> **EXP-059 was priced at ~2.5 h/cell and is measured above 3.21 h**, a 28%+ miss that turned a
+> "~30 h" dispatch into ~45 h.
+>
+> The error: EXP-058's depth-6 cell measured **3.37 h**, and depth 5 was scaled down by
+> multiplying the per-episode budget ratio `13/15` by the stage-count ratio `5/6`, giving 0.72.
+> **That double-counts, and this section already says why** - a curriculum SPLITS a fixed episode
+> count across its stages rather than multiplying it. Both runs are 10,000 episodes, so a shallower
+> curriculum puts *more* episodes in each remaining stage and only drops the deepest one:
+>
+> | depth | `steps(depth, 10_000)` |
+> |---|---|
+> | 5 | 90,000 |
+> | 6 | 99,960 |
+>
+> **The real ratio is 0.90, not 0.72**, giving 3.03 h. So the formula would have caught most of the
+> miss. **It is still a floor** - the observed cost exceeds even 3.03 h - so treat a `steps()`-based
+> figure as a lower bound and round up to whole waves as the next section says.
+>
+> **A shallower depth is NOT proportionally cheaper when the episode count is fixed.** That is the
+> reusable form of this mistake.
+
 ### ROUND UP TO WHOLE WAVES. Dividing by `workers` is wrong and it is wrong by a lot.
 
 **Corrected 2026-08-22, after EXP-047 was estimated at 23 h and took 42 h.** The old formula here
