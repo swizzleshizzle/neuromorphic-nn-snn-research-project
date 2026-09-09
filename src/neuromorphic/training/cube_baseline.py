@@ -307,12 +307,24 @@ class MemoryReadout:
     that a win is just "wider head reading the current state" rather than memory helping.
     """
 
+    # EXP-059 instrumentation. Sampled, because it costs a second hippocampal read.
+    RECALL_PROBE_STRIDE = 8
+
     def __init__(self, mode: str, rng: random.Random, brain):
         self.mode = mode
         self.rng = rng
         self.brain = brain
         self._cache: list[torch.Tensor] = []
         self.unshuffled_steps = 0
+        # EXP-059's validity gate: does the hippocampus's STORED CONTENT change the recall at
+        # all? Accumulates cosine(real recall, W_rec-zeroed recall) on sampled steps. A value
+        # near 1.0 means stored content contributes nothing and a memory-vs-amnesic contrast is
+        # vacuous by construction. This measures the hippocampus, not the readout, which is why
+        # it is the right thing to gate on: EXP-058 gated on STORING and learned nothing,
+        # because all three arms store.
+        self.recall_cos_sum = 0.0
+        self.recall_cos_n = 0
+        self._probe_step = 0
 
     def reset(self) -> None:
         """Drop the episode's cached concepts. Call at every episode start."""
@@ -320,6 +332,35 @@ class MemoryReadout:
             raise ValueError(f"unknown readout {self.mode!r}")
         self._cache = []
         self.unshuffled_steps = 0
+        self.recall_cos_sum = 0.0
+        self.recall_cos_n = 0
+        self._probe_step = 0
+
+    def _probe_recall(self, query: torch.Tensor, recall: torch.Tensor) -> None:
+        """EXP-059's gate instrument: how much of `recall` is the STORED CONTENT?
+
+        Recomputes the same read with `W_rec` zeroed and accumulates the cosine between them.
+        The docstring above records 0.802 measured over 79 real policy steps, so a healthy
+        hippocampus sits well below 1.0; a value AT 1.0 means the attractor contributed nothing
+        and the memory-versus-amnesic contrast has nothing to measure.
+
+        Sampled every `RECALL_PROBE_STRIDE` steps because it costs a second hippocampal read.
+        """
+        self._probe_step += 1
+        if (self._probe_step - 1) % self.RECALL_PROBE_STRIDE:
+            return
+        saved = self.brain.hippo.W_rec
+        self.brain.hippo.W_rec = torch.zeros_like(saved)
+        try:
+            bare = self.brain.hippo(
+                query.unsqueeze(0).expand(self.brain.T, *query.shape)
+            ).mean(dim=0)[0]
+        finally:
+            self.brain.hippo.W_rec = saved
+        denom = float(recall.norm()) * float(bare.norm())
+        if denom > 0:
+            self.recall_cos_sum += float(torch.dot(recall, bare)) / denom
+            self.recall_cos_n += 1
 
     def __call__(self, out: dict) -> torch.Tensor:
         # EXP-047. The concept path returns BEFORE the `no_grad` below, deliberately.
@@ -374,6 +415,7 @@ class MemoryReadout:
                 query.unsqueeze(0).expand(self.brain.T, *query.shape)
             ).mean(dim=0)[0]                                # [content]
             fam = self.brain.hippo.familiarity(query)       # [B]
+            self._probe_recall(query, recall)
             return torch.cat([concept, recall, fam[:1]])
 
 
@@ -750,6 +792,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         episodes_run = 0
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
+        recall_cos_sum, recall_cos_n = 0.0, 0
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
         # ...and for the same reason it never enters the stage loop that fills this. Empty is the
         # honest value, not a missing key: EXP-042 added `stage_trace` and every floor arm before
@@ -854,6 +897,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         baseline = 0.0
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
+        recall_cos_sum, recall_cos_n = 0.0, 0
         entropies = []
         gate_fn = None
         if cfg.plasticity_gate == "dopamine":
@@ -923,6 +967,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 revisits += len(env.visited) - len(set(env.visited))
                 stored_counts.append(agent.hippo.n_stored if use_memory else 0)
                 unshuffled_steps += readout.unshuffled_steps
+                recall_cos_sum += readout.recall_cos_sum
+                recall_cos_n += readout.recall_cos_n
                 if encoder_optimizer is not None:
                     gate_calls += 1
                     gate_opens += int(stats["gate_open"])
@@ -994,6 +1040,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "mean_train_entropy": (sum(entropies) / len(entropies)) if entropies else 0.0,
         "stage_trace": stage_trace,
         "mean_n_stored": (sum(stored_counts) / len(stored_counts)) if stored_counts else 0.0,
+        # EXP-059's validity gate. Cosine between the real recall and a W_rec-zeroed one, so
+        # ~1.0 means the attractor's stored content changed nothing and a memory-versus-amnesic
+        # contrast is vacuous. Absent for readouts with no real recall to probe.
+        "recall_content_cos": (recall_cos_sum / recall_cos_n) if recall_cos_n else None,
+        "recall_probe_n": recall_cos_n,
         "unshuffled_steps": unshuffled_steps,
         "unshuffled_frac": (unshuffled_steps / steps_total) if steps_total else 0.0,
         "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},
