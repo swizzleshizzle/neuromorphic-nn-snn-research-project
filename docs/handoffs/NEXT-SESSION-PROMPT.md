@@ -6,71 +6,78 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project, Week 23. NOTHING IS RUNNING.
+Picking up the neuromorphic cube project, Week 23. EXP-059 IS RUNNING on the laptop, ETA
+around 2026-09-11 16:30 UTC. Everything that does not need the laptop is already done.
 
-EXP-059 was dispatched and then DESTROYED by a Windows Update reboot on the laptop at
-2026-09-09 07:35 UTC, 3.75 hours in. No cell had completed, records are written only on
-completion, so the outputs directory is empty and about 19 CPU-hours were lost. No numbers
-exist, so nothing is contaminated - the spec, the calibrated gate and the pre-registered
-claims are intact and re-dispatchable as they stand.
+Read docs/handoffs/SESSION-HANDOFF-2026-09-09.md FIRST - sections 0c, 0d and 0e - then
+CLAUDE.md. Ignore every earlier handoff.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-09-09.md FIRST, sections 0 and 0b, then CLAUDE.md.
-Ignore every earlier handoff.
+FIRST ACTION: check the run with the THREE-READING TEST in
+docs/playbooks/remote-experiment-runs.md, not by ssh exit code. Run age is measured from
+2026-09-09 23:14 UTC. If uptime is LESS than the run age, or python processes are 0 while the
+machine answers, it was rebooted; count records to price the loss. If ssh fails entirely the
+state is UNKNOWN, not "paused" - a sleep and a reboot are indistinguishable from outside, and
+misreading that as "nothing is lost" is how the first EXP-059 attempt was reported healthy for
+13 hours while its workers no longer existed.
 
-THERE IS A DECISION WAITING FOR MICHAEL, in section 0b: re-dispatch unchanged (~45 h),
-re-dispatch at 12 seeds (~22 h, but n=24 was chosen deliberately to halve the standard
-error), or leave it. DO NOT RE-DISPATCH WITHOUT DEFERRING WINDOWS UPDATE on the laptop -
-that combination is exactly what destroyed the first attempt, and a second TrustedInstaller
-reboot is likely.
+DO NOT WRITE aggregate.py. It already exists, with 22 tests, written from the spec while zero
+records existed and verified by probe. Rewriting it from the numbers is exactly what the
+pre-registration discipline exists to prevent. When 72 records land: scp them and the *_head.pt
+back, RUN the existing aggregator, produce RESULTS.md, run the suite in chunks, merge --no-ff,
+delete the branch, add the vault row.
+
+MICHAEL NEEDS TO DEFER WINDOWS UPDATE on the laptop (Settings > Windows Update > Pause
+updates). A TrustedInstaller reboot destroyed the first attempt 3.75 h in, costing ~19
+CPU-hours, and the registry write is blocked by the permission classifier here. Still not done.
 
 Five facts shape everything:
 
-1. AN UNREACHABLE TAILSCALE PEER IS AN UNKNOWN, NOT A PAUSED JOB. "offline, last seen 1h
-   ago" cannot distinguish a sleep from a reboot. The playbook used to say it meant "slept,
-   the job is paused, not dead"; that was false and EXP-059 was reported as healthy for 13
-   hours while its workers no longer existed. The corrected three-reading test - uptime,
-   python process count, record count - is in the playbook.
+1. AN UNREACHABLE TAILSCALE PEER IS AN UNKNOWN, NOT A PAUSED JOB. The playbook used to say
+   "offline, last seen 1h ago" meant the machine slept and the job was paused. That was false
+   and it cost an experiment. The corrected three-reading test is uptime, python process
+   count, record count - and nothing is durable until a cell COMPLETES, so a run always
+   carries a rolling exposure of workers x per-cell-hours.
 
-2. NOTHING IS DURABLE UNTIL A CELL COMPLETES. Records are written per cell at
-   cube_baseline.py:1058, so a run carries a rolling exposure of workers x per-cell-hours,
-   about 20 CPU-h at 6 workers. Before wave 1 lands that exposure is the entire run.
+2. READ docs/retired-instruments.md BEFORE PUTTING ANY INSTRUMENT IN A SPEC. Five are retired:
+   the EXP-033 probe, pretraining move-accuracy, the entropy trace, S, and critic_ev. Every one
+   works as a THRESHOLD and fails as a GRADIENT. Use revisit_rate and optimality.
 
 3. READ "THE GATE-CALIBRATION RULE" IN CLAUDE.md BEFORE WRITING OR READING A VALIDITY GATE.
    EXP-058 was VOID because its gate required mean_n_stored > 10, bounded by episode length
    where episodes average 7.76 steps. EXP-059's gate was calibrated across its full range
-   BEFORE its spec: empty attractor 1.000000, random loaded 0.9437, real depth-5 run 0.8128,
-   threshold 0.95.
+   before its spec: empty attractor 1.000000, real depth-5 run 0.8128, threshold 0.95.
 
-4. EXP-059's primary is M vs A and it is NOT directional. EXP-030's trap is that memory beats
-   the shuffle-null while losing to the amnesic control; EXP-058 reproduced it exactly on a
-   policy 15x better. A significant -0.05 is a real finding that memory HURTS.
+4. EXP-059's primary is M vs A and it is NOT directional. A significant -0.05 is a real finding
+   that memory HURTS, not a failed confirmation. EXP-030's trap is that memory beats the
+   shuffle-null while losing to the amnesic control, and EXP-058 reproduced it exactly.
 
-5. THE CRITIC QUESTION IS CLOSED - the benefit is within-episode state-dependence, not
-   calibration. FIVE INSTRUMENTS MOVE AGAINST POLICY QUALITY: the EXP-033 probe, pretraining
-   move-accuracy, the entropy trace, S, and critic_ev. Use revisit_rate and optimality.
+5. DO NOT SCALE A MEASURED PER-CELL COST TO A NEW DEPTH BY HAND - use the playbook's steps()
+   helper. EXP-059 was priced at 2.5 h/cell and measured 3.05, because the estimate multiplied
+   the step-budget ratio by the stage-count ratio and a curriculum SPLITS a fixed episode count
+   across stages. steps() predicted 3.03 against the measured 3.05.
 
-Cost note: EXP-059 was priced at 2.5 h/cell and measured above 3.21 h, because the estimate
-multiplied the step-budget ratio by the stage-count ratio. A curriculum SPLITS a fixed
-episode count across stages; the playbook's steps() helper gives 0.90, not 0.72. A shallower
-depth is not proportionally cheaper when the episode count is fixed.
+NEXT AFTER EXP-059: dispatch EXP-060, the independent replication of EXP-056. Spec is written
+and pre-registered; ~14 h. Its primary is seeds 14-23 alone, NOT the pooled n=22, because
+extending an experiment because its p-value was marginal and then pooling is optional stopping.
 ```
 
 ---
 
 ## Why it is shaped that way
 
-It opens with the loss and the pending decision, because the single worst outcome would be a fresh
-session cheerfully re-dispatching 45 hours into an un-deferred Windows Update.
+It opens with the run and the three-reading test, because the expensive failure this month was not
+the Windows Update reboot - it was reporting a dead run as healthy for 13 hours on the strength of a
+playbook table that could not tell a sleep from a reboot.
 
 Three things most likely to be lost otherwise:
 
-**The misdiagnosis, not just the failure.** The run died at 07:35 and was reported as "asleep,
-nothing lost" five times over 13 hours, because the playbook's own table said an unreachable peer
-meant a paused job. Recording only "Windows Update killed it" would leave the reasoning error in
-place to be repeated.
+**The aggregator already exists.** A fresh session that writes one from the records would destroy
+the single property that makes it trustworthy, and it would look like diligence while doing it.
 
-**Nothing is contaminated.** No cell completed, so no number exists. That is the one piece of good
-news and it is easy to miss under the loss: the pre-registration survives completely intact.
+**Nothing is durable until a cell completes.** Records land only on completion, so "the run has been
+going for hours" says nothing about how much survives an interruption. Before wave 1, the answer is
+nothing.
 
-**The exposure window is structural.** Records land only on cell completion, so any re-dispatch
-carries the same rolling ~20 CPU-h risk, and the whole-run risk until wave 1 lands.
+**Cost estimates here are wrong in a consistent direction.** Two were corrected this week: EXP-059
+was under-priced by hand-scaling a measured cell, and EXP-060 was over-priced by ~11 h because
+nobody checked which encoders already existed. Check the inventory and use `steps()`.

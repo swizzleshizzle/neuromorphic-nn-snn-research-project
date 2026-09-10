@@ -79,7 +79,7 @@ lines carry per-cell seconds directly.
 At ~3.4 h/cell and the measured 0.904 CPU/wall ratio, 12 waves is **~45 h wall, ETA around
 2026-09-11 20:00 UTC**, plus any sleep.
 
-## 0e. WAVE 1 LANDED - the per-cell cost is MEASURED, and the playbook formula was right
+## 0d. WAVE 1 LANDED - the per-cell cost is MEASURED, and the playbook formula was right
 
 **2026-09-10 02:40:48 UTC: the first 6 records exist**, all arm A, seeds 0-5. Readings at
 04:07 UTC: uptime 20.52 h against a run age of 4.88 h (no reboot), 8 processes, six workers at
@@ -120,60 +120,75 @@ CPU-h cell. The plausible reading is contention from Windows Update staging its 
 rebooted the machine 12 minutes later. **That is a hypothesis, not an established cause**, and it
 is recorded as one.
 
-## 0d. PLAN FOR SESSION 2 OF WEEK 23 - the laptop is occupied for ~45 h
+## 0e. SESSION 2 OF WEEK 23 - DONE. All three items, all laptop-free.
 
-**That single fact sets the agenda: session 2 is the work that needs no laptop.** No second dispatch
-is possible until roughly the evening of 2026-09-11, so anything requiring compute is blocked and
-everything below is deliberately chosen to be independent of it.
+The laptop is occupied until ~2026-09-11 16:30 UTC, so session 2 was scoped to work that needs no
+compute. **All of it is committed and pushed.**
 
-### 1. Write `experiments/059_memory_depth5/aggregate.py` from the spec. FIRST, and time-critical.
+### 1. EXP-059's aggregator - DONE, and written while ZERO records existed
 
-**Its whole value depends on being written before any number exists**, and the run has just started,
-so the window is open now and closes when the first records land. Write it against
-`docs/superpowers/specs/2026-09-09-exp059-memory-depth5-design.md` only.
+`experiments/059_memory_depth5/aggregate.py` plus 22 tests in
+`tests/experiments/test_exp059_aggregate.py`. **Provenance verified by probe, not asserted: 0
+records on the laptop at 2026-09-09 23:47 UTC, workers still in wave 1.** That is the only condition
+under which an aggregator can be honestly written.
 
-What the spec pre-registers, and the aggregator must implement without reinterpretation:
+Three things in it worth knowing before touching it:
 
-- **Claim 3 is a CONDITION and is checked FIRST.** Arm M mean `recall_content_cos` **below 0.95**,
-  and arm S `unshuffled_frac` **below 0.20**. If either fails, **every claim is void and the
-  aggregator must refuse to print the rest** rather than print them with a warning.
-- **Claim 1, PRIMARY, `M` minus `A` on success, NOT directional.** Three pre-registered readings:
-  `>= +0.05` at `p <= 0.05` confirms; **`<= -0.05` at `p <= 0.05` is a real finding that memory
-  HURTS and belongs in the headline**; anything else is a BOUND with its interval and **never an
-  equivalence**.
-- **Claim 2, `M` minus `A` on `revisit_rate`, confirmed at `<= -0.02` and `p <= 0.05`.** Mind the
-  sign: memory is supposed to REDUCE cycling. All four combinations with Claim 1 are pre-registered.
-- **Claim 4, `M` minus `S`**, reported with the sentence that it measures the harm of INCORRECT
-  memory and is **not** evidence about the benefit of correct memory.
-- **Bonferroni 0.0167** across the three inferential contrasts. Claim 3 is a condition, not a
-  contrast.
-- **The permutation test switches on n**: exact when `n <= 20`, otherwise a fixed-seed
-  200,000-sample permutation, and **it must PRINT which it used**. At n=24 exhaustive is 16.8M
-  sign flips.
+- **It deliberately does NOT import `describe_contrast`** from EXP-055/056/057. All three hardcode
+  `T95_DF11 = 2.201`, the multiplier at df=11 for n=12. **This is n=24, where it is 2.069**, so
+  reusing that code would report every interval about 6% too wide. There is a df-indexed table
+  instead.
+- **A missing `recall_content_cos` is a gate FAILURE, never a pass.** `None` coerced to 0.0 would
+  sail under a "below 0.95" ceiling while measuring nothing - the mirror of EXP-058's gate that
+  could not pass.
+- **The sampled permutation uses an add-one estimator**, because plain `hits/draws` can print
+  `p = 0.0000` and claim an exactness the sampling cannot support.
 
-**Test it against synthetic records, not the real ones**, and per the test-strength rule make each
-assertion fail against a deliberately broken aggregator: a gate that cannot fail, a sign flipped on
-Claim 2, an equivalence claimed from a bound.
+**Every test was verified to fail against the specific bug it names**, by mutating the aggregator
+eleven ways and confirming each mutation is caught. **That found a real gap**: nothing covered a
+PARTIAL probe failure, where one seed is `None` and the mean of the other 23 sits comfortably under
+the ceiling, so the gate would have passed on 23 of 24 arms while claiming to check all of them.
 
-### 2. The standing note on the five retired instruments.
+**Reading the output on a synthetic world found a second gap the tests had not.** At a significant
+`-0.045` the wording reported only the magnitude. That is the likeliest outcome given EXP-058's
+ordering, and EXP-057's Claim 2 at `-0.0446` needed "do NOT call this a null" written into its prose
+because the wording did not say it. The sub-bar branch now names the direction.
 
-Deferred three handoffs running and now has enough instances to write once: the EXP-033 probe,
-pretraining move-accuracy, the entropy trace, `S`, and `critic_ev`. **The unifying point is that
-unanimity at `p 0.0005` measures an instrument's consistency, not its link to the outcome.** Include
-`critic_ev` must not gate critic work, since EXP-056's worse arm had the better-fitting critic at
-every stage.
+### 2. The retired-instruments note - DONE
 
-### 3. Spec the EXP-056 repeat so it is ready the moment the laptop frees.
+`docs/retired-instruments.md`, with a pointer from `CLAUDE.md`. Deferred across three handoffs.
 
-~25 h, of which **14 h is re-manufacturing encoders**. Worth doing because `p 0.0234` against a
-`0.025` threshold is thin for a result two experiments lean on. Writing the spec now costs nothing
-and removes the design work from the critical path.
+**The synthesis is that these are not bad measurements: every one works as a THRESHOLD and fails as
+a GRADIENT.** Each detects that an intervention happened; none measures how much it helped. The
+recurring error is seeing an instrument and the outcome move together across one coarse contrast and
+reading that as if it held per seed.
 
-### Not in session 2
+It also records **why this system generates them so readily**: with `recall=False` only the sensory
+region is on the policy path, so an instrument reading a representation can measure something the
+policy never consults. And it carries four checks to run before adopting a new instrument, the
+sharpest being that **a pilot selecting on an unvalidated proxy can cancel the arm that was going to
+work** - which is what EXP-053's lr pilot nearly did to arm B.
 
-- **Anything needing the laptop.** Blocked until ~2026-09-11 evening.
-- **Merging the branch.** It carries EXP-059's driver and cannot merge before its `RESULTS.md`.
-- Vault `0576` and `0817` still need Michael.
+### 3. EXP-060, the EXP-056 replication - SPECED, not dispatched
+
+`docs/superpowers/specs/2026-09-10-exp060-flattened-critic-replication-design.md`.
+
+**Its real problem is statistical, not computational.** Extending an experiment because its p-value
+was marginal and then pooling is **optional stopping**. So the primary is an **independent
+replication on seeds 14-23 alone**, which no decision was based on, and the pooled n=22 is secondary
+with that caveat attached whenever quoted. **The primary is underpowered at ~50-60%, and EXP-056's
+`-0.0646` is itself upward-biased because it was selected for significance**, so a null primary is
+pre-registered as a bound.
+
+> [!note] **COST CORRECTED DOWNWARD: ~14 h, not the ~25 h this handoff carried.**
+> Three reasons, and two of them were simply never checked:
+> 1. **E1 encoders already exist for seeds 0-13, not 0-11** - EXP-047's pilot ran on seeds 12 and 13
+>    and those encoders were kept. **10 seeds are needed, not 12.**
+> 2. **E0 is already manufactured for all 24 seeds**, as a side effect of EXP-059. The ~1.7 h every
+>    previous estimate carried is already spent.
+> 3. **Worker counts chosen to DIVIDE the cell count.** 10 and 20 cells both divide by 10. Note the
+>    playbook measures per-cell time as WORSE at 10 workers than 6; the gain is in removing a ragged
+>    final wave, not in parallelism.
 
 ## 1. What EXP-059 is, and why the design is shaped this way
 
@@ -237,14 +252,27 @@ scale-free, so it cannot repeat EXP-057's regime-dependence.
 
 ## 3. Open items
 
-1. **Finish EXP-059** (section 0).
-2. **Repeat EXP-056 at higher n, ~25 h**, of which 14 h is re-manufacturing encoders. `p 0.0234`
-   against `0.025` is thin for a result two experiments lean on.
-3. **EXP-055's two leads**: what one epoch builds that helps policy while making `S` worse than
-   random, and whether `e2` is a cheaper recipe at 74% of `e10` for a fifth of the cost.
-4. **A standing note on the five retired instruments.** Enough instances now to write once.
+**Everything laptop-free is done.** What remains is either waiting on compute or waiting on Michael.
+
+1. **Finish EXP-059.** Running, ETA ~2026-09-11 16:30 UTC. When 72 records exist: `scp` them and
+   the `*_head.pt` back, run the **already-written** `aggregate.py` (do NOT rewrite it - it was
+   authored from the spec before any number existed), produce `RESULTS.md`, run the suite in chunks,
+   merge `--no-ff`, delete the branch, add the vault row.
+2. **Dispatch EXP-060** once the laptop frees. Spec is written and pre-registered; ~14 h. Vault todo
+   added.
+3. **DEFER WINDOWS UPDATE ON THE LAPTOP - needs Michael.** Settings > Windows Update > Pause
+   updates. The registry write is blocked by the permission classifier here. This is what destroyed
+   the first EXP-059 attempt.
+4. **EXP-055's two leads**, both needing compute and neither specced: what one epoch builds that
+   helps policy while making `S` worse than random, and whether `e2` is a cheaper encoder recipe at
+   74% of `e10` for a fifth of the cost. **Deliberately not specced** - EXP-060 has a stronger claim
+   on the next slot, and specs written far ahead of their dispatch tend to be re-derived anyway.
 5. **Vault, needs Michael**: `0576` see the dashboard render once, `0817` decide the Phase 0/1
    progress-tracker checkpoints.
+
+**Vault `4f13` (re-ask the EXP-030 memory question) is what EXP-059 IS**, and it is deliberately
+left open: it is not done until `RESULTS.md` exists, and per the secretary convention a task is
+ticked when Michael says so, not when the work looks finished.
 
 ## 4. Standing facts
 
