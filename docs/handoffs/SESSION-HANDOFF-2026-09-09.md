@@ -104,11 +104,28 @@ worker, so there is no fractional-wave guesswork:
 **That is EARLIER than the 16:30 previously quoted**, because the old figure used wave 1's 3.44 h,
 which included process startup and was never representative.
 
-**The assumption is doing all the work, and it is untested.** Arms M and S perform real hippocampal
-recall where A reads a `W_rec`-zeroed one, plus the `recall_content_cos` probe every 8 steps.
-**48 of the 72 cells are still unpriced.** The first arm-M completion, expected around **14:30
-UTC**, is the reading that settles it - and it is the first number in this run that could move the
-ETA in either direction.
+### Arm M is now priced too, and it is only 7% dearer
+
+**2026-09-10 14:43 UTC: arm M's first wave of 6 is done** (30/72 total: amnesic 24, memory 6,
+shuffled 0). Arm A's last completion was 11:27 and arm M's sixth was 14:43, so one arm-M wave is
+**3.27 h wall per cell** against arm A's 3.054 - a **7% premium**, not the step change the extra
+hippocampal recall and the every-8-steps probe might have caused.
+
+| segment | cells | per cell | span |
+|---|---|---|---|
+| arm A | 24, done | 3.054 h | 12.22 h |
+| arm M | 24, 6 done | **3.27 h** | ~13.1 h |
+| arm S | 24, 0 done | assumed 3.27 h | ~13.1 h |
+| **total** | | | **~38.4 h** |
+
+**Revised ETA: 2026-09-11 13:40 UTC**, plus any sleep. Arm S remains an assumption, though a
+shuffled read costs what a real one does, so it is a much safer one than arm M was.
+
+> [!warning] **DO NOT COMPUTE A PRELIMINARY M-VERSUS-A CONTRAST.** Six arm-M seeds against their
+> arm-A partners is a runnable contrast right now, and looking at it would contaminate the analysis
+> the pre-registration exists to protect - the aggregator checks the validity gate FIRST for exactly
+> this reason, and the gate cannot be evaluated until arm M is complete. **Cost readings are the
+> only thing to take from a partial run.**
 
 ## 0e. SESSION 2 OF WEEK 23 - DONE. All three items, all laptop-free.
 
