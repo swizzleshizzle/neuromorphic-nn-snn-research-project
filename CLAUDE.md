@@ -170,6 +170,11 @@ reintroduce one.
 - **n >= 12 seeds.** n=5 lied in EXP-026 and the de-noised result flipped.
 - **Measure the chance floor, do not assume it.** On the cube it is 21% at depth 1, not 1/6, because a random walk with a `2d+3` budget can stumble into solved.
 - **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for. EXP-030 is the worked example: `memory` beat the shuffle-null by 10.8 points (p 0.078) and beat the amnesic control by 1.2 (p 0.91). The primary comparison was measuring the harm of *incorrect* memory, not the benefit of correct memory. Three arms would have published a false positive.
+- **FIVE INSTRUMENTS ARE RETIRED and must not gate a decision**: the EXP-033 probe, pretraining
+  move-accuracy, the entropy trace, `S`, and `critic_ev`. Use `revisit_rate` and `optimality`.
+  Each works as a THRESHOLD and fails as a GRADIENT, and "unanimous at p 0.0005" measures an
+  instrument's consistency rather than its link to the outcome. Full note with the evidence and
+  the four checks to run before adopting a new instrument: `docs/retired-instruments.md`.
 - **Prefer a mechanism measurement to a performance measurement.** "Memory did not help" is weak and unactionable. "Memory was on the policy path, cycles were abundant, and the revisit rate did not fall" localises the failure to the readout. Instrument the mechanism the intervention is supposed to drive, not just the score.
 - **Read real output, not only green tests.** A cube frame labelled `solved: yes` on a scrambled cube passed every unit test in the suite; two minutes reading an actual recorded trace found it. Same pattern as the filename collision that was visible in an implementer's own smoke output. Tests prove what you thought to assert; output shows what you did not.
 - **No scipy in the venv.** For n around 12, an exact paired permutation test over all `2**n` sign flips is cheap, assumption-free, and better than a normal approximation. 12 seeds is 4096 flips.
