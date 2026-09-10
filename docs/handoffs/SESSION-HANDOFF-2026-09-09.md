@@ -79,53 +79,36 @@ lines carry per-cell seconds directly.
 At ~3.4 h/cell and the measured 0.904 CPU/wall ratio, 12 waves is **~45 h wall, ETA around
 2026-09-11 20:00 UTC**, plus any sleep.
 
-## 0d. WAVE 1 LANDED - the per-cell cost is MEASURED, and the playbook formula was right
+## 0d. ARM A IS COMPLETE - the cost is now measured cleanly, and a units error is corrected
 
-**2026-09-10 02:40:48 UTC: the first 6 records exist**, all arm A, seeds 0-5. Readings at
-04:07 UTC: uptime 20.52 h against a run age of 4.88 h (no reboot), 8 processes, six workers at
-**4.32 CPU-h**, ratio **0.885**, no sleep.
+**2026-09-10 11:27 UTC: all 24 arm-A cells are done.** Arms M and S have produced **zero** records,
+because the driver is arm-major (`sweep_configs` iterates `for key in arms` outside
+`for seed in seeds`). Readings at 13:07 UTC: uptime 29.52 h against a run age of 13.88 h, 8
+processes, six workers at 12.27 CPU-h, ratio **0.884**, no sleep, no reboot.
+
+> [!warning] **CORRECTION: earlier entries said "~3.05 CPU-h per cell". That is the WALL figure,
+> not the CPU one.** The two were conflated across several readings. **3.05 h is wall time per
+> cell; the CPU cost is 2.70 CPU-h.** Projections must use the wall figure, and the CPU figure is
+> only for the sleep check.
+
+**Arm A, measured cleanly rather than extrapolated** - 24 cells on 6 workers is exactly 4 per
+worker, so there is no fractional-wave guesswork:
 
 | quantity | value |
 |---|---|
-| wave 1, launch to 6th completion | 23:14 -> 02:40 UTC, **3.44 h wall** |
-| per cell | **~3.05 CPU-h** at the measured ratio |
-| projected total, 12 waves | **~41.3 h wall** |
-| **ETA** | **2026-09-11 16:30 UTC**, plus any sleep |
+| arm A, launch to last completion | 23:14 -> 11:27 UTC, **12.22 h wall** |
+| per cell | **3.054 h wall**, 2.70 CPU-h |
+| **projected total IF M and S match A** | 12 cells per worker x 3.054 = **36.7 h** |
+| **ETA on that assumption** | **2026-09-11 11:53 UTC** |
 
-> [!note] **THE CORRECTED `steps()` FORMULA PREDICTED 3.03 CPU-H. MEASURED ~3.05.**
-> That is the playbook fix validating itself on the first real number. The hand-scaled 2.5 h
-> estimate that priced this run was the error, and its cause is recorded there: multiplying the
-> step-budget ratio by the stage-count ratio double-counts, because a curriculum SPLITS a fixed
-> episode count across stages. **Use `steps()`; do not scale a measured cell by hand.**
+**That is EARLIER than the 16:30 previously quoted**, because the old figure used wave 1's 3.44 h,
+which included process startup and was never representative.
 
-**Two corrections to expectations set earlier this session:**
-
-1. **The log does NOT carry per-cell seconds.** It prints `0s` on every line, because
-   `run.py` reads `r.get("seconds", 0)` and the record has no `seconds` field. Per-cell cost had
-   to be inferred from the log's mtime instead. Any future check that promises "the log carries
-   per-cell seconds" is wrong; **the mtime of the last completion is the usable signal**.
-2. **41.3 h is a FLOOR, and the reason is STRUCTURAL rather than incidental.** `sweep_configs`
-   iterates `for key in arms` OUTSIDE `for seed in seeds`, so the driver is **arm-major**: all 24
-   arm-A cells run before arm M starts, and all 24 of M before S. Confirmed at 23 records, every
-   one of them `exp059_amnesic_d5`.
-
-   **So every cost measurement of this run so far is arm A, the cheapest arm, and 48 of the 72
-   cells are unpriced.** Arms M and S do real hippocampal recall where A reads a `W_rec`-zeroed
-   one, plus the `recall_content_cos` probe every 8 steps. **If they are slower, the ETA slips and
-   nothing measured so far would have shown it.** Re-price when the first arm-M record lands, which
-   is the next genuinely informative reading.
-
-**Descriptive, decides nothing, but worth a second look at write-up time:** arm A's first six
-successes are 0.395, 0.340, 0.310, 0.280, 0.160 and **0.000**, mean ~0.248 against the
-`exp043_capped_d5` context of 0.3229. A seed at exactly 0.000 is a collapsed policy rather than a
-noisy one. **No claim is affected** - the contrasts are paired by seed, so a low arm-A seed is
-subtracted from the same seed's arm M - but it belongs in `RESULTS.md` rather than being noticed
-for the first time by a reader.
-
-**Attempt 1 showed 3.21 CPU-h with zero records at a comparable age**, which does not fit a 3.05
-CPU-h cell. The plausible reading is contention from Windows Update staging its upgrade, which
-rebooted the machine 12 minutes later. **That is a hypothesis, not an established cause**, and it
-is recorded as one.
+**The assumption is doing all the work, and it is untested.** Arms M and S perform real hippocampal
+recall where A reads a `W_rec`-zeroed one, plus the `recall_content_cos` probe every 8 steps.
+**48 of the 72 cells are still unpriced.** The first arm-M completion, expected around **14:30
+UTC**, is the reading that settles it - and it is the first number in this run that could move the
+ETA in either direction.
 
 ## 0e. SESSION 2 OF WEEK 23 - DONE. All three items, all laptop-free.
 
