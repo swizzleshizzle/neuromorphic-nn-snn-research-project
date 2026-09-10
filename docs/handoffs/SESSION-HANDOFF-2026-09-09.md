@@ -104,9 +104,16 @@ At ~3.4 h/cell and the measured 0.904 CPU/wall ratio, 12 waves is **~45 h wall, 
    `run.py` reads `r.get("seconds", 0)` and the record has no `seconds` field. Per-cell cost had
    to be inferred from the log's mtime instead. Any future check that promises "the log carries
    per-cell seconds" is wrong; **the mtime of the last completion is the usable signal**.
-2. **41.3 h is a FLOOR, not a symmetric estimate.** All six wave-1 cells were arm A. Arms M and S
-   are not yet priced, and the run is `--skip-existing`-resumable, so treat the ETA as the
-   earliest plausible finish.
+2. **41.3 h is a FLOOR, and the reason is STRUCTURAL rather than incidental.** `sweep_configs`
+   iterates `for key in arms` OUTSIDE `for seed in seeds`, so the driver is **arm-major**: all 24
+   arm-A cells run before arm M starts, and all 24 of M before S. Confirmed at 23 records, every
+   one of them `exp059_amnesic_d5`.
+
+   **So every cost measurement of this run so far is arm A, the cheapest arm, and 48 of the 72
+   cells are unpriced.** Arms M and S do real hippocampal recall where A reads a `W_rec`-zeroed
+   one, plus the `recall_content_cos` probe every 8 steps. **If they are slower, the ETA slips and
+   nothing measured so far would have shown it.** Re-price when the first arm-M record lands, which
+   is the next genuinely informative reading.
 
 **Descriptive, decides nothing, but worth a second look at write-up time:** arm A's first six
 successes are 0.395, 0.340, 0.310, 0.280, 0.160 and **0.000**, mean ~0.248 against the
