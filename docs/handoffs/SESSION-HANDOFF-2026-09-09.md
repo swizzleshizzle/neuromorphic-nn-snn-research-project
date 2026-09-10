@@ -79,6 +79,47 @@ lines carry per-cell seconds directly.
 At ~3.4 h/cell and the measured 0.904 CPU/wall ratio, 12 waves is **~45 h wall, ETA around
 2026-09-11 20:00 UTC**, plus any sleep.
 
+## 0e. WAVE 1 LANDED - the per-cell cost is MEASURED, and the playbook formula was right
+
+**2026-09-10 02:40:48 UTC: the first 6 records exist**, all arm A, seeds 0-5. Readings at
+04:07 UTC: uptime 20.52 h against a run age of 4.88 h (no reboot), 8 processes, six workers at
+**4.32 CPU-h**, ratio **0.885**, no sleep.
+
+| quantity | value |
+|---|---|
+| wave 1, launch to 6th completion | 23:14 -> 02:40 UTC, **3.44 h wall** |
+| per cell | **~3.05 CPU-h** at the measured ratio |
+| projected total, 12 waves | **~41.3 h wall** |
+| **ETA** | **2026-09-11 16:30 UTC**, plus any sleep |
+
+> [!note] **THE CORRECTED `steps()` FORMULA PREDICTED 3.03 CPU-H. MEASURED ~3.05.**
+> That is the playbook fix validating itself on the first real number. The hand-scaled 2.5 h
+> estimate that priced this run was the error, and its cause is recorded there: multiplying the
+> step-budget ratio by the stage-count ratio double-counts, because a curriculum SPLITS a fixed
+> episode count across stages. **Use `steps()`; do not scale a measured cell by hand.**
+
+**Two corrections to expectations set earlier this session:**
+
+1. **The log does NOT carry per-cell seconds.** It prints `0s` on every line, because
+   `run.py` reads `r.get("seconds", 0)` and the record has no `seconds` field. Per-cell cost had
+   to be inferred from the log's mtime instead. Any future check that promises "the log carries
+   per-cell seconds" is wrong; **the mtime of the last completion is the usable signal**.
+2. **41.3 h is a FLOOR, not a symmetric estimate.** All six wave-1 cells were arm A. Arms M and S
+   are not yet priced, and the run is `--skip-existing`-resumable, so treat the ETA as the
+   earliest plausible finish.
+
+**Descriptive, decides nothing, but worth a second look at write-up time:** arm A's first six
+successes are 0.395, 0.340, 0.310, 0.280, 0.160 and **0.000**, mean ~0.248 against the
+`exp043_capped_d5` context of 0.3229. A seed at exactly 0.000 is a collapsed policy rather than a
+noisy one. **No claim is affected** - the contrasts are paired by seed, so a low arm-A seed is
+subtracted from the same seed's arm M - but it belongs in `RESULTS.md` rather than being noticed
+for the first time by a reader.
+
+**Attempt 1 showed 3.21 CPU-h with zero records at a comparable age**, which does not fit a 3.05
+CPU-h cell. The plausible reading is contention from Windows Update staging its upgrade, which
+rebooted the machine 12 minutes later. **That is a hypothesis, not an established cause**, and it
+is recorded as one.
+
 ## 0d. PLAN FOR SESSION 2 OF WEEK 23 - the laptop is occupied for ~45 h
 
 **That single fact sets the agenda: session 2 is the work that needs no laptop.** No second dispatch
