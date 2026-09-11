@@ -6,87 +6,78 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project, Week 23. Nothing is running, the laptop is idle, and
-main is clean at 99dcfdd with no branches and no open PRs.
+Picking up the neuromorphic cube project, Week 23. EXP-059 IS RUNNING on the laptop, ETA
+around 2026-09-11 16:30 UTC. Everything that does not need the laptop is already done.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-09-07.md first, then CLAUDE.md. IGNORE the 09-03
-handoff (out of date) and DO NOT ACT ON the 08-31 one at all: its item 2 proposes an arm that
-is disqualified, and building it would waste six hours on a control whose confound is aligned
-with its own hypothesis.
+Read docs/handoffs/SESSION-HANDOFF-2026-09-09.md FIRST - sections 0c, 0d and 0e - then
+CLAUDE.md. Ignore every earlier handoff.
 
-Where we are: a spiking network solves 2x2 cubes at depth 6 around 0.36. Five facts shape
-everything:
+FIRST ACTION: check the run with the THREE-READING TEST in
+docs/playbooks/remote-experiment-runs.md, not by ssh exit code. Run age is measured from
+2026-09-09 23:14 UTC. If uptime is LESS than the run age, or python processes are 0 while the
+machine answers, it was rebooted; count records to price the loss. If ssh fails entirely the
+state is UNKNOWN, not "paused" - a sleep and a reboot are indistinguishable from outside, and
+misreading that as "nothing is lost" is how the first EXP-059 attempt was reported healthy for
+13 hours while its workers no longer existed.
 
-1. READ "THE GATE-CALIBRATION RULE" IN CLAUDE.md BEFORE WRITING A VALIDITY GATE. Two of the
-   three experiments that used one got it wrong this month, both the same shape: a threshold
-   chosen in one regime and applied in another. EXP-058 is VOID because its gate required
-   mean_n_stored > 10, a quantity bounded by episode length, in a setting where episodes
-   average 7.76 steps. Unsatisfiable by construction. Compute a gate's maximum attainable
-   value before committing it.
+DO NOT WRITE aggregate.py. It already exists, with 22 tests, written from the spec while zero
+records existed and verified by probe. Rewriting it from the numbers is exactly what the
+pre-registration discipline exists to prevent. When 72 records land: scp them and the *_head.pt
+back, RUN the existing aggregator, produce RESULTS.md, run the suite in chunks, merge --no-ff,
+delete the branch, add the vault row.
 
-2. THE CRITIC QUESTION IS CLOSED. Its benefit is within-episode state-dependence, not
-   calibration. EXP-056 showed flattening V(s_t) to its episode mean costs -0.0646; EXP-057
-   showed a state-blind fitted constant beats the lagging EMA by only +0.0088 at p 0.7822.
-   Everything without within-episode dependence sits 0.1358-0.1558; the full critic sits at
-   0.2004. That is a SHAPE across two experiments, not a resolved decomposition.
+MICHAEL NEEDS TO DEFER WINDOWS UPDATE on the laptop (Settings > Windows Update > Pause
+updates). A TrustedInstaller reboot destroyed the first attempt 3.75 h in, costing ~19
+CPU-hours, and the registry write is blocked by the permission classifier here. Still not done.
 
-3. FIVE INSTRUMENTS MOVE AGAINST POLICY QUALITY: the EXP-033 probe, pretraining move-accuracy,
-   the entropy trace, S, and critic_ev. Use revisit_rate and optimality. Do not put any of the
-   five in a new spec. And remember unanimity at p 0.0005 measures an instrument's consistency,
-   not its link to the outcome - the probe was unanimous at every depth and still ranked seeds
-   no better than chance.
+Five facts shape everything:
 
-4. THE LAPTOP IS NOT READY TO DISPATCH. Its worktree C:\Users\mlgbr\wt-exp053 is on
-   exp-058-memory-reask at 4a96137, two commits behind a branch that no longer exists on
-   origin. Sync it to main with sync_repo.ps1 (-Repo and -Branch are parameters), never a bare
-   checkout. THE WORKTREE HAS NO .venv, so the only interpreter imports the MAIN checkout's src
-   unless PYTHONPATH overrides it, silently and plausibly. Copy the gate in any launch0NN_wt.ps1.
+1. AN UNREACHABLE TAILSCALE PEER IS AN UNKNOWN, NOT A PAUSED JOB. The playbook used to say
+   "offline, last seen 1h ago" meant the machine slept and the job was paused. That was false
+   and it cost an experiment. The corrected three-reading test is uptime, python process
+   count, record count - and nothing is durable until a cell COMPLETES, so a run always
+   carries a rolling exposure of workers x per-cell-hours.
 
-5. OPERATIONAL: the Bash default timeout is 120 s and 600 s is a hard ceiling, so always pass
-   an explicit timeout and split suites. NEVER pass comma-separated arguments over ssh - cmd.exe
-   eats the commas and the failure EXITS ZERO. Verify a launch by probing for records and worker
-   processes, never by an exit code. Long background commands get killed here around 2-3 h with
-   empty output; foreground chunks under 600 s are reliable.
+2. READ docs/retired-instruments.md BEFORE PUTTING ANY INSTRUMENT IN A SPEC. Five are retired:
+   the EXP-033 probe, pretraining move-accuracy, the entropy trace, S, and critic_ev. Every one
+   works as a THRESHOLD and fails as a GRADIENT. Use revisit_rate and optimality.
 
-Highest-value open item, and it needs a design decision BEFORE any dispatch: a successor to
-EXP-058. Its claim thresholds were never contaminated and can be reused, but THE SEEDS ARE
-BURNED - runs here are byte-identical, so re-running seeds 0-11 under a corrected gate
-reproduces exactly the void records, which is laundering rather than replication. An
-uncontaminated re-test needs new seeds (expensive: E2 encoders exist only for seeds 0-11, so it
-means re-running the EXP-047 and EXP-049 chains first) or a different measurement, such as the
-same question at another depth on a base config whose encoders already exist more widely. The
-second is cheaper and is genuinely new rather than a repeat.
+3. READ "THE GATE-CALIBRATION RULE" IN CLAUDE.md BEFORE WRITING OR READING A VALIDITY GATE.
+   EXP-058 was VOID because its gate required mean_n_stored > 10, bounded by episode length
+   where episodes average 7.76 steps. EXP-059's gate was calibrated across its full range
+   before its spec: empty attractor 1.000000, real depth-5 run 0.8128, threshold 0.95.
 
-Its prior: the effects to detect are about -0.03 for memory vs amnesic and -0.045 for shuffled
-vs amnesic, both under the +0.05 bar EXP-058 set. Raise n or lower the bar deliberately and say
-which first. Gate on RECALL differing between arms, not on storing.
+4. EXP-059's primary is M vs A and it is NOT directional. A significant -0.05 is a real finding
+   that memory HURTS, not a failed confirmation. EXP-030's trap is that memory beats the
+   shuffle-null while losing to the amnesic control, and EXP-058 reproduced it exactly.
 
-Also open: repeating EXP-056 at higher n (~25 h, not the ~6 h an earlier note claimed, because
-14 h of it is re-manufacturing encoders), EXP-055's two leads, and a standing note on the five
-retired instruments.
+5. DO NOT SCALE A MEASURED PER-CELL COST TO A NEW DEPTH BY HAND - use the playbook's steps()
+   helper. EXP-059 was priced at 2.5 h/cell and measured 3.05, because the estimate multiplied
+   the step-budget ratio by the stage-count ratio and a curriculum SPLITS a fixed episode count
+   across stages. steps() predicted 3.03 against the measured 3.05.
 
-Both are yours to schedule; nothing decays if they wait.
+NEXT AFTER EXP-059: dispatch EXP-060, the independent replication of EXP-056. Spec is written
+and pre-registered; ~14 h. Its primary is seeds 14-23 alone, NOT the pooled n=22, because
+extending an experiment because its p-value was marginal and then pooling is optional stopping.
 ```
 
 ---
 
 ## Why it is shaped that way
 
-It opens on the gate-calibration rule rather than on a result, because that is the failure mode
-actively costing experiments: **EXP-058 spent 20.2 hours and produced nothing reportable**, and the
-cause was one arithmetic check nobody did before committing the spec.
+It opens with the run and the three-reading test, because the expensive failure this month was not
+the Windows Update reboot - it was reporting a dead run as healthy for 13 hours on the strength of a
+playbook table that could not tell a sleep from a reboot.
 
 Three things most likely to be lost otherwise:
 
-**The seeds are burned, and that is not obvious.** Byte-identical seeded runs are normally an asset
-here, used as a correctness check. After a void experiment they become a liability: the obvious
-"fix the gate and re-run" produces the same records and licenses nothing. A fresh session will
-reach for it immediately.
+**The aggregator already exists.** A fresh session that writes one from the records would destroy
+the single property that makes it trustworthy, and it would look like diligence while doing it.
 
-**EXP-058's void run still reproduced EXP-030's trap.** Memory beat the shuffle-null and did not
-beat the amnesic control, exactly as in 2026-07 on a policy 15x worse. The same two-arm design
-would have reported a win both times. That is the reason the successor keeps three arms.
+**Nothing is durable until a cell completes.** Records land only on completion, so "the run has been
+going for hours" says nothing about how much survives an interruption. Before wave 1, the answer is
+nothing.
 
-**The EXP-056 repeat is ~25 h, not ~6 h.** An earlier handoff priced it by costing the arm and
-forgetting it has neither controls nor encoders at new seeds. Anyone re-deriving that estimate
-should check what exists at which seed before quoting a number.
+**Cost estimates here are wrong in a consistent direction.** Two were corrected this week: EXP-059
+was under-priced by hand-scaling a measured cell, and EXP-060 was over-priced by ~11 h because
+nobody checked which encoders already existed. Check the inventory and use `steps()`.
