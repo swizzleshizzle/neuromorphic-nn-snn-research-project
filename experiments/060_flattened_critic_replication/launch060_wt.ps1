@@ -15,6 +15,10 @@
 # a worktree script run with it imports the OLD library and produces a complete, plausible,
 # entirely wrong result with no error. PYTHONPATH overrides it and the gate below PROVES it did.
 #
+# NO BACKTICKS IN DOUBLE-QUOTED OUTPUT STRINGS. PowerShell reads `b as backspace and `f as form
+# feed, so "(phase `baseline`)" printed as "(phase aseline)" - caught by reading the check
+# output rather than trusting it. Use plain words or single quotes in banner text.
+#
 # NO COMMA-SEPARATED ARGUMENTS. cmd.exe eats commas and the failure EXITS ZERO (EXP-055 lost a
 # dispatch to `-Epochs 1,2,3,5` arriving as `1235`). Seed lists are therefore hardcoded here and
 # never cross the ssh boundary. Verify a launch by probing for records and worker processes.
@@ -71,8 +75,8 @@ $branch = (& git rev-parse --abbrev-ref HEAD).Trim()
 "flatten_critic = $hasFlag"
 "E0 encoders    = $e0 of 24"
 "selected_lr    = present"
-"EXP-043 d6 for seeds 14-23 = $nD6 of 10   (phase `baseline` produces these)"
-"E1 encoders for seeds 14-23 = $nE1 of 10   (phase `finetune` produces these)"
+"EXP-043 d6 for seeds 14-23 = $nD6 of 10   (phase baseline produces these)"
+"E1 encoders for seeds 14-23 = $nE1 of 10   (phase finetune produces these)"
 
 $alive = @(Get-Process | Where-Object { $_.ProcessName -match "^python" }).Count
 if ($alive -gt 2) { Write-Error "$alive python processes already running; refusing to start."; exit 1 }
