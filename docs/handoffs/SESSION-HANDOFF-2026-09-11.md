@@ -1,6 +1,13 @@
 # Session Handoff - 2026-09-11 (Week 23) - EXP-059 COMPLETE AND MERGED
 
-> **Nothing is running. The laptop is FREE. `main` is at `054db85`, clean, no branches, no PRs.**
+> **EXP-060 IS RUNNING.** Phase 0 of 3 launched **2026-09-11 21:33 UTC**, ~17 h total.
+> `main` is clean, no branches, no PRs.
+>
+> **WINDOWS UPDATE: I COULD NOT VERIFY THE PAUSE.** Michael paused it, but no `Pause*` values
+> exist under `HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings` where the Settings UI
+> normally writes `PauseUpdatesExpiryTime`. **`ActiveHours` are 09:00-03:00 local**, so Windows may
+> only auto-restart between **03:00 and 09:00 local = 07:00-13:00 UTC**. **EXP-059's killer reboot
+> was at 03:35 local, 35 minutes into that window.** If it happens again, that is when.
 >
 > **Suite: 591 passed** under `-m "not slow"` (356 outside `tests/training`, 31 in
 > `test_cube_baseline.py`, 204 in the rest), plus 22 slow-marked deselected.
@@ -83,22 +90,46 @@ aggregator could not compute anything on partial data.
   **UTC-4**; do not scale per-cell cost by hand, use `steps()`; check reboot history before a long
   dispatch.
 
-## 4. Open items
+## 4. EXP-060 - dispatched, and the spec's cost was WRONG
 
-1. **EXP-060 is ready to dispatch and the laptop is free.** ~14 h. **DO NOT DISPATCH UNTIL WINDOWS
-   UPDATE IS DEFERRED** - that is what destroyed EXP-059's first attempt, and the registry write is
-   blocked by the permission classifier here, so it needs Michael: Settings > Windows Update > Pause
-   updates.
-2. **The obvious next question EXP-059 cannot answer: WHY does the read hurt?** Claim 3 rules out an
-   *empty* attractor, which is far narrower than ruling out a badly scaled or uninformative recall
-   code. **That is the live scientific thread**, and it is more interesting than EXP-055's leads.
-3. **EXP-055's two leads**, both needing compute: what one epoch builds that helps policy while
-   making `S` worse than random, and whether `e2` is a cheaper recipe at 74% of `e10`.
-4. **Vault `4f13` ("re-ask the EXP-030 memory question") IS EXP-059 and can now be ticked** - but
-   that is Michael's call, not something to tick because the work looks finished.
-5. **Vault, needs Michael**: `0576` dashboard render, `0817` Phase 0/1 checkpoints.
+**Three phases, in order, ~17 h**, not the ~14 h the spec carried. The launcher enforces the order.
 
-## 5. Standing facts
+| phase | what | cells | cost | produces |
+|---|---|---|---|---|
+| **0 `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | ~3 h | `exp043_capped_d6_*.json` |
+| **1 `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 | 10 | ~6 h | `exp047_ft_d6_lr0.0001_*_encoder.pt` |
+| **2 `rl`** | EXP-060 arms B and F | 20 | ~8 h | `exp060_*.json` |
+
+> [!warning] **THE MISSING DEPENDENCY, found at dispatch and not at spec time.**
+> E1 encoders cannot be made for seeds 14-23 without an **EXP-043 depth-6 baseline for those
+> seeds first**: EXP-047's `confirm` mode refuses without it, because those records are the paired
+> baseline for **its own** Claim 1. **They exist only for seeds 0-11.** Depth **5** has all 24,
+> which is exactly why the gap was easy to miss - EXP-059 ran on depth-5 encoders and found
+> everything it needed. The spec's cost section is **amended, before any EXP-060 number exists**,
+> which is the only time an amendment is legitimate.
+
+**Phase 0's estimate is the weakest number here.** A depth-6 capped cell with a `concept` readout
+has never been timed at 10 workers; it is scaled from EXP-058's 3.37 h depth-6 *memory* cell, which
+does strictly more work. **Read wave 1 before trusting the total** - EXP-059 was dispatched without
+that discipline and its 2.5 h/cell turned out to be 3.05.
+
+**The design point, which must survive into the write-up:** the **primary is seeds 14-23 ALONE at
+n=10**, not the pooled n=22. Extending because a p-value was marginal and then pooling is **optional
+stopping**. The primary is only ~50-60% powered, and EXP-056's -0.0646 is **upward-biased because it
+was selected for significance**, so a null primary is a **bound, never a refutation**.
+
+Monitoring advances the phases automatically; the launcher's gates make a wrong phase fail safe.
+
+## 5. Other open items
+
+1. **The live scientific thread: WHY does the memory read hurt?** EXP-059's gate ruled out an
+   *empty* attractor, far narrower than ruling out a badly scaled or uninformative recall code.
+   **More interesting than EXP-055's leads.**
+2. **EXP-055's two leads**, both needing compute.
+3. **Vault `4f13` IS EXP-059 and can be ticked** - Michael's call.
+4. **Vault, needs Michael**: `0576` dashboard render, `0817` Phase 0/1 checkpoints.
+
+## 6. Standing facts
 
 - **READ `docs/retired-instruments.md` BEFORE PUTTING AN INSTRUMENT IN A SPEC.**
 - **READ "THE GATE-CALIBRATION RULE" IN `CLAUDE.md` BEFORE WRITING A GATE.** Calibrate across the
@@ -109,7 +140,7 @@ aggregator could not compute anything on partial data.
 - **An unreachable peer is an UNKNOWN.** Nothing is durable until a cell completes.
 - **n >= 12 seeds. Measure the chance floor. No scipy.**
 
-## 6. Pointers
+## 7. Pointers
 
 - `experiments/059_memory_depth5/RESULTS.md` - the full write-up
 - `docs/retired-instruments.md`, `CLAUDE.md`
