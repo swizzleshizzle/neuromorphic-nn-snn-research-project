@@ -127,6 +127,42 @@ shuffled read costs what a real one does, so it is a much safer one than arm M w
 > this reason, and the gate cannot be evaluated until arm M is complete. **Cost readings are the
 > only thing to take from a partial run.**
 
+## 0d-bis. THE VALIDITY GATE PASSES - checked early, on arm M alone
+
+**2026-09-11 03:10 UTC, with arm M complete at 24/24 and the run still going.** Checked early
+deliberately: if the gate had failed, the remaining 23 arm-S cells were **~13 h of laptop time about
+to be spent on a void experiment**.
+
+**This is not peeking.** Claim 3 is a pre-registered CONDITION, not a contrast, and arm M's mean
+cosine says nothing about M versus A on success. The check loaded arms M and S **only** - arm A was
+never read into the process, so no contrast was computable from it. The records were copied to a
+scratchpad rather than `experiments/059_memory_depth5/outputs/`, because a partial set in the real
+directory would let the aggregator compute contrasts on incomplete data.
+
+| reading | value |
+|---|---|
+| arm M mean `recall_content_cos`, 24 seeds | **0.8514** |
+| threshold | must be **< 0.95** |
+| min / median / max across seeds | 0.7527 / 0.8570 / **0.9042** |
+| seeds at or above threshold individually | **none** |
+| missing probe data | **none**; `recall_probe_n` runs 13,231 to 15,808 per seed |
+| **VERDICT** | **PASS** |
+
+**The margin is real, not nominal.** The band between the threshold (0.95) and total failure (an
+empty attractor at exactly 1.000000) is 0.05 wide. The **mean sits 0.0986 below the threshold -
+about twice that band - and even the WORST single seed clears by 0.046.** Every seed is also below
+the 0.9437 that a randomly-loaded attractor measured, so the attractor's stored content is doing
+something in all 24.
+
+**Arm S's half is provisional**: 0.1594 on 2 of 24 seeds against a `< 0.20` ceiling, and EXP-058
+measured 0.1652, so it is known satisfiable. It is **not** a verdict until arm S completes.
+
+> [!note] **THE GATE-CALIBRATION RULE WORKED.** Two of the three experiments that used a validity
+> gate got it wrong - EXP-057's absolute threshold was calibrated in the wrong regime, EXP-058's was
+> unsatisfiable by construction. This one was calibrated across its **full attainable range** before
+> the spec was written (empty 1.000000, random-loaded 0.9437, real run 0.8128), and it passes with
+> the margin that calibration predicted. **That is the practice paying for itself.**
+
 ## 0e. SESSION 2 OF WEEK 23 - DONE. All three items, all laptop-free.
 
 The laptop is occupied until ~2026-09-11 16:30 UTC, so session 2 was scoped to work that needs no
