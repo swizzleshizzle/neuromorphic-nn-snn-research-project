@@ -118,8 +118,20 @@ hippocampal recall and the every-8-steps probe might have caused.
 | arm S | 24, 0 done | assumed 3.27 h | ~13.1 h |
 | **total** | | | **~38.4 h** |
 
-**Revised ETA: 2026-09-11 13:40 UTC**, plus any sleep. Arm S remains an assumption, though a
-shuffled read costs what a real one does, so it is a much safer one than arm M was.
+**ETA, revised as each arm got priced.** The figure drifted later at every stage, which is worth
+noting as a pattern rather than three separate corrections: **each arm cost more than the one
+before, and every early estimate was built on the cheapest arm available at the time.**
+
+| reading | per-cell basis | ETA |
+|---|---|---|
+| wave 1 only | 3.44 h, arm A incl. startup | 2026-09-11 16:30 |
+| arm A complete | 3.054 h, arm A clean | 2026-09-11 11:53 |
+| arm M first wave | 3.27 h | 2026-09-11 13:40 |
+| arm M complete | 3.42 h | 2026-09-11 14:45 |
+| **arm S at 8 of 24** | **~3.5 h** | **2026-09-11 16:10** |
+
+At 56/72 the whole-run rate is 1.757 cells/h, and the arm-specific projection agrees with it to
+within minutes. **Arm S is no longer an assumption.**
 
 > [!warning] **DO NOT COMPUTE A PRELIMINARY M-VERSUS-A CONTRAST.** Six arm-M seeds against their
 > arm-A partners is a runnable contrast right now, and looking at it would contaminate the analysis
