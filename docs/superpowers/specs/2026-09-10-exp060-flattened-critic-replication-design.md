@@ -108,29 +108,42 @@ check where EXP-057's did not:
 **Note that 0.025 is the exact threshold EXP-056 cleared by 6.4%**, so the replication is held to
 the same bar rather than a looser one.
 
-## 4. Cost - corrected DOWNWARD, and the corrections matter
+## 4. Cost - AMENDED 2026-09-11 at dispatch, UPWARD, before any number exists
 
-**The standing ~25 h estimate is wrong. It is ~14 h, and one of its three phases is already paid.**
+> [!warning] **The ~14 h figure below the line was WRONG, and the error was a missing dependency
+> rather than a bad rate.** Corrected to **~17 h in three phases**. Amended before dispatch and
+> before any EXP-060 number exists, which is the only time an amendment is legitimate.
 
-| phase | cells | workers | cost | basis |
+**What was missed: E1 encoders cannot be manufactured for seeds 14-23 without first manufacturing
+an EXP-043 depth-6 baseline for those seeds.** EXP-047's `confirm` mode refuses to start unless
+`exp043_capped_d6_regionalized_d6_s{seed}_*.json` exists for every seed, because those records are
+the paired baseline for **its** Claim 1. **They exist only for seeds 0-11.** Depth 5 has all 24,
+which is what made the gap easy to miss - EXP-059 ran on depth-5 encoders and found everything it
+needed.
+
+| phase | what | cells | workers | cost |
 |---|---|---|---|---|
-| E0 pretraining | - | - | **0 h, ALREADY DONE** | all 24 `exp040_encoder_s*.pt` exist; EXP-059 needed exactly these |
-| E1 fine-tune, seeds 14-23 | 10 | 10 | **~6 h** | EXP-047 confirmatory measured **11.95 h for 12 cells at 10 workers = 2 waves**, so one wave is ~5.98 h and 10 cells on 10 workers is one wave |
-| RL, both arms | 20 | 10 | **~8 h** | EXP-056 measured **5.72 h for 12 cells at 6 workers = 2 waves**, so 2.86 h per cell at 6 workers; scaled by the measured 10-vs-6-worker per-cell penalty (0.16 vs 0.115 s/step) and rounded to 2 clean waves |
+| **0. `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | 10 | **~3 h** |
+| **1. `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 -> E1 | 10 | 10 | **~6 h** |
+| **2. `rl`** | EXP-060 arms B and F | 20 | 10 | **~8 h** |
+| | | | | **~17 h** |
 
-**Three corrections to the old figure:**
+Phase 0's estimate is the weakest: a depth-6 capped cell with a `concept` readout has not been
+timed at 10 workers, and it is scaled from EXP-058's measured 3.37 h depth-6 memory cell, which
+does strictly more work. **Read wave 1 before trusting it** - that is the discipline EXP-059 was
+dispatched without, and its 2.5 h/cell estimate turned out to be 3.05.
 
-1. **E1 is needed for 10 seeds, not 12.** It already exists for seeds 0-13, not 0-11 - EXP-047's
-   pilot ran on seeds 12 and 13, and those encoders were kept.
-2. **E0 is already manufactured for all 24 seeds**, as a side effect of EXP-059. The ~1.7 h that
-   every previous estimate carried is spent.
-3. **Worker count is chosen to DIVIDE the cell count.** 10 cells and 20 cells both divide by 10,
-   giving clean waves. This is the one place more workers help: not by parallelism alone, but by
-   removing a ragged final wave. Per-cell time is *worse* at 10 workers than at 6, and the playbook
-   records that; it is still the right choice here because 20 cells on 6 workers is 4 waves.
+**The order is not optional and the launcher enforces it**, refusing `finetune` without phase 0's
+records and `rl` without phase 1's encoders, rather than failing six hours in.
 
-**These are wave-rounded extrapolations from measured anchors, not measurements.** Read the first
-wave before trusting the total - which is exactly the discipline EXP-059 was dispatched without.
+### What the original estimate got right, and it still holds
+
+1. **E1 already exists for seeds 0-13, not 0-11** - EXP-047's pilot ran on 12 and 13 and those
+   encoders were kept. **10 seeds are needed, not 12.**
+2. **E0 is already manufactured for all 24 seeds**, as a side effect of EXP-059.
+3. **Worker counts divide the cell counts.** 10 and 20 both divide by 10. Note that per-cell time
+   is *worse* at 10 workers than at 6 (0.16 vs 0.115 s/step, measured); the gain is removing a
+   ragged final wave, not parallelism.
 
 ## 5. What this cannot answer
 
