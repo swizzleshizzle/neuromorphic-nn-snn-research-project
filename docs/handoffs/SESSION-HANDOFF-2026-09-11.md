@@ -96,9 +96,22 @@ aggregator could not compute anything on partial data.
 
 | phase | what | cells | cost | produces |
 |---|---|---|---|---|
-| **0 `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | **4.3 h MEASURED** (est. 3 h) | `exp043_capped_d6_*.json` DONE |
-| **1 `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 | 10 | ~6 h, running since 01:54 UTC | `exp047_ft_d6_lr0.0001_*_encoder.pt` |
-| **2 `rl`** | EXP-060 arms B and F | 20 | ~8 h | `exp060_*.json` |
+| **0 `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | **4.3 h MEASURED** (est. 3 h) | 10/10 **DONE** |
+| **1 `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 | 10 | **7.1 h MEASURED** (est. 6 h) | 10/10 **DONE** |
+| **2 `rl`** | EXP-060 arms B and F | 20 | est. 8-11 h, running since **08:59 UTC** | `exp060_*.json` |
+
+**Both completed phases overran their estimates, in the same direction and for the same reason** -
+4.3 h against 3 h and 7.1 h against 6 h. Phase 2's ~8 h came from the same 6-worker-scaling method,
+so treat it as a floor and expect **~17:00-20:00 UTC**. Wave 1 (10 of the 20 cells) settles it.
+
+> [!note] **A correction worth keeping: phase 1 is NOT all-or-nothing.** An earlier note here said
+> it was a single wave of 10 whose encoders appear together, so a reboot would cost the whole ~6 h.
+> **Wrong.** Encoders are written per cell and the seeds vary enough that they finish separately
+> (3 of 10 at 4.8 h). Completed artifacts survive and `--skip-existing` keeps them, so a reboot
+> costs only the in-flight cells - in every phase.
+
+**Phase 2's dispatch was verified from the launcher's own banner**, not an exit code:
+`E1 encoders for seeds 14-23 = 10 of 10`, 20 runs, seeds 14-23 confirmed FRESH, arms B and F.
 
 **Phase 0 measured 4.3 h against a 3 h estimate**, so the total is **~18.3 h** and the ETA is
 **2026-09-12 ~16:00 UTC**. The miss is the same shape as EXP-059's: the estimate was scaled from a
