@@ -96,9 +96,22 @@ aggregator could not compute anything on partial data.
 
 | phase | what | cells | cost | produces |
 |---|---|---|---|---|
-| **0 `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | ~3 h | `exp043_capped_d6_*.json` |
-| **1 `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 | 10 | ~6 h | `exp047_ft_d6_lr0.0001_*_encoder.pt` |
+| **0 `baseline`** | EXP-043 depth 6, seeds 14-23 | 10 | **4.3 h MEASURED** (est. 3 h) | `exp043_capped_d6_*.json` DONE |
+| **1 `finetune`** | EXP-047 `--mode confirm`, seeds 14-23 | 10 | ~6 h, running since 01:54 UTC | `exp047_ft_d6_lr0.0001_*_encoder.pt` |
 | **2 `rl`** | EXP-060 arms B and F | 20 | ~8 h | `exp060_*.json` |
+
+**Phase 0 measured 4.3 h against a 3 h estimate**, so the total is **~18.3 h** and the ETA is
+**2026-09-12 ~16:00 UTC**. The miss is the same shape as EXP-059's: the estimate was scaled from a
+6-worker measurement using the playbook's 10-vs-6 penalty ratio, and **the real penalty at 10
+workers is steeper than that ratio implies.** Phase 0's gates all passed and the dispatch was
+verified from the launcher's own banner (`EXP-043 d6 for seeds 14-23 = 10 of 10`), not from an exit
+code.
+
+> [!warning] **BOTH REMAINING PHASES CROSS THE REBOOT WINDOW.** Windows may only auto-restart
+> 03:00-09:00 local = **07:00-13:00 UTC**. Phase 1 runs into ~08:00 UTC and phase 2 spans
+> ~08:00-16:00, so each crosses it. All phases pass `--skip-existing`, so a reboot costs the
+> in-flight wave rather than the phase - but phase 1 is a SINGLE wave of 10, so a reboot there
+> costs the whole ~6 h.
 
 > [!warning] **THE MISSING DEPENDENCY, found at dispatch and not at spec time.**
 > E1 encoders cannot be made for seeds 14-23 without an **EXP-043 depth-6 baseline for those
