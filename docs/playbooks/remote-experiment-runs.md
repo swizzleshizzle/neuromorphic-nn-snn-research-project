@@ -224,6 +224,23 @@ and 0.157 s/step at 10 workers, right on it. The formula was.
 **divides the cell count** - 12 cells on 6 workers is 2 clean waves and each cell runs faster
 than it would at 10.
 
+> [!warning] **THE 0.16-vs-0.115 RATIO UNDER-PRICES 10-WORKER RUNS. Measured 2026-09-12, EXP-060,
+> three phases and three overruns all in the same direction.**
+>
+> | phase | estimate, scaled by that ratio | measured | miss |
+> |---|---|---|---|
+> | EXP-043 depth 6, 10 cells | 3 h | **4.3 h** | +43% |
+> | EXP-047 fine-tune, 10 cells | 6 h | **7.1 h** | +18% |
+> | EXP-060 depth 7, 20 cells | 8 h | **9.1 h** | +14% |
+>
+> EXP-059 missed the same way at 6 workers (2.5 h estimated, 3.05 measured). **Four instances now,
+> all low.** The pattern is not a bad arithmetic step each time - it is that **scaling a measured
+> per-cell cost across worker counts is unreliable**, and the ratio itself is what needs
+> re-measuring.
+>
+> **Until it is: treat any cross-worker-count estimate as a FLOOR and add 20-40%.** Better, price
+> from a measurement at the SAME worker count, and read wave 1 before trusting a total.
+
 > [!warning] STOP EXPECTING WALL-CLOCK RETURNS FROM MORE WORKERS. Measured 2026-09-01, EXP-055
 > phase 3: 48 depth-6 cells, 10,000 episodes, frozen encoder.
 > The pre-registration estimated **17.2 h at 6 workers**. Running it at **8 took 18.0 h**, about
