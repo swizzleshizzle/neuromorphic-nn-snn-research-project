@@ -176,6 +176,13 @@ reintroduce one.
   instrument's consistency rather than its link to the outcome. Full note with the evidence and
   the four checks to run before adopting a new instrument: `docs/retired-instruments.md`.
 - **Prefer a mechanism measurement to a performance measurement.** "Memory did not help" is weak and unactionable. "Memory was on the policy path, cycles were abundant, and the revisit rate did not fall" localises the failure to the readout. Instrument the mechanism the intervention is supposed to drive, not just the score.
+- **An instrument that cannot detect the defect it exists for is the gate-that-cannot-fail trap in
+  disguise, and only MUTATION TESTING finds it.** EXP-061's leak detector compared the real recall
+  against the noise vector, both taken BEFORE the substitution, so it read ~0 by construction and
+  was blind to `recall = 0.5 * recall + 0.5 * noise` - a 50% leak that passed every assertion. Six
+  of seven mutations were caught; that one survived and exposed the blind spot. **Break the
+  implementation deliberately and check each test fails against the bug it names.** Same practice
+  found a missing PARTIAL-failure case in EXP-059's aggregator gate.
 - **Read real output, not only green tests.** A cube frame labelled `solved: yes` on a scrambled cube passed every unit test in the suite; two minutes reading an actual recorded trace found it. Same pattern as the filename collision that was visible in an implementer's own smoke output. Tests prove what you thought to assert; output shows what you did not.
 - **No scipy in the venv.** For n around 12, an exact paired permutation test over all `2**n` sign flips is cheap, assumption-free, and better than a normal approximation. 12 seeds is 4096 flips.
 
