@@ -39,8 +39,8 @@ The slow files under `-m "not slow"` are NOT the ones the old table named:
 Everything else in `tests/training` is seconds. The old table's `test_critic_seam.py`
 and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected.
 
-**Counts:** 370 tests 2026-07-30, 521 2026-08-28, **561 as of 2026-09-01 (546 not
-slow, 15 slow)**.
+**Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, **623 as of 2026-09-13
+(601 not slow, 22 slow)**, verified by `--collect-only`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
