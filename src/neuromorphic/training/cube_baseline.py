@@ -71,7 +71,8 @@ class CubeConfig:
     normalize_advantages: bool = False
     content: int = 64
     n_actions: int = 6
-    readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" | "memory_amnesic"
+    readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" |
+                                # "memory_amnesic" | "memory_noise"
     # Depth curriculum for training (EXP-034). Empty means the shipped behaviour: train
     # only at `depth`. When set, `episodes` is SPLIT across the listed depths rather than
     # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
@@ -283,7 +284,7 @@ def feature_width(cfg: CubeConfig) -> int:
     """Width of the policy head's input for a config's readout mode."""
     if cfg.readout == "concept":
         return cfg.content
-    if cfg.readout in ("memory", "memory_shuffled", "memory_amnesic"):
+    if cfg.readout in ("memory", "memory_shuffled", "memory_amnesic", "memory_noise"):
         return cfg.content * 2 + FAMILIARITY_WIDTH
     raise ValueError(f"unknown readout {cfg.readout!r}")
 
@@ -325,16 +326,41 @@ class MemoryReadout:
         self.recall_cos_sum = 0.0
         self.recall_cos_n = 0
         self._probe_step = 0
+        # EXP-061. `||recall|| / ||concept||`, accumulated on every step for every memory mode.
+        # This is the quantity EXP-061 gates on: if the recall block is negligible beside the
+        # concept block the policy head barely sees it, and "replacing recall with noise changed
+        # nothing" would be vacuous rather than informative. Recorded for ALL memory modes so
+        # the comparison is available later without a re-run.
+        self.recall_norm_sum = 0.0
+        self.concept_norm_sum = 0.0
+        self.norm_n = 0
+        # Cosine between the substituted noise and the real recall it replaced. A sanity
+        # reading, NOT a gate: it is ~0 by construction, so gating on it could not fail.
+        self.noise_cos_sum = 0.0
+        self.noise_cos_n = 0
+        # Dedicated generator so the noise is reproducible and does NOT consume from the global
+        # torch stream, which would shift action sampling for this arm relative to the others.
+        # Derived from the run's own rng, and only for the mode that needs it, so creating it
+        # cannot perturb `memory_shuffled`'s choices.
+        self._noise_gen = None
+        if mode == "memory_noise":
+            self._noise_gen = torch.Generator().manual_seed(rng.randrange(2 ** 31))
 
     def reset(self) -> None:
         """Drop the episode's cached concepts. Call at every episode start."""
-        if self.mode not in ("concept", "memory", "memory_shuffled", "memory_amnesic"):
+        if self.mode not in ("concept", "memory", "memory_shuffled", "memory_amnesic",
+                             "memory_noise"):
             raise ValueError(f"unknown readout {self.mode!r}")
         self._cache = []
         self.unshuffled_steps = 0
         self.recall_cos_sum = 0.0
         self.recall_cos_n = 0
         self._probe_step = 0
+        self.recall_norm_sum = 0.0
+        self.concept_norm_sum = 0.0
+        self.norm_n = 0
+        self.noise_cos_sum = 0.0
+        self.noise_cos_n = 0
 
     def _probe_recall(self, query: torch.Tensor, recall: torch.Tensor) -> None:
         """EXP-059's gate instrument: how much of `recall` is the STORED CONTENT?
@@ -361,6 +387,17 @@ class MemoryReadout:
         if denom > 0:
             self.recall_cos_sum += float(torch.dot(recall, bare)) / denom
             self.recall_cos_n += 1
+
+    def _note_norms(self, concept: torch.Tensor, recall: torch.Tensor) -> None:
+        """EXP-061's gate instrument: the recall block's magnitude beside the concept block's.
+
+        Cheap (two norms, no extra hippocampal read), so it runs on every step rather than
+        sampled. A small ratio means the policy head is dominated by the concept and any
+        recall-substitution result is uninformative.
+        """
+        self.recall_norm_sum += float(recall.norm())
+        self.concept_norm_sum += float(concept.norm())
+        self.norm_n += 1
 
     def __call__(self, out: dict) -> torch.Tensor:
         # EXP-047. The concept path returns BEFORE the `no_grad` below, deliberately.
@@ -399,6 +436,7 @@ class MemoryReadout:
                 finally:
                     self.brain.hippo.W_rec = saved
                 self._cache.append(snapshot)
+                self._note_norms(concept, recall)
                 return torch.cat([concept, recall, fam[:1]])
 
             if self.mode == "memory_shuffled":
@@ -416,6 +454,38 @@ class MemoryReadout:
             ).mean(dim=0)[0]                                # [content]
             fam = self.brain.hippo.familiarity(query)       # [B]
             self._probe_recall(query, recall)
+
+            if self.mode == "memory_noise":
+                # EXP-061. Replace the recall block with a random vector of the SAME L2 norm,
+                # leaving `concept` and `fam` untouched. So this differs from `memory` in the
+                # recall block's INFORMATION CONTENT and in nothing else - not its magnitude,
+                # not the feature width, not familiarity.
+                #
+                # This is the arm EXP-059 could not supply. That experiment found correct and
+                # incorrect memory indistinguishable (M-S = +0.0204, p 0.4268) and both about
+                # 0.10 below amnesic, which is consistent with the recall being NOISE on the
+                # policy path and equally consistent with its content being actively
+                # misleading. Matched-magnitude noise separates those.
+                real_norm = recall.norm()
+                z = torch.randn(recall.shape, generator=self._noise_gen, dtype=recall.dtype)
+                zn = z.norm()
+                if float(zn) > 0:
+                    noise = z * (real_norm / zn)
+                else:                                        # astronomically unlikely
+                    noise = torch.zeros_like(recall)
+                # Measure against what is ACTUALLY RETURNED, not against the noise vector.
+                # Comparing `recall` to `noise` before substitution is ~0 by construction and
+                # therefore cannot detect a leak: mutation testing showed
+                # `recall = 0.5 * recall + 0.5 * noise` passing every assertion while the policy
+                # saw half the real recall. Cosine against the substituted value catches it.
+                substituted = noise
+                denom = float(real_norm) * float(substituted.norm())
+                if denom > 0:
+                    self.noise_cos_sum += float(torch.dot(recall, substituted)) / denom
+                    self.noise_cos_n += 1
+                recall = substituted
+
+            self._note_norms(concept, recall)
             return torch.cat([concept, recall, fam[:1]])
 
 
@@ -793,6 +863,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         recall_cos_sum, recall_cos_n = 0.0, 0
+        recall_norm_sum, concept_norm_sum, norm_n = 0.0, 0.0, 0
+        noise_cos_sum, noise_cos_n = 0.0, 0
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
         # ...and for the same reason it never enters the stage loop that fills this. Empty is the
         # honest value, not a missing key: EXP-042 added `stage_trace` and every floor arm before
@@ -898,6 +970,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         revisits, steps_total, stored_counts = 0, 0, []
         unshuffled_steps = 0
         recall_cos_sum, recall_cos_n = 0.0, 0
+        recall_norm_sum, concept_norm_sum, norm_n = 0.0, 0.0, 0
+        noise_cos_sum, noise_cos_n = 0.0, 0
         entropies = []
         gate_fn = None
         if cfg.plasticity_gate == "dopamine":
@@ -969,6 +1043,11 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 unshuffled_steps += readout.unshuffled_steps
                 recall_cos_sum += readout.recall_cos_sum
                 recall_cos_n += readout.recall_cos_n
+                recall_norm_sum += readout.recall_norm_sum
+                concept_norm_sum += readout.concept_norm_sum
+                norm_n += readout.norm_n
+                noise_cos_sum += readout.noise_cos_sum
+                noise_cos_n += readout.noise_cos_n
                 if encoder_optimizer is not None:
                     gate_calls += 1
                     gate_opens += int(stats["gate_open"])
@@ -1045,6 +1124,15 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # contrast is vacuous. Absent for readouts with no real recall to probe.
         "recall_content_cos": (recall_cos_sum / recall_cos_n) if recall_cos_n else None,
         "recall_probe_n": recall_cos_n,
+        # EXP-061's validity gate. Mean ||recall|| / mean ||concept|| over every policy step.
+        # A small ratio means the policy head is dominated by the concept block, and any
+        # result from substituting the recall block is uninformative rather than a finding.
+        "recall_concept_norm_ratio": ((recall_norm_sum / concept_norm_sum)
+                                      if concept_norm_sum else None),
+        "recall_norm_mean": (recall_norm_sum / norm_n) if norm_n else None,
+        "concept_norm_mean": (concept_norm_sum / norm_n) if norm_n else None,
+        # Sanity only, never a gate: ~0 by construction for `memory_noise`, None elsewhere.
+        "noise_real_cos": (noise_cos_sum / noise_cos_n) if noise_cos_n else None,
         "unshuffled_steps": unshuffled_steps,
         "unshuffled_frac": (unshuffled_steps / steps_total) if steps_total else 0.0,
         "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},
