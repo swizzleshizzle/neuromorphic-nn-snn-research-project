@@ -392,6 +392,35 @@ and leave workers computing into the void?) and **effective cores sampled inside
 > (`Get-Process ... | ForEach-Object { $_.CPU }`), never by elapsed time: 6 workers at 13.46
 > CPU-hours over 4 completed cells is 3.37 h per cell regardless of how long the laptop was shut.
 
+### THE UPDATE RESTART FIRES AROUND 03:30 LAPTOP-LOCAL. Twice now, four minutes apart.
+
+**Two runs have been killed by it, and the time of day is nearly identical:**
+
+| run | reboot, laptop-local | reboot, UTC | cost |
+|---|---|---|---|
+| EXP-059 attempt 1 | **03:35** | 07:35 | ~19 CPU-h, ALL of it (no cell had completed) |
+| EXP-062 | **03:31** | 07:31 | ~4 CPU-h (12 of 24 cells had completed) |
+
+**`ActiveHours` are 09:00-03:00 local, so Windows may only auto-restart 03:00-09:00 local, and it
+takes the first opportunity - about half an hour in.** That makes the risk window far narrower and
+far more predictable than "sometime in a six-hour span":
+
+> ==**A dispatch that will still be running at 03:30 laptop-local (07:30 UTC) should expect a
+> restart there unless updates are verifiably paused.**==
+
+**Both times the machine also stayed unreachable for hours AFTER coming back up** - 11 h for
+EXP-062 - so tailscaled does not reliably return on its own following an update reboot. **A long
+silence that ends with a low uptime is this, not a sleep.**
+
+**Practical consequences:**
+
+- **Schedule long runs to clear 03:30 local**, or accept losing the in-flight wave there.
+- **Per-cell durability is what bounds the damage.** EXP-059 lost everything because no cell had
+  finished; EXP-062 lost ~4 CPU-h because 12 of 24 had. Same failure, two very different bills.
+- **Verify the pause rather than trusting it.** `Pause*` values under
+  `HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings` are what the Settings UI writes. Their
+  absence is not proof the pause failed, but it is not evidence it worked either.
+
 ### BEFORE ANY LONG DISPATCH: check the laptop's pending Windows Updates
 
 **Windows Update killed EXP-059 3.75 h into a ~45 h run**, unprompted, with reason
