@@ -1,6 +1,6 @@
 # Session Handoff - 2026-09-17 (Week 24) - EXP-062 DONE, Phase 3 checkpoint is next
 
-> **Nothing is running. The laptop is FREE and idle. `main` is at `5f79a62`, clean, no branches,
+> **Nothing is running. The laptop is FREE and idle. `main` is clean (EXP-062 merged at `5f79a62`, this handoff on top), no branches,
 > no PRs.** Suite: **601 passed** under `-m "not slow"` (356 + 31 + 214), 22 slow, **623 total**.
 >
 > **Week 24's experimental work is COMPLETE.** Week 25 (Sep 21-27) is the **Phase 3 checkpoint**,

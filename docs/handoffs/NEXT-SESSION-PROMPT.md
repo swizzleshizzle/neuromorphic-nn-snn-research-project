@@ -7,7 +7,7 @@ detail, and duplicating it here would create two versions that drift.
 
 ```
 Picking up the neuromorphic cube project, Week 24/25. NOTHING IS RUNNING, the laptop is FREE,
-main is clean at 5f79a62, suite 601 passing under -m "not slow" (623 total).
+main is clean (EXP-062 merged at 5f79a62, handoff docs on top), suite 601 passing under -m "not slow" (623 total).
 
 Read docs/handoffs/SESSION-HANDOFF-2026-09-17.md first, then CLAUDE.md. Ignore earlier ones.
 
