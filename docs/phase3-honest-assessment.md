@@ -19,7 +19,7 @@ least one metric. (3) Interpretability analysis. (4) Clear documentation.*
 | Criterion | Grade | Note |
 |---|---|---|
 | (1) Solves from 1-move scrambles, 3-move stretch | **Exceeded** | Depth 1 was solved in the v1 baseline itself (87.5%, EXP-029). The stretch goal, depth 3, reached **50.0%** (EXP-035), **22.7x** the v1 baseline's 2.2%. The series now runs to **depth 8 at 0.0783** (EXP-062) against a *measured* chance floor of **exactly 0.0000**. |
-| (2) Comparison vs monolithic | **Partial, and confounded in the direction that makes it MORE interesting** | It exists and is committed (EXP-029): depth 1 ties at 87.5% each, depth 2 is 38.0% against 30.6%, depth 3 is 2.2% against 0.8%. The gaps are weak (the depth-2 sd across seeds is ~24 points, depth 3 is near the 1.4% floor for both) and it was never re-run once the recipe worked. **But the control is mismatched on the axis that matters, against the regionalized arm.** See section 2a. |
+| (2) Comparison vs monolithic | **Partial, and confounded in the direction that makes it MORE interesting** | It exists and is committed (EXP-029): depth 1 ties at 87.5% each, depth 2 is 38.0% against 30.6%, depth 3 is 2.2% against 0.8%. The gaps are weak (the depth-2 sd across seeds is ~24 points, depth 3 is near the 1.4% floor for both) and it was never re-run once the recipe worked. **But the control is mismatched on the axis that matters, against the regionalized arm, and the obvious fix turns out to be vacuous.** See section 2a and its 2026-09-17 correction: this criterion is not merely unmeasured, it is **unanswerable without an architecture change**. |
 | (3) Interpretability analysis | **Met, then substantially retracted** | Extensive: decodability (EXP-033), specialization (EXP-027), the critic's mechanism (EXP-056/057), the recall's information content (EXP-061), the readout ceiling (EXP-063). **But five instruments were retired** (`docs/retired-instruments.md`), including the EXP-033 probe that carried most mechanism claims through weeks 17 to 20. The analysis is real; a large fraction of its original *conclusions* were withdrawn by later work. |
 | (4) Clear documentation | **Met** | **All 35 Phase 3 experiments (EXP-029 to EXP-063) carry a committed results file** with provenance and a regeneration command, a standing rule since the 2026-07-13 audit found EXP-027's numbers living only in a gitignored `outputs/`. **28 of them also have a pre-registered spec** (EXP-036 onward, unbroken except EXP-041). Plus ADRs, `docs/retired-instruments.md`, `docs/playbooks/remote-experiment-runs.md`, and 663 tests. Repo-wide the results-file figure is 49 of 64 folders; the gaps are all Phase 0/1 learning exercises that predate the rule. |
 
@@ -63,6 +63,32 @@ Three consequences, and the third decides what to do about criterion 2:
    (a monolithic arm at 192, or a regionalized arm whose off-path regions are removed rather than
    merely bypassed) and pre-registers which of width and topology it is testing. That is a real
    experiment, not a re-run, and it is **deliberately not being done to close a checkpoint box.**
+
+> **CORRECTION, 2026-09-17, before any cell was run: point 3's proposed experiment is VACUOUS and
+> both of its suggestions are wrong.** Left above as written, because this document was tagged
+> `phase-3-checkpoint` with that recommendation in it and silently editing it would hide the
+> mistake rather than record it.
+>
+> The on-path-matched contrast compares a network **against itself**. `Brain` builds its sensory
+> region as `SensoryCortex(n_obs=144, hidden=128, concept=64, seed=s)`;
+> `MonolithicBrain(total_neurons=192, content=64)` builds `SensoryCortex(n_obs=144, hidden=192-64,
+> concept=64, seed=s)`. Same module, same arguments, same seed. **Measured across 6 seeds through
+> the real `make_agent` path: every weight bit-identical, and the concept identical at
+> `max|diff| = 0.000e+00`.** The second suggestion fails for the same reason: removing regions that
+> are already architecturally disconnected from the action changes nothing.
+>
+> **The real conclusion is stronger than the experiment would have been.** The topology question is
+> not answerable by ANY arm-versus-arm contrast in this configuration, because the topology is not
+> on the policy path. Total-matching measures width (in the control's favour, as above);
+> on-path-matching measures nothing. There is no third arm that does not first require **changing
+> the architecture so that a region other than `sensory` influences the action**. That is v2 design
+> work, not a checkpoint experiment.
+>
+> **This is EXP-030's lesson recurring**: *a path-matched control can turn out bit-identical to the
+> arm it is controlling for.* It was caught this time because the identity was checked **before**
+> dispatch rather than after, and it cost nothing instead of 24 to 48 cells.
+> `tests/training/test_topology_contrast_is_vacuous.py` locks it in, and **a failure of that file
+> is good news**: it would mean the topology had become measurable for the first time.
 
 **Criterion 2 is therefore graded Partial and left Partial, with the confound documented and the
 correct experiment specified.** Closing it by re-running a contrast whose flaw is now understood
