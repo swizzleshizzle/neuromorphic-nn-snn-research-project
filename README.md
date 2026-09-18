@@ -2,14 +2,14 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 2 (Multi-region brain), Week 12
+**Status:** Phase 3 (Rubik's Cube capstone), Week 24. 63 numbered experiments.
 **Capstone target:** *I Attempted to Build a Brain in 12 Months*
 
 ---
 
 ## What this is
 
-A software-only neuromorphic AI research project. The goal is a regionalized spiking neural network (five distinct functional regions modeled loosely on the mammalian brain: sensory cortex, hippocampal memory, prefrontal planning, motor cortex, thalamic router) that learn to solve a 2x2 Rubik's Cube through experience rather than supervised training.
+A software-only neuromorphic AI research project. The goal is a regionalized spiking neural network (five distinct functional regions modeled loosely on the mammalian brain: sensory cortex, hippocampal memory, prefrontal planning, motor cortex, thalamic router) that learns to solve a 2x2 Rubik's Cube through experience rather than supervised training.
 
 The wider context: most modern AI consumes megawatts. The brain runs general intelligence on ~20 watts. This project tests, at small scale, whether brain-inspired architecture can capture some fraction of that efficiency.
 
@@ -20,6 +20,55 @@ This repo is also the working surface of a self-directed curriculum. The author 
 - A polished framework. The code is the *output of learning*, not the input to anyone else's research.
 - A claim that this will work. Several phase milestones may fail. Failures are documented as carefully as successes.
 - A drop-in solution for any specific application. The Strategy Sentinel trading-system extension is on a separate, multi-year track and is not included in this repo.
+
+---
+
+## Results so far
+
+The cube task, 12 seeds, against a **measured** chance floor rather than an assumed one (it is
+20.8% at depth 1, not 1/6, because a random walk inside a `2d+3` step budget can stumble into
+solved). **The evaluation column matters: depth 1 is scored on the training distribution, every
+depth from 3 down the table is scored on held-out states the policy never trained on.**
+
+| scramble depth | success | evaluated on | chance floor | source |
+|---|---|---|---|---|
+| 1 | **87.5%** | train-dist | 20.8% | EXP-029, the v1 baseline |
+| 3 | **50.0%** | held-out | 1.4% | EXP-035, up from 2.2% with no architectural change |
+| 6 | **35.3%** | held-out | 0.1% | EXP-049 |
+| 7 | **20.0%** | held-out | **0.0000** | EXP-053, replicated by EXP-060 |
+| 8 | **7.8%** | held-out | **0.0000** | EXP-062, the current frontier |
+
+### What moved the needle
+
+1. **A depth curriculum.** Depth 3 went from 2.2% to 50.0%, a 22.7x improvement, with **no change
+   to the architecture at all** (EXP-034/035).
+2. **Compute.** Success is linear in the *logarithm* of training spend, about **0.22 per log10**,
+   with no knee (EXP-044/045/046, held out of sample at depth 8 by EXP-062). So the "depth series"
+   was a **budget series**, and the architectural "wall" reported in earlier weeks was an exchange
+   rate.
+3. **Training the spiking encoder during RL** (EXP-039/040/047/048). **This is the one genuinely
+   neuromorphic change in the project that pays for itself.**
+4. **A learned critic**, whose benefit is within-episode state-dependence (EXP-056/057) and which
+   replicated on fresh seeds (EXP-060). It is also **ordinary reinforcement learning**.
+
+### What did not work, stated as plainly as the above
+
+- **Episodic memory does not help, and actively hurts** (-0.0954, p 0.0056). The hippocampal
+  recall block is **indistinguishable from matched-magnitude noise** (EXP-059/061), and a learned
+  attention over a *perfect* episodic cache is **0.198 worse than having no memory at all**
+  (EXP-063). That last arm was built as a ceiling so the negative would be decisive.
+- **The neuromorphic claim for the credit-assignment stage is refuted.** The `neuromod`
+  neuromodulatory bus was made load-bearing and bought nothing measurable (EXP-053).
+- **The stated capstone deliverable is priced out on evidence.** Depth-11 random scrambles would
+  cost about **33 days of compute per seed** (EXP-062). Nothing about it requires new science; the
+  arithmetic is what stops it.
+- **Five measurement instruments were retired**, including the probe that carried most mechanism
+  claims through weeks 17 to 20. Each worked as a threshold and failed as a gradient. See
+  `docs/retired-instruments.md`.
+
+**Full audit, graded criterion by criterion: `docs/phase3-honest-assessment.md`.** The short
+version is that almost every architectural idea lost to a training idea, and the project's main
+achievement is that it kept finding that out instead of not finding it out.
 
 ---
 
@@ -145,13 +194,13 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 
 ## Phase roadmap
 
-| Phase | Window | Focus |
-|---|---|---|
-| 0: Foundations | Apr–May 2026 | NN concepts, PyTorch, snnTorch tutorials, RL basics |
-| 1: Single-region SNNs | May 2026 | Spiking MNIST, recurrence, surrogate gradients, STDP |
-| 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task |
-| 3: Rubik's Cube | Aug–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization |
-| 4: Capstone | Oct–Dec 2026 | Documentation, write-up, video, public release |
+| Phase | Window | Focus | Status |
+|---|---|---|---|
+| 0: Foundations | Apr–May 2026 | NN concepts, PyTorch, snnTorch tutorials, RL basics | Complete |
+| 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
+| 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
+| 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | **In progress.** 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
+| 4: Capstone | Oct–Dec 2026 | Documentation, write-up, public release | Not started |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
