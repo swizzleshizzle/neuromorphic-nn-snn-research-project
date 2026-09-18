@@ -12,6 +12,7 @@ never sees a distance. See docs/superpowers/specs/2026-07-25-cube-baseline-desig
 from __future__ import annotations
 
 import json
+import math
 import random
 import statistics
 from dataclasses import asdict, dataclass, field
@@ -72,7 +73,8 @@ class CubeConfig:
     content: int = 64
     n_actions: int = 6
     readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" |
-                                # "memory_amnesic" | "memory_noise"
+                                # "memory_amnesic" | "memory_noise" |
+                                # "memory_attn" | "memory_attn_noise"
     # Depth curriculum for training (EXP-034). Empty means the shipped behaviour: train
     # only at `depth`. When set, `episodes` is SPLIT across the listed depths rather than
     # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
@@ -279,14 +281,65 @@ class ShellCubeEnv(CubeEnv):
 
 FAMILIARITY_WIDTH = 1
 
+# EXP-063. The two LEARNED readouts. They are listed separately from the fixed memory modes
+# because they are the only ones that put trainable parameters on the readout itself.
+ATTN_MODES = ("memory_attn", "memory_attn_noise")
+
+# Every readout whose head input is [concept, read-block, familiarity]. The width is identical
+# across all of them BY CONSTRUCTION, which is what makes EXP-059/061/063's arms comparable
+# without a width control: they differ only in how the middle block is produced.
+MEMORY_MODES = ("memory", "memory_shuffled", "memory_amnesic", "memory_noise") + ATTN_MODES
+
+READOUT_MODES = ("concept",) + MEMORY_MODES
+
+ATTN_DK = 16
+"""Attention key/query width (EXP-063).
+
+Deliberately small. With `content=64` and no biases the learned readout adds
+`2 * 64 * 16 = 2,048` parameters to a 780-parameter head - a 3.6x trainable surface, which is
+a real confound and is exactly why `memory_attn_noise` exists to hold it fixed. A full
+`content x content` projection would have added 4,096 more for no scientific gain.
+"""
+
 
 def feature_width(cfg: CubeConfig) -> int:
     """Width of the policy head's input for a config's readout mode."""
     if cfg.readout == "concept":
         return cfg.content
-    if cfg.readout in ("memory", "memory_shuffled", "memory_amnesic", "memory_noise"):
+    if cfg.readout in MEMORY_MODES:
         return cfg.content * 2 + FAMILIARITY_WIDTH
     raise ValueError(f"unknown readout {cfg.readout!r}")
+
+
+class AttentionReadout(nn.Module):
+    """EXP-063: a LEARNED softmax attention over the episode's strictly prior concepts.
+
+    The values ARE the keys - there is no value projection - so the block handed to the policy
+    head is a convex combination of concepts the agent actually visited earlier this episode.
+    That is deliberate: it makes the arm a clean test of whether episodic content is USABLE,
+    rather than a test of whether a wider nonlinear readout helps.
+
+    **This arm bypasses the hippocampal attractor, and that is the point.** It attends over a
+    perfect cache, so it is a CEILING instrument, not a proposed architecture: if a learned
+    readout over perfect episodic memory cannot beat a control with nothing real to attend to,
+    then no readout over the lossy attractor read can either. EXP-059/061 established that the
+    RAW attractor read is indistinguishable from matched-magnitude noise; this asks the prior
+    question of whether the information is worth reading at all.
+    """
+
+    def __init__(self, content: int, d_k: int = ATTN_DK):
+        super().__init__()
+        self.d_k = d_k
+        # No biases: a bias on the query adds a constant logit offset that softmax cancels
+        # anyway, and a bias on the keys is one more parameter for the control arm to match.
+        self.W_q = nn.Linear(content, d_k, bias=False)
+        self.W_k = nn.Linear(content, d_k, bias=False)
+
+    def weights(self, concept: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+        """``concept`` ``[content]``, ``keys`` ``[n, content]`` -> attention ``[n]``."""
+        q = self.W_q(concept)                                  # [d_k]
+        k = self.W_k(keys)                                     # [n, d_k]
+        return torch.softmax((k @ q) / math.sqrt(self.d_k), dim=0)
 
 
 class MemoryReadout:
@@ -343,15 +396,37 @@ class MemoryReadout:
         # Derived from the run's own rng, and only for the mode that needs it, so creating it
         # cannot perturb `memory_shuffled`'s choices.
         self._noise_gen = None
-        if mode == "memory_noise":
+        if mode in ("memory_noise", "memory_attn_noise"):
             self._noise_gen = torch.Generator().manual_seed(rng.randrange(2 ** 31))
+        # EXP-063. Created ONLY for the attention modes, so no other mode's torch RNG stream
+        # shifts - the same discipline `_noise_gen` follows, and the reason EXP-059's and
+        # EXP-061's arms stay reusable without a re-run.
+        self.attn = None
+        if mode in ATTN_MODES:
+            self.attn = AttentionReadout(brain.content)
+        # The control arm's stand-in cache: one matched-norm, NON-NEGATIVE random vector per
+        # visited state, generated once when the state is visited and stable for the rest of
+        # the episode. Non-negative because concept codes are spike RATES and therefore live
+        # in the positive orthant: signed noise would cancel under a convex combination and
+        # shrink the read block by roughly 1/sqrt(n), turning an information control into a
+        # magnitude control.
+        self._attn_cache: list[torch.Tensor] = []
+        self._noise_cache: list[torch.Tensor] = []
+        # EXP-063 mechanism instruments. `attn_entropy` is normalised by log(n) so it is
+        # comparable across steps with different cache sizes; 1.0 is uniform attention (the
+        # readout learned nothing to select on) and 0.0 is a hard pick.
+        self.attn_entropy_sum = 0.0
+        self.attn_entropy_n = 0
+        self.attn_recency_sum = 0.0
+        self.empty_cache_steps = 0
 
     def reset(self) -> None:
         """Drop the episode's cached concepts. Call at every episode start."""
-        if self.mode not in ("concept", "memory", "memory_shuffled", "memory_amnesic",
-                             "memory_noise"):
+        if self.mode not in READOUT_MODES:
             raise ValueError(f"unknown readout {self.mode!r}")
         self._cache = []
+        self._attn_cache = []
+        self._noise_cache = []
         self.unshuffled_steps = 0
         self.recall_cos_sum = 0.0
         self.recall_cos_n = 0
@@ -361,6 +436,10 @@ class MemoryReadout:
         self.norm_n = 0
         self.noise_cos_sum = 0.0
         self.noise_cos_n = 0
+        self.attn_entropy_sum = 0.0
+        self.attn_entropy_n = 0
+        self.attn_recency_sum = 0.0
+        self.empty_cache_steps = 0
 
     def _probe_recall(self, query: torch.Tensor, recall: torch.Tensor) -> None:
         """EXP-059's gate instrument: how much of `recall` is the STORED CONTENT?
@@ -399,6 +478,102 @@ class MemoryReadout:
         self.concept_norm_sum += float(concept.norm())
         self.norm_n += 1
 
+    def _matched_noise(self, vec: torch.Tensor) -> torch.Tensor:
+        """A NON-NEGATIVE random vector with the same L2 norm as `vec` (EXP-063).
+
+        Non-negative because concept codes are spike rates and live in the positive orthant.
+        Signed noise would cancel under the attention's convex combination and shrink the read
+        block by roughly `1/sqrt(n)` where the real one holds its norm, which would make the
+        control differ from its arm in MAGNITUDE as well as in content - the single confound
+        EXP-061 was built to remove.
+        """
+        z = torch.randn(vec.shape, generator=self._noise_gen, dtype=vec.dtype).abs()
+        zn = z.norm()
+        if float(zn) == 0.0:                                  # astronomically unlikely
+            return torch.zeros_like(vec)
+        return z * (vec.norm() / zn)
+
+    def _note_attention(self, a: torch.Tensor) -> None:
+        """Mechanism instruments, never a gate.
+
+        Both are accumulated only when there are at least two states to choose between: with
+        one, normalised entropy is 0/0 and the recency mass is trivially 1.0, so including
+        those steps would report the cache size rather than the attention.
+        """
+        n = int(a.shape[0])
+        if n < 2:
+            return
+        prob = a.detach().clamp_min(1e-12)
+        self.attn_entropy_sum += float(-(prob * prob.log()).sum()) / math.log(n)
+        self.attn_recency_sum += float(prob[-1])
+        self.attn_entropy_n += 1
+
+    def _attend(self, concept: torch.Tensor, real_prior: list, noise_prior: list):
+        """The read block: a learned convex combination of prior states, or of their controls."""
+        if not real_prior:
+            # First step of an episode: nothing has been visited yet, so there is genuinely
+            # nothing to attend over. A zero block is the honest value - attending to the
+            # current state instead would rebuild the very confound this readout avoids.
+            self.empty_cache_steps += 1
+            return torch.zeros_like(concept)
+
+        real_keys = torch.stack(real_prior)                    # [n, content]
+        if self.mode == "memory_attn":
+            a = self.attn.weights(concept, real_keys)
+            read = a @ real_keys
+            self._note_attention(a)
+            return read
+
+        # `memory_attn_noise`: identical module, identical parameter count, identical feature
+        # width. The keys and values are the matched-norm stand-ins, so the attention has the
+        # same capacity and the same optimisation problem with nothing real to attend to.
+        noise_keys = torch.stack(noise_prior)
+        a = self.attn.weights(concept, noise_keys)
+        read = a @ noise_keys
+        with torch.no_grad():
+            real_read = self.attn.weights(concept, real_keys) @ real_keys
+            rn = read.norm()
+            scale = (real_read.norm() / rn) if float(rn) > 0 else torch.zeros(())
+        # A DETACHED scalar, so the block's magnitude matches the real read step for step while
+        # the gradient still flows through the attention that produced its direction.
+        read = read * scale
+        denom = float(real_read.norm()) * float(read.norm())
+        if denom > 0:
+            # Reported, NOT a gate and NOT near zero by construction: both vectors are
+            # non-negative, so this cosine has a large positive floor. The instrument that
+            # actually detects a leak is `test_attn_noise_read_is_exactly_the_noise_cache`,
+            # which recomputes the returned vector independently and demands exact equality.
+            self.noise_cos_sum += float(torch.dot(real_read, read.detach())) / denom
+            self.noise_cos_n += 1
+        self._note_attention(a)
+        return read
+
+    def _attention_features(self, out: dict) -> torch.Tensor:
+        """EXP-063's learned readout. Deliberately NOT wrapped in `no_grad`.
+
+        The brain's own computation still runs detached - only the attention projections carry
+        a graph - so the gradient reaches `W_q` and `W_k` and nothing else. EXP-047's silent
+        failure was a `no_grad` that detached the very thing a change had just made trainable,
+        and `test_attention_gradient_reaches_the_parameters` asserts the parameters MOVE rather
+        than asserting a switch is set.
+        """
+        with torch.no_grad():
+            concept = concept_rate(out)                       # [content], detached
+            snapshot = out["concept"].mean(dim=0)             # [B, content]
+            fam = self.brain.hippo.familiarity(snapshot)      # [B]
+
+        real_prior = list(self._attn_cache)
+        noise_prior = list(self._noise_cache)
+        self._attn_cache.append(concept)
+        if self._noise_gen is not None:
+            self._noise_cache.append(self._matched_noise(concept))
+
+        read = self._attend(concept, real_prior, noise_prior)
+        # Detached at the CALL SITE so `_note_norms`, which every pre-existing memory mode
+        # shares, is left byte-for-byte untouched.
+        self._note_norms(concept, read.detach())
+        return torch.cat([concept, read, fam[:1]])
+
     def __call__(self, out: dict) -> torch.Tensor:
         # EXP-047. The concept path returns BEFORE the `no_grad` below, deliberately.
         #
@@ -417,6 +592,9 @@ class MemoryReadout:
         # swap it out under `memory_amnesic`, which is not something to build a graph through.
         if self.mode == "concept":
             return concept_rate(out)                        # [content]
+
+        if self.mode in ATTN_MODES:
+            return self._attention_features(out)
 
         with torch.no_grad():
             concept = concept_rate(out)                     # [content]
@@ -865,6 +1043,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         recall_cos_sum, recall_cos_n = 0.0, 0
         recall_norm_sum, concept_norm_sum, norm_n = 0.0, 0.0, 0
         noise_cos_sum, noise_cos_n = 0.0, 0
+        attn_entropy_sum, attn_entropy_n, attn_recency_sum = 0.0, 0, 0.0
+        empty_cache_steps = 0
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
         # ...and for the same reason it never enters the stage loop that fills this. Empty is the
         # honest value, not a missing key: EXP-042 added `stage_trace` and every floor arm before
@@ -930,6 +1110,15 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 ])
         else:
             optimizer = torch.optim.Adam(policy_parameters(head), lr=cfg.lr)
+        # EXP-063. The learned readout trains at the head's lr, as a second parameter group
+        # rather than a separate optimizer: Adam state is per-parameter, so the head's own
+        # updates are bit-identical to every prior run, and `trainable_params` below picks the
+        # attention up automatically because it counts the optimizer rather than the config.
+        # `readout.attn` is None for every mode that predates EXP-063, so no existing path
+        # gains a parameter group.
+        if readout.attn is not None:
+            optimizer.add_param_group({"params": list(readout.attn.parameters()),
+                                       "lr": cfg.lr})
         # EXP-053. A SEPARATE optimizer, not a third parameter group, so the head's Adam
         # state and update sequence stay exactly what every prior record was produced with.
         critic = None
@@ -972,6 +1161,8 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         recall_cos_sum, recall_cos_n = 0.0, 0
         recall_norm_sum, concept_norm_sum, norm_n = 0.0, 0.0, 0
         noise_cos_sum, noise_cos_n = 0.0, 0
+        attn_entropy_sum, attn_entropy_n, attn_recency_sum = 0.0, 0, 0.0
+        empty_cache_steps = 0
         entropies = []
         gate_fn = None
         if cfg.plasticity_gate == "dopamine":
@@ -1048,6 +1239,10 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 norm_n += readout.norm_n
                 noise_cos_sum += readout.noise_cos_sum
                 noise_cos_n += readout.noise_cos_n
+                attn_entropy_sum += readout.attn_entropy_sum
+                attn_entropy_n += readout.attn_entropy_n
+                attn_recency_sum += readout.attn_recency_sum
+                empty_cache_steps += readout.empty_cache_steps
                 if encoder_optimizer is not None:
                     gate_calls += 1
                     gate_opens += int(stats["gate_open"])
@@ -1133,6 +1328,19 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         "concept_norm_mean": (concept_norm_sum / norm_n) if norm_n else None,
         # Sanity only, never a gate: ~0 by construction for `memory_noise`, None elsewhere.
         "noise_real_cos": (noise_cos_sum / noise_cos_n) if noise_cos_n else None,
+        # EXP-063 mechanism instruments, never gates. `attn_entropy_norm` is 1.0 when the
+        # learned attention stayed uniform - it selected nothing - and 0.0 when it picks one
+        # state. `attn_recency_mass` is the share on the immediately preceding state, which
+        # separates "uses episodic memory" from "uses the previous state". Both are averaged
+        # over steps with at least two states to choose between; with fewer they would report
+        # the cache size instead. None for every readout with no attention.
+        "attn_entropy_norm": (attn_entropy_sum / attn_entropy_n) if attn_entropy_n else None,
+        "attn_recency_mass": (attn_recency_sum / attn_entropy_n) if attn_entropy_n else None,
+        "attn_choice_steps": attn_entropy_n,
+        # The denominator for EXP-063's second gate. `revisit_rate` already divides by this
+        # but never recorded it, so the raw count was unrecoverable from the record alone.
+        "train_steps": steps_total,
+        "empty_cache_steps": empty_cache_steps,
         "unshuffled_steps": unshuffled_steps,
         "unshuffled_frac": (unshuffled_steps / steps_total) if steps_total else 0.0,
         "config": {**asdict(cfg), "out_dir": str(cfg.out_dir)},

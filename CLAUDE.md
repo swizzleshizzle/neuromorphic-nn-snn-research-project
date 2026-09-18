@@ -39,8 +39,8 @@ The slow files under `-m "not slow"` are NOT the ones the old table named:
 Everything else in `tests/training` is seconds. The old table's `test_critic_seam.py`
 and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected.
 
-**Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, **623 as of 2026-09-13
-(601 not slow, 22 slow)**, verified by `--collect-only`.
+**Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, 623 2026-09-13,
+**663 as of 2026-09-17 (641 not slow, 22 slow)**, verified by `--collect-only`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
@@ -183,6 +183,13 @@ reintroduce one.
   of seven mutations were caught; that one survived and exposed the blind spot. **Break the
   implementation deliberately and check each test fails against the bug it names.** Same practice
   found a missing PARTIAL-failure case in EXP-059's aggregator gate.
+- **A TEST'S FIXTURE CAN DISARM THE TEST, and mutation testing is what shows it.** EXP-063's
+  encoder-freeze test built its brain output under `torch.no_grad()`, the convenient thing to do.
+  The concept therefore arrived already detached, so deleting the readout's own `no_grad` changed
+  nothing, the test still passed, and the mutation survived. The test only became able to fail
+  once its input was built WITH a live graph. **Ask what the fixture already guarantees before
+  trusting what the assertion appears to check** - a test that cannot see the defect is worse
+  than no test, because it is counted as coverage. 18 of 18 mutations caught after that one fix.
 - **Read real output, not only green tests.** A cube frame labelled `solved: yes` on a scrambled cube passed every unit test in the suite; two minutes reading an actual recorded trace found it. Same pattern as the filename collision that was visible in an implementer's own smoke output. Tests prove what you thought to assert; output shows what you did not.
 - **No scipy in the venv.** For n around 12, an exact paired permutation test over all `2**n` sign flips is cheap, assumption-free, and better than a normal approximation. 12 seeds is 4096 flips.
 
