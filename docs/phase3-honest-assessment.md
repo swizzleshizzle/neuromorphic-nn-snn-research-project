@@ -19,7 +19,7 @@ least one metric. (3) Interpretability analysis. (4) Clear documentation.*
 | Criterion | Grade | Note |
 |---|---|---|
 | (1) Solves from 1-move scrambles, 3-move stretch | **Exceeded** | Depth 1 was solved in the v1 baseline itself (87.5%, EXP-029). The stretch goal, depth 3, reached **50.0%** (EXP-035), **22.7x** the v1 baseline's 2.2%. The series now runs to **depth 8 at 0.0783** (EXP-062) against a *measured* chance floor of **exactly 0.0000**. |
-| (2) Comparison vs monolithic | **Partial** | It exists and is committed (EXP-029): depth 1 is a tie at 87.5% each, depth 2 is 38.0% against 30.6%, depth 3 is 2.2% against 0.8%. But the depth-2 gap sits inside a seed sd of ~24 points, depth 3 is at the 1.4% floor for both arms, and **only 1 of the 5 regions is on the policy path** when `recall=False`, so the contrast measures **width, not topology**. It was never re-run once the recipe worked. |
+| (2) Comparison vs monolithic | **Partial, and confounded in the direction that makes it MORE interesting** | It exists and is committed (EXP-029): depth 1 ties at 87.5% each, depth 2 is 38.0% against 30.6%, depth 3 is 2.2% against 0.8%. The gaps are weak (the depth-2 sd across seeds is ~24 points, depth 3 is near the 1.4% floor for both) and it was never re-run once the recipe worked. **But the control is mismatched on the axis that matters, against the regionalized arm.** See section 2a. |
 | (3) Interpretability analysis | **Met, then substantially retracted** | Extensive: decodability (EXP-033), specialization (EXP-027), the critic's mechanism (EXP-056/057), the recall's information content (EXP-061), the readout ceiling (EXP-063). **But five instruments were retired** (`docs/retired-instruments.md`), including the EXP-033 probe that carried most mechanism claims through weeks 17 to 20. The analysis is real; a large fraction of its original *conclusions* were withdrawn by later work. |
 | (4) Clear documentation | **Met** | **All 35 Phase 3 experiments (EXP-029 to EXP-063) carry a committed results file** with provenance and a regeneration command, a standing rule since the 2026-07-13 audit found EXP-027's numbers living only in a gitignored `outputs/`. **28 of them also have a pre-registered spec** (EXP-036 onward, unbroken except EXP-041). Plus ADRs, `docs/retired-instruments.md`, `docs/playbooks/remote-experiment-runs.md`, and 663 tests. Repo-wide the results-file figure is 49 of 64 folders; the gaps are all Phase 0/1 learning exercises that predate the rule. |
 
@@ -27,6 +27,46 @@ least one metric. (3) Interpretability analysis. (4) Clear documentation.*
 reason worth stating: **the architecture question stopped being the interesting question.** Once
 the curriculum and the budget law explained the depth series, nobody went back to re-run a
 topology contrast that had been measured on a policy which had learned nothing.
+
+### 2a. The monolithic control is neuron-matched on the wrong quantity, and it favours the control
+
+This was found on 2026-09-17 by reading the existing code and numbers, with nothing re-run. It is
+the largest free correction available to criterion 2, and it is the project's own standing habit
+applied to itself: **ask what a control holds fixed besides the thing you named.**
+
+`MonolithicBrain` is documented as "neuron-matched to the five-region `Brain`" and spends the
+entire budget on one flat stack: `hidden = 510 - 64 = 446` plus `concept = 64`. So **all 510 of
+its neurons are on the policy path.**
+
+The regionalized arm's policy path is its **sensory region alone** whenever `recall=False`, which
+is every arm in the phase except the memory ones. That region is **192 neurons**. The other 318
+(hippocampus 150, prefrontal 150, router 12, motor 6) are off-path.
+
+| arm | total neurons | ON the policy path |
+|---|---|---|
+| regionalized | 510 | **192** |
+| monolithic | 510 | **510** |
+
+**The control therefore had 2.66x the on-path capacity, and still lost at depth 2 (30.6% against
+38.0%) and depth 3 (0.8% against 2.2%).** "Matched on total neuron count" reads as scrupulously
+fair and is in fact a 2.66x handicap on the only axis the policy can use.
+
+Three consequences, and the third decides what to do about criterion 2:
+
+1. The regionalized arm's weak win is **less likely to be a width artifact than the raw numbers
+   suggest**, because width ran the other way. That is a modest upgrade to the result.
+2. It is still **not** evidence that the five-region topology helps. Both gaps are inside the seed
+   noise, and a 2.66x capacity deficit losing narrowly is not the same as topology winning.
+3. ==**Re-running the old contrast on the working recipe would NOT fix criterion 2.**== It would
+   reproduce this exact confound at a higher success rate and cost about 24 cells of compute to
+   learn nothing new. What criterion 2 actually needs is a design that **matches ON-PATH capacity**
+   (a monolithic arm at 192, or a regionalized arm whose off-path regions are removed rather than
+   merely bypassed) and pre-registers which of width and topology it is testing. That is a real
+   experiment, not a re-run, and it is **deliberately not being done to close a checkpoint box.**
+
+**Criterion 2 is therefore graded Partial and left Partial, with the confound documented and the
+correct experiment specified.** Closing it by re-running a contrast whose flaw is now understood
+would be the box-ticking this assessment exists to avoid.
 
 ## 2. Scorecard against the roadmap the project wrote for itself
 
