@@ -74,7 +74,15 @@ class CubeConfig:
     n_actions: int = 6
     readout: str = "concept"    # "concept" | "memory" | "memory_shuffled" |
                                 # "memory_amnesic" | "memory_noise" |
-                                # "memory_attn" | "memory_attn_noise"
+                                # "memory_attn" | "memory_attn_noise" | "motor"
+    # EXP-064. Learning rate for the PREFRONTAL and MOTOR regions. `None` keeps them frozen at
+    # random init, which is what every experiment before EXP-064 did. Requires readout="motor":
+    # training regions that are not on the policy path would move parameters no gradient reaches.
+    region_lr: float | None = None
+    # EXP-064's capacity-matched control. `None` is the v1 single `nn.Linear`. An int adds one
+    # ReLU hidden layer of that width, so a conventional head can be matched in trainable
+    # parameters against the regions the motor arm trains.
+    head_hidden: int | None = None
     # Depth curriculum for training (EXP-034). Empty means the shipped behaviour: train
     # only at `depth`. When set, `episodes` is SPLIT across the listed depths rather than
     # multiplied, so a curriculum arm never buys extra compute over a fixed-budget arm.
@@ -290,7 +298,13 @@ ATTN_MODES = ("memory_attn", "memory_attn_noise")
 # without a width control: they differ only in how the middle block is produced.
 MEMORY_MODES = ("memory", "memory_shuffled", "memory_amnesic", "memory_noise") + ATTN_MODES
 
-READOUT_MODES = ("concept",) + MEMORY_MODES
+# EXP-064. The readout that puts the brain's OWN pathway on the policy path: the policy reads
+# the motor region's spike rates, so gradient flows back through motor -> router -> prefrontal.
+# Before EXP-064 that pathway ran on every step of every experiment and its output was consumed
+# only by the dashboard.
+MOTOR_MODES = ("motor",)
+
+READOUT_MODES = ("concept",) + MEMORY_MODES + MOTOR_MODES
 
 ATTN_DK = 16
 """Attention key/query width (EXP-063).
@@ -308,6 +322,11 @@ def feature_width(cfg: CubeConfig) -> int:
         return cfg.content
     if cfg.readout in MEMORY_MODES:
         return cfg.content * 2 + FAMILIARITY_WIDTH
+    if cfg.readout in MOTOR_MODES:
+        # The motor region emits one spike train per action, so the "features" the head reads
+        # are already action-width. The head is then a 6x6 affine: a learned temperature and
+        # bias on the brain's own decision, not a second policy sitting on top of it.
+        return cfg.n_actions
     raise ValueError(f"unknown readout {cfg.readout!r}")
 
 
@@ -419,6 +438,13 @@ class MemoryReadout:
         self.attn_entropy_n = 0
         self.attn_recency_sum = 0.0
         self.empty_cache_steps = 0
+        # EXP-064 gate instrument 2: does the motor pathway actually SPIKE? A spiking readout
+        # that emits nothing hands the head a constant zero vector, and the arm degenerates to a
+        # bias-only policy while every other number looks ordinary. Mean firing rate over the
+        # action units, accumulated on every step.
+        self.motor_rate_sum = 0.0
+        self.motor_rate_n = 0
+        self.motor_silent_steps = 0
 
     def reset(self) -> None:
         """Drop the episode's cached concepts. Call at every episode start."""
@@ -440,6 +466,9 @@ class MemoryReadout:
         self.attn_entropy_n = 0
         self.attn_recency_sum = 0.0
         self.empty_cache_steps = 0
+        self.motor_rate_sum = 0.0
+        self.motor_rate_n = 0
+        self.motor_silent_steps = 0
 
     def _probe_recall(self, query: torch.Tensor, recall: torch.Tensor) -> None:
         """EXP-059's gate instrument: how much of `recall` is the STORED CONTENT?
@@ -595,6 +624,20 @@ class MemoryReadout:
 
         if self.mode in ATTN_MODES:
             return self._attention_features(out)
+
+        if self.mode == "motor":
+            # EXP-064. Deliberately NOT wrapped in `no_grad`: this is the whole point. The
+            # gradient has to reach `prefrontal` and `motor` through the spiking unroll, which
+            # is what `grad_brain=True` and snnTorch's surrogate gradients make possible.
+            # `test_motor_gradient_reaches_prefrontal_and_motor` asserts the parameters MOVE.
+            rate = out["action_spikes"].mean(dim=0)[0]          # [n_actions]
+            with torch.no_grad():
+                total = float(rate.sum())
+                self.motor_rate_sum += float(rate.mean())
+                self.motor_rate_n += 1
+                if total == 0.0:
+                    self.motor_silent_steps += 1
+            return rate
 
         with torch.no_grad():
             concept = concept_rate(out)                     # [content]
@@ -1045,6 +1088,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         noise_cos_sum, noise_cos_n = 0.0, 0
         attn_entropy_sum, attn_entropy_n, attn_recency_sum = 0.0, 0, 0.0
         empty_cache_steps = 0
+        motor_rate_sum, motor_rate_n, motor_silent = 0.0, 0, 0
         entropies: list[float] = []  # the chance floor never trains, so there is no policy
         # ...and for the same reason it never enters the stage loop that fills this. Empty is the
         # honest value, not a missing key: EXP-042 added `stage_trace` and every floor arm before
@@ -1058,16 +1102,48 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         agent = make_agent(cfg)
         torch.manual_seed(train_seed)  # head init and sampling stream matched across arms
         readout = MemoryReadout(cfg.readout, random.Random(train_seed), agent)
-        use_memory = cfg.readout != "concept"
+        # EXP-064: "motor" is not a memory readout. Listing the memory modes explicitly beats
+        # `!= "concept"`, which silently switched the hippocampus on for every new readout mode
+        # ever added. Memory HURTS on this task (EXP-059/061/063), so a motor arm that quietly
+        # engaged it would be testing two changes at once.
+        use_memory = cfg.readout in MEMORY_MODES
         spec = AblationSpec(kind="gaussian", dose=cfg.sigma, seed=train_seed) if cfg.sigma else None
-        head = AblatedConcept(
-            nn.Linear(feature_width(cfg), cfg.n_actions), spec, width=feature_width(cfg)
-        )
+        if cfg.head_hidden is None:
+            inner = nn.Linear(feature_width(cfg), cfg.n_actions)
+        else:
+            # EXP-064's capacity-matched control. One ReLU hidden layer, so a conventional
+            # readout can be matched in TRAINABLE PARAMETERS against the regions the motor arm
+            # trains. Without this the motor arm would be compared against a 390-parameter head
+            # while training 15,498, which is the confound EXP-063 was caught by.
+            inner = nn.Sequential(
+                nn.Linear(feature_width(cfg), cfg.head_hidden),
+                nn.ReLU(),
+                nn.Linear(cfg.head_hidden, cfg.n_actions),
+            )
+        head = AblatedConcept(inner, spec, width=feature_width(cfg))
         # EXP-047. The frozen path builds the optimizer exactly as every prior experiment did,
         # from `policy_parameters(head)` alone, so its Adam state and update sequence are
         # unchanged. Fine-tuning ADDS a second parameter group rather than merging the two,
         # which keeps the head's lr and the encoder's separate quantities.
         finetune = cfg.encoder_lr is not None
+        # EXP-064. Training the regions requires the gradient to reach them THROUGH the spiking
+        # unroll, so the brain's forward must not run under `no_grad`.
+        train_regions = cfg.region_lr is not None
+        if train_regions:
+            if cfg.arm != "regionalized":
+                raise ValueError(
+                    f"region_lr requires arm='regionalized' (got {cfg.arm!r}): the monolithic "
+                    "arm has no prefrontal or motor region to train."
+                )
+            if cfg.readout not in MOTOR_MODES:
+                # The whole point is that these regions were OFF the policy path. Training them
+                # under any other readout would move parameters that no gradient reaches, and
+                # `trainable_params` would report a surface that is not actually being trained.
+                raise ValueError(
+                    f"region_lr requires readout='motor' (got {cfg.readout!r}): prefrontal and "
+                    "motor are off the policy path for every other readout, so they would "
+                    "receive no gradient and the run would train nothing while looking normal."
+                )
         gated = cfg.plasticity_gate is not None
         if gated and not finetune:
             raise ValueError(
@@ -1119,6 +1195,22 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         if readout.attn is not None:
             optimizer.add_param_group({"params": list(readout.attn.parameters()),
                                        "lr": cfg.lr})
+        # EXP-064. Prefrontal and motor as their own group at their own lr. The router holds no
+        # parameters (it is a pure gating function), so it is deliberately absent rather than
+        # added as an empty group. Counted by `trainable_params` automatically.
+        region_init = None
+        if train_regions:
+            # EXP-064 gate instrument 1. `trainable_params` counts what an optimizer HOLDS, which
+            # EXP-047 showed is not the same as what moves: that run reported a 70x trainable
+            # surface while `fc1.weight` moved by exactly 0.0. This snapshots the regions before
+            # training so the record can carry how far they ACTUALLY travelled.
+            region_init = {f"{r}.{n}": p.detach().clone()
+                           for r, mod in (("pfc", agent.pfc), ("motor", agent.motor))
+                           for n, p in mod.named_parameters()}
+            region_params = list(agent.pfc.parameters()) + list(agent.motor.parameters())
+            if not region_params:
+                raise ValueError("region_lr is set but prefrontal and motor expose no parameters")
+            optimizer.add_param_group({"params": region_params, "lr": cfg.region_lr})
         # EXP-053. A SEPARATE optimizer, not a third parameter group, so the head's Adam
         # state and update sequence stay exactly what every prior record was produced with.
         critic = None
@@ -1163,6 +1255,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         noise_cos_sum, noise_cos_n = 0.0, 0
         attn_entropy_sum, attn_entropy_n, attn_recency_sum = 0.0, 0, 0.0
         empty_cache_steps = 0
+        motor_rate_sum, motor_rate_n, motor_silent = 0.0, 0, 0
         entropies = []
         gate_fn = None
         if cfg.plasticity_gate == "dopamine":
@@ -1219,7 +1312,7 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                     entropy_beta=cfg.entropy_beta,
                     normalize_advantages=cfg.normalize_advantages,
                     store=use_memory, recall=use_memory, feature_fn=readout,
-                    grad_brain=finetune,
+                    grad_brain=finetune or train_regions,
                     critic=critic, critic_optimizer=critic_optimizer,
                     flatten_critic=cfg.flatten_critic,
                     encoder_optimizer=encoder_optimizer, gate_fn=gate_fn,
@@ -1243,6 +1336,9 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                 attn_entropy_n += readout.attn_entropy_n
                 attn_recency_sum += readout.attn_recency_sum
                 empty_cache_steps += readout.empty_cache_steps
+                motor_rate_sum += readout.motor_rate_sum
+                motor_rate_n += readout.motor_rate_n
+                motor_silent += readout.motor_silent_steps
                 if encoder_optimizer is not None:
                     gate_calls += 1
                     gate_opens += int(stats["gate_open"])
@@ -1266,9 +1362,17 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
                         "return_within_rms": within_rms(stage_fit, "return_within_ss")}
                        if critic is not None else {}),
                 })
+        # EXP-064. `feature_fn` is needed whenever the head does NOT read the raw concept, which
+        # is no longer the same question as "is memory on". It was the same question until the
+        # motor readout arrived: that one builds its features from the brain's own pathway while
+        # deliberately leaving the hippocampus off. Tying the two together fed evaluation a
+        # 64-wide concept into a 6-wide head. This expression reproduces the OLD behaviour
+        # exactly for every readout that predates EXP-064, because `use_memory` was defined as
+        # `readout != "concept"` for all of them.
+        eval_feature_fn = readout if cfg.readout != "concept" else None
         result = evaluate_states(
             agent, head, eval_states, depth=cfg.depth, generator=generator, rng_seed=train_seed,
-            feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
+            feature_fn=eval_feature_fn, store=use_memory, recall=use_memory,
         )
         # STRICTLY AFTER the held-out evaluation. `greedy_action` draws on `generator`, so
         # evaluating the train side first would advance the stream and move every held-out
@@ -1277,9 +1381,17 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         train_result = evaluate_states(
             agent, head, train_eval_states, depth=cfg.depth, generator=generator,
             rng_seed=train_seed,
-            feature_fn=readout if use_memory else None, store=use_memory, recall=use_memory,
+            feature_fn=eval_feature_fn, store=use_memory, recall=use_memory,
         )
         episodes_run = cfg.episodes
+
+    region_drift = None
+    if region_init:
+        num = sum(float((p.detach() - region_init[f"{r}.{n}"]).pow(2).sum())
+                  for r, mod in (("pfc", agent.pfc), ("motor", agent.motor))
+                  for n, p in mod.named_parameters())
+        den = sum(float(v.pow(2).sum()) for v in region_init.values())
+        region_drift = (num ** 0.5) / (den ** 0.5) if den > 0 else None
 
     record = {
         "arm": cfg.arm,
@@ -1336,6 +1448,17 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # the cache size instead. None for every readout with no attention.
         "attn_entropy_norm": (attn_entropy_sum / attn_entropy_n) if attn_entropy_n else None,
         "attn_recency_mass": (attn_recency_sum / attn_entropy_n) if attn_entropy_n else None,
+        # EXP-064. Relative parameter drift of the trained regions, ||theta_end - theta_init|| /
+        # ||theta_init||, as a RATIO so it is scale-free across differently sized tensors. A
+        # frozen pathway reads exactly 0.0, so the gate can fail; a training one reads well above
+        # it, so the gate can pass. This is the quantity that DISCRIMINATES the arms: the motor
+        # arm trains the regions and the control does not touch them.
+        "region_drift": region_drift,
+        # Did the spiking pathway actually fire? A silent motor region hands the head a constant
+        # zero vector and the arm degenerates to a bias-only policy that still trains and still
+        # reports an ordinary success rate.
+        "motor_rate_mean": (motor_rate_sum / motor_rate_n) if motor_rate_n else None,
+        "motor_silent_frac": (motor_silent / motor_rate_n) if motor_rate_n else None,
         "attn_choice_steps": attn_entropy_n,
         # The denominator for EXP-063's second gate. `revisit_rate` already divides by this
         # but never recorded it, so the raw count was unrecoverable from the record alone.
