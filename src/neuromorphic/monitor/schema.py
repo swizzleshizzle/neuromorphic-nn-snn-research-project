@@ -51,16 +51,22 @@ def region_specs(brain):
 
 
 def _config_hash(brain, seed: int, task_type: str) -> str:
+    # `int(...)` on every width, deliberately. The repo's standing invariant is that action
+    # width comes from `env.action_space.n` and never a literal, and gymnasium returns that as
+    # a numpy int64, which `json.dumps` refuses. The gridworld path never hit it because its
+    # brain is built with a python int; the CUBE path crashed on the very first trace anyone
+    # tried to record (EXP-065). Coercion is a no-op for every value already committed, so
+    # existing digests are unchanged.
     payload = {
-        "content": brain.content,
-        "n_actions": brain.n_actions,
-        "n_hippo": brain.hippo.n_neurons,
-        "T": brain.T,
+        "content": int(brain.content),
+        "n_actions": int(brain.n_actions),
+        "n_hippo": int(brain.hippo.n_neurons),
+        "T": int(brain.T),
         # n_obs is meaningful for every task; grid_n is meaningful for exactly one,
         # and a cube brain carries the Brain default of 5, which means nothing.
-        "n_obs": brain.n_obs,
+        "n_obs": int(brain.n_obs),
         "task": task_type,
-        "seed": seed,
+        "seed": int(seed),
     }
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:8]
 

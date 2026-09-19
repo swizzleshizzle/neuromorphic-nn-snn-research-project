@@ -54,9 +54,11 @@ class MonolithicBrain:
                 f"total_neurons ({total_neurons}) must exceed content ({content}); "
                 "there would be no hidden layer left"
             )
-        self.content = content
-        self.n_actions = n_actions
-        self.T = num_steps
+        # See Brain.__init__: widths are coerced so an `env.action_space.n` (numpy int64)
+        # cannot reach a JSON serialiser downstream.
+        self.content = int(content)
+        self.n_actions = int(n_actions)
+        self.T = int(num_steps)
         self.n_obs = n_obs
         self.obs_width = obs_width
         self.n_neurons = total_neurons

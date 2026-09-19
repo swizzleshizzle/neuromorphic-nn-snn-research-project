@@ -39,3 +39,24 @@ test("boots on the real trace and renders the data-driven shell", async ({ page 
   await expect(exportBtn).toBeVisible();
   await exportBtn.click();
 });
+
+test("the hero controls do not overlap each other", async ({ page }) => {
+  // A measured geometric assertion, not a qualitative one. Before the fix these two
+  // positioned themselves independently at right:18 and right:120, and overlapped by
+  // 42.5px horizontally and 24px vertically at a 1600x1000 viewport - the Export PNG
+  // button sat on top of the "3D Cloud" segment. This fails against that code.
+  await page.goto("/");
+  const toggle = await page.locator("[data-hero-toggle]").boundingBox();
+  const exportBtn = await page.locator("[data-export-png]").boundingBox();
+  expect(toggle).not.toBeNull();
+  expect(exportBtn).not.toBeNull();
+  const overlapX =
+    Math.min(toggle!.x + toggle!.width, exportBtn!.x + exportBtn!.width) -
+    Math.max(toggle!.x, exportBtn!.x);
+  const overlapY =
+    Math.min(toggle!.y + toggle!.height, exportBtn!.y + exportBtn!.height) -
+    Math.max(toggle!.y, exportBtn!.y);
+  expect(overlapX > 0 && overlapY > 0, `controls intersect by ${overlapX}x${overlapY}px`).toBe(
+    false,
+  );
+});

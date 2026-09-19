@@ -72,9 +72,14 @@ class Brain:
         obs_width: int = 4,
     ):
         self.grid_n = grid_n
-        self.content = content
-        self.n_actions = n_actions
-        self.T = num_steps
+        # `int(...)` on the widths, deliberately. The standing invariant is that action width
+        # comes from `env.action_space.n` and never a literal, and gymnasium returns that as a
+        # numpy int64 which `json.dumps` refuses. Nothing noticed until the first CUBE trace was
+        # recorded (EXP-065) and the monitor crashed writing its own header. Coercing here fixes
+        # every consumer at once instead of patching each one that serialises a width.
+        self.content = int(content)
+        self.n_actions = int(n_actions)
+        self.T = int(num_steps)
         self.bus = bus if bus is not None else NeuromodBus()
 
         # Encoder seam: default reproduces the grid behavior exactly, so every existing
