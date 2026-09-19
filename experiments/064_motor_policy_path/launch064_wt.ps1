@@ -59,8 +59,10 @@ if ($hasMotor -ne "True") {
 # real episodes and asserts BOTH that the trainable surface is 15,540 AND that the regions
 # actually MOVED. EXP-047 reported a 70x surface while the parameter moved by exactly 0.0.
 $tmpOut = Join-Path $env:TEMP "exp064_launch_check"
-$probe = & $py -c "import sys, pathlib; from neuromorphic.training.cube_baseline import CubeConfig, run_cube_baseline; d = pathlib.Path(sys.argv[1]); r = run_cube_baseline(CubeConfig(arm='regionalized', readout='motor', region_lr=0.01, tag='launchcheck', depth=1, seed=3, sigma=0.0, episodes=6, entropy_beta=0.0, max_depth=1, out_dir=d)); drift = r['region_drift'] or 0.0; sys.stdout.write(f\"{r['trainable_params']}|{drift:.6f}|{r['mean_n_stored']}\")" $tmpOut
-$parts = $probe -split '\|'
+$probe = & $py -u "experiments\064_motor_policy_path\launch_probe.py" $tmpOut
+if ($LASTEXITCODE -ne 0) { Write-Error "the pre-flight probe failed to run: $probe"; exit 1 }
+$parts = ($probe.Trim()) -split '\s+'
+if ($parts.Count -ne 3) { Write-Error "probe returned $($parts.Count) values, expected 3: $probe"; exit 1 }
 if ($parts[0] -ne "15540") {
     Write-Error "trainable surface is $($parts[0]), expected 15540 (15456 prefrontal + 42 motor + 42 head). The regions are not in the optimizer."
     exit 1
