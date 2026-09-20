@@ -7,14 +7,14 @@ detail, and duplicating it here would create two versions that drift.
 
 ```
 Picking up the neuromorphic cube project. NOTHING IS RUNNING, the laptop is FREE, main is
-clean at 39b9454, suite 678 tests (656 not slow). Phase 3 is CHECKPOINTED and tagged
-phase-3-checkpoint.
+clean at 5c55ef1, suite 703 tests (681 not slow) plus 88 vitest + 2 e2e in dashboard/.
+Phase 3 is CHECKPOINTED and tagged phase-3-checkpoint; EXP-064 and EXP-065 are done and banked.
 
-Read docs/handoffs/SESSION-HANDOFF-2026-09-18.md first, then CLAUDE.md. Ignore earlier handoffs.
+Read docs/handoffs/SESSION-HANDOFF-2026-09-20.md first, then CLAUDE.md. Ignore earlier handoffs.
 
-THERE IS NO REQUIRED NEXT TASK. Week 24 is done and week 25's checkpoint was delivered early,
-so do not invent a deliverable for it. Section 3 of the handoff lists the three real open
-items and, more importantly, three things NOT to do.
+THERE IS NO REQUIRED NEXT TASK. Weeks 24 and 25 are both complete, so do not invent a
+deliverable for them. Section 4 of the handoff lists what is open and, more importantly,
+four things NOT to do. Phase 4 (documentation) starts Oct 5 and is laptop-free.
 
 Ask me what I want to work on before starting anything.
 ```
