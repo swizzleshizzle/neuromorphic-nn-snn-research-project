@@ -127,6 +127,22 @@ Practical consequences:
   measured twice. Ask what the arms actually differ in, and measure that.
 - **A gate is more expensive to get wrong than an assertion, and it gets less review**, because it
   reads like bookkeeping next to the claims. Give it the same scrutiny as the claim it guards.
+- **GATE THE COMPARISON'S RESOLUTION, NOT JUST THE ARM'S MECHANISM.** EXP-064 cost 14 hours and
+  both of its gates PASSED: the regions genuinely trained (`region_drift` 2.71) and the spiking
+  pathway genuinely fired (`motor_rate_mean` 0.153, zero silent steps). ==Both arms then scored
+  exactly **0.0000**.== A contrast between two arms on the floor is 0 by construction, so the
+  primary was decided before the run started. Both gates guarded the *arm*; neither could see
+  that the *contrast* had no resolution. **Ask what reading would prove the comparison could
+  have come out either way, and gate on that too.**
+- **A CONTROL MUST BE A WORKING REFERENCE, NOT JUST A MATCHED ONE.** EXP-064's control was
+  capacity-matched to 0.36% and was never checked for **competence**. EXP-043 had run the same
+  config with a *linear* head at depth 5 and scored **0.3229**; adding `head_hidden=218` to match
+  parameters dropped it to **0.0000** with entropy 0.0120 and modal action 1.000. ==Matching cost
+  0.32 and bought a dead policy.== The floor was calibratable **before dispatch from a number
+  already in the repo**. **Before using an arm as a reference, confirm it still clears the floor
+  in the regime it will run in.** This is the third distinct matching failure: EXP-030 matched a
+  control so closely it became bit-identical to its arm, EXP-063 matched a control to its arm but
+  neither to the baseline, and EXP-064 matched capacity but not competence.
 - **Amending a gate is legitimate only before a number exists.** EXP-057's threshold was amended
   that way and the amendment is dated in its spec. EXP-058's was not amended, deliberately: by then
   the numbers existed, and editing it would have been the outcome-dependent editing the whole

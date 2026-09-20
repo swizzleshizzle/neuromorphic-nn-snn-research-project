@@ -18,8 +18,26 @@ export function Hero() {
       >
         <Scene morphRef={morphRef} />
       </Canvas>
-      <CloudFlowToggle />
-      <ExportButton />
+      {/* One flex row owns the top-right corner. The two controls used to position
+          themselves independently with `right: 18` and `right: 120`, which assumed the
+          toggle was about 100px wide; it measures 144px, so they overlapped by 42.5px.
+          Laying them out instead of guessing each other's width means a label change
+          cannot reintroduce it. `e2e/smoke.spec.ts` asserts they do not intersect. */}
+      <div
+        data-hero-controls
+        style={{
+          position: "absolute",
+          top: 14,
+          right: 18,
+          zIndex: 10,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <ExportButton />
+        <CloudFlowToggle />
+      </div>
       <SensoryGrid />
       <HeroCaption />
     </div>

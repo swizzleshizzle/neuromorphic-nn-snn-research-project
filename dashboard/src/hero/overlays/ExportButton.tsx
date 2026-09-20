@@ -13,10 +13,8 @@ export function ExportButton() {
       data-export-png
       onClick={onExport}
       style={{
-        position: "absolute",
-        top: 14,
-        right: 120,
-        zIndex: 10,
+        // Positioning belongs to `[data-hero-controls]` in Hero.tsx. This used to carry
+        // `position: absolute; right: 120`, a guess at the sibling toggle's width.
         font: "600 10px/1 'Space Grotesk', sans-serif",
         color: "var(--text-dim)",
         background: "var(--panel)",

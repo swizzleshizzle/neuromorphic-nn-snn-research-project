@@ -17,9 +17,7 @@ export function CloudFlowToggle() {
     <div
       data-hero-toggle
       style={{
-        position: "absolute",
-        top: 14,
-        right: 18,
+        // Positioning belongs to `[data-hero-controls]` in Hero.tsx.
         display: "flex",
         gap: 3,
         padding: 3,
