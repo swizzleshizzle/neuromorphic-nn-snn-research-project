@@ -1096,6 +1096,12 @@ def run_cube_baseline(cfg: CubeConfig) -> dict:
         # measured floor at depth 7 WITH a curriculum. It raised UnboundLocalError at record time.
         stage_trace: list[dict] = []
         trainable_params = 0   # the chance floor has no policy to train
+        # ...and it has no regions to train either. This mirrors the `stage_trace` note above,
+        # which is the SAME bug from EXP-042: a new telemetry variable was initialised only in
+        # the training branch, and the chance-floor arm raised UnboundLocalError at record time.
+        # EXP-064 repeated it with `region_init` despite the warning sitting six lines away.
+        # Anything the record dict reads must be initialised in BOTH branches.
+        region_init = None
         critic = None   # the chance floor has no critic either
         gate_opens, gate_calls = 0, 0   # the chance floor has no encoder to gate either
     else:
