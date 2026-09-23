@@ -83,6 +83,11 @@ def main() -> None:
         digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
         print(f"{cfg.seed:>5d} {res['success_rate']:>9.4f} {res['optimality']:>11.4f} "
               f"{digest:>16s}", flush=True)
+        # Field by field, at full repr. The digest says WHETHER two machines agree; this says
+        # WHICH quantity disagrees, and that distinction decides what a write-up may claim.
+        for k in ("success_rate", "mean_steps", "optimality", "eval_revisit_rate",
+                  "greedy_modal_action_frac"):
+            print(f"        {k:26s} {res[k]!r}", flush=True)
 
 
 if __name__ == "__main__":
