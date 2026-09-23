@@ -42,7 +42,7 @@ and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected
 **Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, 623 2026-09-13,
 663 2026-09-17,
 703 2026-09-20,
-**714 as of 2026-09-21 (692 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
+**726 as of 2026-09-23 (704 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
@@ -186,6 +186,15 @@ reintroduce one.
 - **Per-experiment `RESULTS.md`, committed.** Standing since the 2026-07-13 audit found EXP-027's numbers living only in a gitignored `outputs/` folder. Include provenance: seeds, date, machine, regeneration command.
 - **Pre-register the interpretation contract before the numbers exist**, and mark each claim confirmed or refuted afterwards. EXP-028's headline refuted its own pre-registration, which is exactly why this is worth doing.
 - **n >= 12 seeds.** n=5 lied in EXP-026 and the de-noised result flipped.
+- **THE SEED IS A CONFOUND WORTH 0.09, AND IT IS INHERITED.** A cube seed fixes the E0 encoder, the
+  train/held-out split and the head init at once, so seed quality is one persistent property that
+  every downstream stage inherits. Measured over 8 depth-5 arms from five experiments: per-seed
+  correlation **+0.419, positive in 28 of 28 arm pairs**, sd **0.0906**. That is **0.0388** of noise
+  on any comparison between two DISJOINT seed sets, against published effects of 0.05 to 0.09, and
+  **exactly zero** on a paired same-seed comparison. EXP-060's "unexplained level shift" was this
+  and nothing else (exact p **0.5066**), and its encoder-manufacturing suspect was wrong.
+  **Never compare arms across different seed sets, and run `scripts/seed_effect.py` before
+  explaining a block difference.** Full note with the eliminations: `docs/seed-effect.md`.
 - **Measure the chance floor, do not assume it.** On the cube it is 21% at depth 1, not 1/6, because a random walk with a `2d+3` budget can stumble into solved.
 - **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for. EXP-030 is the worked example: `memory` beat the shuffle-null by 10.8 points (p 0.078) and beat the amnesic control by 1.2 (p 0.91). The primary comparison was measuring the harm of *incorrect* memory, not the benefit of correct memory. Three arms would have published a false positive.
 - **FIVE INSTRUMENTS ARE RETIRED and must not gate a decision**: the EXP-033 probe, pretraining
