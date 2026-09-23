@@ -145,6 +145,18 @@ Practical consequences:
   in the regime it will run in.** This is the third distinct matching failure: EXP-030 matched a
   control so closely it became bit-identical to its arm, EXP-063 matched a control to its arm but
   neither to the baseline, and EXP-064 matched capacity but not competence.
+- **A TOLERANCE CALIBRATED ON A SAME-MACHINE COMPARISON CANNOT BE REUSED ACROSS MACHINES.**
+  EXP-067 imported EXP-036's 0.02 replication tolerance unchanged, on the stated and correct
+  principle that a replication inventing its own bar is not a replication. But that tolerance was
+  set where the replication noise is **exactly zero** (same machine, byte-identical). Across
+  machines the per-seed sd is **0.1496**, so the se at n=12 is **0.0432** and the bar sits at
+  **0.46 se**: under the null of equivalent machines it fails about **two times in three**
+  (P(pass) = 0.326, exact sign-flip null). ==Reusing a threshold is right; reusing it without a
+  POWER statement is the same regime error in new clothes.== And it was visible beforehand, which
+  is the EXP-064 shape again: the week-25 audit had **printed the retrained seed-0 success rate on
+  screen the day before**, under a header saying it was comparing checkpoints and *"not a success
+  rate"*. One subtraction against the published value gave 3.3x the tolerance.
+  **Before reusing a threshold, state what it can detect in the NEW regime.**
 - **Amending a gate is legitimate only before a number exists.** EXP-057's threshold was amended
   that way and the amendment is dated in its spec. EXP-058's was not amended, deliberately: by then
   the numbers existed, and editing it would have been the outcome-dependent editing the whole
@@ -260,4 +272,8 @@ so wrap everything in `powershell -NoProfile -Command`.
   experiment uses **no pretrained encoder**. **Re-evaluating a tracked checkpoint IS portable** -
   every headline metric matches to full float repr, with one derived mean differing by 1 ULP. So
   the reproducibility guarantee is *re-evaluate the checkpoints*, never *retrain from the seed*.
-  See `docs/reproducibility-audit.md`.
+  See `docs/reproducibility-audit.md`. **EXP-067 then measured what SURVIVES:
+  2 of 3 pre-registered verdicts replicated on a second machine and the numeric bar did not, and
+  the task layer (shells, held-out splits, scramble streams) is byte-identical on 12 of 12 seeds,
+  so every bit of the divergence is in training.** See
+  `experiments/067_cross_machine_replication/RESULTS.md`.
