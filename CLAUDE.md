@@ -244,5 +244,11 @@ so wrap everything in `powershell -NoProfile -Command`.
 - Progress is best read from the per-run JSON record count, not the log.
 - **`ssh -n` makes an interactive gate stop cleanly** (`input()` raises `EOFError`), which is what you want
   when a driver prints a pre-flight number you must read. Pass `--skip-gate` only after reading it.
-- **Seeded runs are byte-identical across worker scheduling.** Re-running a seed and diffing the records is
-  a free correctness check on the seeding discipline.
+- **Seeded runs are byte-identical across worker scheduling ON ONE MACHINE, and NOT across
+  machines.** Re-running a seed and diffing the records is a free correctness check on the seeding
+  discipline, and it stays that. But measured 2026-09-22: retraining EXP-036 depth 3 seed 0 on a
+  different x86 box shares **0 of 390** parameters with its published head (cosine 0.524), and that
+  experiment uses **no pretrained encoder**. **Re-evaluating a tracked checkpoint IS portable** -
+  every headline metric matches to full float repr, with one derived mean differing by 1 ULP. So
+  the reproducibility guarantee is *re-evaluate the checkpoints*, never *retrain from the seed*.
+  See `docs/reproducibility-audit.md`.

@@ -11,7 +11,23 @@
 > 2026-08-09 14:40 to 16:20; phase 2 (policy) 17:54 to 2026-08-10 02:09. Laptop `SwizzlesDuo`,
 > `--workers 10`, exit 0, **zero tracebacks**. All comparators are EXP-036 cells at the same
 > seeds on the same machine and were not re-run. Records in `outputs/` (gitignored); the
-> `*_head.pt` and `*_encoder_*.pt` files ARE tracked. Regenerate at the bottom.
+> `*_head.pt` files ARE tracked. Regenerate at the bottom.
+
+> [!warning] **CORRECTED 2026-09-22.** The line above previously claimed `*_encoder_*.pt` files
+> were tracked as well. **They were not** - 36 head checkpoints were tracked and **zero encoder
+> weights**, because `.gitignore` deliberately excluded `exp040_encoder_s*.pt` as "reproducible
+> from phase 1". Anyone following this file to reproduce would have looked for encoders that were
+> not in the checkout.
+>
+> **They are tracked now, because that reasoning was measured and found false off this laptop.**
+> Regenerating on the machine that made them is byte-identical 12 of 12; on a different x86
+> machine it is **0 of 2**, with only **7.1%** of parameters matching and a cosine of **0.77**
+> between original and regenerated. Fifteen experiments load these encoders frozen.
+>
+> The regenerated encoder is a valid one, not the same one: move-accuracy **0.4346** against the
+> original's **0.4373**, inside the seed spread 0.4300-0.4373. So the **findings** are likely
+> reproducible from scratch; the **published numbers** are not. Verify with
+> `verify_regeneration.py`.
 
 ## Headline
 

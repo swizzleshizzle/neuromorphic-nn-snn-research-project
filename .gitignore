@@ -60,10 +60,24 @@ wandb/
 # experiment cost roughly 2 MB. Claim 2 re-probes these weights, and regenerating one costs
 # ~5.6 core-hours; the whole set is a ~12 h laptop run.
 #
-# This pattern deliberately does NOT match `exp040_encoder_s*.pt` (the PRETRAINED encoders),
-# which end in `_s<seed>.pt` and stay ignored: those are reproducible from EXP-040's phase 1 in
-# about 15 minutes per seed, and there are more of them.
+# The PRETRAINED encoders (`exp040_encoder_s*.pt`) used to be excluded here, on the ground that
+# they are "reproducible from EXP-040's phase 1". MEASURED 2026-09-22, that ground is FALSE off
+# the machine that made them:
+#
+#   laptop, where the originals were made : 12 of 12 byte-identical  (deterministic)
+#   this VPS, a different x86 machine     :  0 of 2 byte-identical  (NOT portable)
+#
+# And the difference is not last-bit float noise. Only 7.1% of the 26,824 parameters match,
+# max|delta| is 2.38, and the cosine between original and regenerated is 0.77 - a substantially
+# different network. FIFTEEN experiments load these encoders frozen (EXP-041 through EXP-066),
+# so a fresh clone on any other machine reproduces none of their published numbers.
+#
+# The regenerated encoder is a VALID encoder, just not THE encoder: its move-accuracy 0.4346
+# sits inside the seed spread 0.4300-0.4373. So the FINDINGS are likely reproducible while the
+# NUMBERS are not, and only tracking the artifacts makes the stronger claim true.
+# 2.8 MB for all 24. See experiments/040_pretrained_encoder_policy/verify_regeneration.py.
 !experiments/*/outputs/*_encoder.pt
+!experiments/*/outputs/exp040_encoder_s*.pt
 *.pth
 results.csv
 training_curves.png
