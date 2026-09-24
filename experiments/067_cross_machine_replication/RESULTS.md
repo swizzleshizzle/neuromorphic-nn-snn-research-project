@@ -79,8 +79,24 @@ gate the comparison's resolution, not just the arm's mechanism.
 > cubes.
 
 **Within a machine the same comparison is exact.** EXP-036 against EXP-035 measured +0.0002 and was
-byte-identical on every measured quantity. Across machines the per-seed sd is **0.1496**. So seed
-identity pins the result completely on one machine and **not at all** across two.
+byte-identical on every measured quantity. Across machines the per-seed sd is **0.1496**.
+
+> [!warning] **CORRECTION 2026-09-24.** This section first said seed identity pins the result
+> "completely on one machine and **not at all** across two". ==The second half is wrong, and it was
+> an inference rather than a measurement:== a large per-seed delta does not imply the ORDERING is
+> lost, and those are different quantities.
+>
+> Measured, the per-seed correlation between the laptop and this VPS is **r = +0.428** (r-squared
+> 0.183, two-sided permutation **p = 0.1686** over 200,000 orderings, so it is **not** distinguishable
+> from zero at n=12). **The point estimate is almost exactly the +0.419 within-machine seed effect**
+> measured across arms in `docs/seed-effect.md`.
+>
+> **That coincidence is a hypothesis, not a result**, and it is the obvious follow-up: a seed fixes
+> both the TASK DRAW (proven byte-identical across machines by the floor arm above) and the TRAINING
+> TRAJECTORY (proven to diverge completely). If the persistent seed effect is mostly the task draw,
+> it should survive a machine change at about full strength, which is what this r hints at. **n=12
+> cannot settle it**, and `split_seed` / `train_seed` are already separate crossable knobs on
+> `CubeConfig`, so it is directly testable.
 
 ## Claim 1, PRIMARY - the replication bar. **+0.0278 against 0.02. NOT REPLICATED.**
 
