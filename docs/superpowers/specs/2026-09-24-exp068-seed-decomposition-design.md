@@ -136,8 +136,32 @@ applied and none is needed; this is recorded so it is not read as an omission.
 |---|---|
 | Cells | **100** (10 x 10), all trained, no floor cells needed |
 | Workers | **10**, which divides 100 into **10 clean waves** |
-| Per cell | **TO BE MEASURED on the laptop before the full launch**, at 10 workers |
-| Reference | 46 min/cell at depth 3 on the 2-core VPS at 2 workers (EXP-067) |
+| Per cell | **66.1 to 87.9 min**, measured (see the amendment below) |
+| Per wave | **87.9 min**, measured |
+| **Full run, 90 remaining cells** | **9 waves, ~13.2 h** |
+| Reference that would have been WRONG | 46 min/cell at depth 3 on the 2-core VPS at 2 workers (EXP-067) |
+
+> [!success] **COST AMENDED 2026-09-24, BEFORE THE FULL LAUNCH AND AFTER THE CALIBRATION WAVE.**
+> No claim, threshold, bar or test is touched. Only this section changes, which is the amendment
+> EXP-060 made and recorded in the same way.
+>
+> The 10-cell diagonal wave ran 2026-09-23 23:19:33 to 2026-09-24 00:47:28 laptop-local.
+>
+> | | |
+> |---|---|
+> | first cell | **66.1 min** |
+> | last cell | **87.9 min** |
+> | spread within one wave | **21.8 min, 33%** |
+>
+> ==**Scaling the VPS figure would have under-priced this by 44%**== (46 min against 66.1 for the
+> fastest cell, and against 87.9 for the wave). That is the sixth cross-machine or cross-worker
+> scaling to come in low, and the first caught **before** dispatch rather than in a post-mortem.
+> The cause is visible in the health probe: workers held only **71% CPU-to-wall**, because 10
+> workers on an Ultra 9 185H spill onto E-cores that are far slower than its P-cores.
+>
+> **THE WAVE TIME PRICES THE RUN, NOT THE FASTEST CELL.** Using 66.1 would have predicted 9.9 h
+> against a real 13.2. This is "mid-run progress is not a rate" in its other form: a wave ends
+> when its SLOWEST cell ends, and cells within a wave here differ by a third.
 
 ==The cost line is deliberately unfilled.== The only depth-3 figure in hand is a VPS measurement,
 and the rule is to price from a **same-machine, same-worker-count** measurement. A 10-cell
