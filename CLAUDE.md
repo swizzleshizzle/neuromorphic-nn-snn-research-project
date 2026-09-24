@@ -42,7 +42,7 @@ and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected
 **Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, 623 2026-09-13,
 663 2026-09-17,
 703 2026-09-20,
-**714 as of 2026-09-21 (692 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
+**726 as of 2026-09-23 (704 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
@@ -145,6 +145,18 @@ Practical consequences:
   in the regime it will run in.** This is the third distinct matching failure: EXP-030 matched a
   control so closely it became bit-identical to its arm, EXP-063 matched a control to its arm but
   neither to the baseline, and EXP-064 matched capacity but not competence.
+- **A TOLERANCE CALIBRATED ON A SAME-MACHINE COMPARISON CANNOT BE REUSED ACROSS MACHINES.**
+  EXP-067 imported EXP-036's 0.02 replication tolerance unchanged, on the stated and correct
+  principle that a replication inventing its own bar is not a replication. But that tolerance was
+  set where the replication noise is **exactly zero** (same machine, byte-identical). Across
+  machines the per-seed sd is **0.1496**, so the se at n=12 is **0.0432** and the bar sits at
+  **0.46 se**: under the null of equivalent machines it fails about **two times in three**
+  (P(pass) = 0.326, exact sign-flip null). ==Reusing a threshold is right; reusing it without a
+  POWER statement is the same regime error in new clothes.== And it was visible beforehand, which
+  is the EXP-064 shape again: the week-25 audit had **printed the retrained seed-0 success rate on
+  screen the day before**, under a header saying it was comparing checkpoints and *"not a success
+  rate"*. One subtraction against the published value gave 3.3x the tolerance.
+  **Before reusing a threshold, state what it can detect in the NEW regime.**
 - **Amending a gate is legitimate only before a number exists.** EXP-057's threshold was amended
   that way and the amendment is dated in its spec. EXP-058's was not amended, deliberately: by then
   the numbers existed, and editing it would have been the outcome-dependent editing the whole
@@ -186,6 +198,15 @@ reintroduce one.
 - **Per-experiment `RESULTS.md`, committed.** Standing since the 2026-07-13 audit found EXP-027's numbers living only in a gitignored `outputs/` folder. Include provenance: seeds, date, machine, regeneration command.
 - **Pre-register the interpretation contract before the numbers exist**, and mark each claim confirmed or refuted afterwards. EXP-028's headline refuted its own pre-registration, which is exactly why this is worth doing.
 - **n >= 12 seeds.** n=5 lied in EXP-026 and the de-noised result flipped.
+- **THE SEED IS A CONFOUND WORTH 0.09, AND IT IS INHERITED.** A cube seed fixes the E0 encoder, the
+  train/held-out split and the head init at once, so seed quality is one persistent property that
+  every downstream stage inherits. Measured over 8 depth-5 arms from five experiments: per-seed
+  correlation **+0.419, positive in 28 of 28 arm pairs**, sd **0.0906**. That is **0.0388** of noise
+  on any comparison between two DISJOINT seed sets, against published effects of 0.05 to 0.09, and
+  **exactly zero** on a paired same-seed comparison. EXP-060's "unexplained level shift" was this
+  and nothing else (exact p **0.5066**), and its encoder-manufacturing suspect was wrong.
+  **Never compare arms across different seed sets, and run `scripts/seed_effect.py` before
+  explaining a block difference.** Full note with the eliminations: `docs/seed-effect.md`.
 - **Measure the chance floor, do not assume it.** On the cube it is 21% at depth 1, not 1/6, because a random walk with a `2d+3` budget can stumble into solved.
 - **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for. EXP-030 is the worked example: `memory` beat the shuffle-null by 10.8 points (p 0.078) and beat the amnesic control by 1.2 (p 0.91). The primary comparison was measuring the harm of *incorrect* memory, not the benefit of correct memory. Three arms would have published a false positive.
 - **FIVE INSTRUMENTS ARE RETIRED and must not gate a decision**: the EXP-033 probe, pretraining
@@ -251,4 +272,8 @@ so wrap everything in `powershell -NoProfile -Command`.
   experiment uses **no pretrained encoder**. **Re-evaluating a tracked checkpoint IS portable** -
   every headline metric matches to full float repr, with one derived mean differing by 1 ULP. So
   the reproducibility guarantee is *re-evaluate the checkpoints*, never *retrain from the seed*.
-  See `docs/reproducibility-audit.md`.
+  See `docs/reproducibility-audit.md`. **EXP-067 then measured what SURVIVES:
+  2 of 3 pre-registered verdicts replicated on a second machine and the numeric bar did not, and
+  the task layer (shells, held-out splits, scramble streams) is byte-identical on 12 of 12 seeds,
+  so every bit of the divergence is in training.** See
+  `experiments/067_cross_machine_replication/RESULTS.md`.

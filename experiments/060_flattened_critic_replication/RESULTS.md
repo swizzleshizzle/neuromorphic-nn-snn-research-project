@@ -107,6 +107,27 @@ noisier measurement that happened to land well.
 > encoders were manufactured on 2026-09-12 rather than 2026-08-21. **Do not quote the pooled
 > number without both caveats.**
 
+> [!note] **RESOLVED 2026-09-23. The level shift is seed sampling, and it predates this
+> experiment.** Full working in `docs/seed-effect.md`; regenerate with
+> `.venv/bin/python -u scripts/seed_effect.py`.
+>
+> The suspect named above, that these encoders were manufactured on 2026-09-12, is **ruled out**.
+> Seeds 14-23 already ran 0.044 to 0.051 low at depth 5 in EXP-040 and EXP-043, cells dated
+> **2026-08-22** by EXP-043's own RESULTS, using August encoders and the August library. The two E1
+> encoder batches are also indistinguishable frozen: relative fine-tuning displacement 0.0301 for
+> seeds 0-11 against 0.0294 for 14-23, inside one within-batch sd.
+>
+> **What carries it is the seed itself.** A seed fixes the E0 encoder, the split and the head init
+> together, so its quality is inherited by every downstream stage. Across 8 depth-5 arms from five
+> experiments, per-seed quality correlates at **+0.419, positive in 28 of 28 arm pairs**, with an sd
+> of **0.0906**. Against that, this split is the 50th percentile: **exact two-sided p = 0.5066** over
+> 646,646 partitions. Seeds **21 and 22 are the 1st and 3rd worst of all 24** and both landed here;
+> dropping them flips the block difference to +0.0089.
+>
+> **Claim 1 is untouched** - it is paired within seed, which cancels this exactly, and surviving a
+> 0.06 level shift is the paired design working as designed. **Claim 2 stays ill-advised**, now for
+> one reason (optional stopping) rather than two.
+
 ## What this changes
 
 1. **The critic conclusion is now supported by an independent replication.** EXP-056 cleared
@@ -128,6 +149,8 @@ noisier measurement that happened to land well.
   pools across a level shift. Quote Claim 1 instead.
 - **Not that the level shift is understood.** It is flagged, not explained, and nothing here
   distinguishes seed-set difficulty from anything about the encoder manufacturing run.
+  **Superseded 2026-09-23: it is seed-set difficulty. See the addendum above and
+  `docs/seed-effect.md`.**
 - **Not that -0.0925 is the true effect size.** n=10, and the interval is wide; the replication
   establishes the direction and that the effect clears the bar, not its magnitude.
 - **Not a resolved decomposition of the critic's benefit.** EXP-057's Claim 3 remains unresolvable
