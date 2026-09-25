@@ -42,7 +42,7 @@ and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected
 **Counts:** 370 tests 2026-07-30, 521 2026-08-28, 561 2026-09-01, 623 2026-09-13,
 663 2026-09-17,
 703 2026-09-20,
-**726 as of 2026-09-23 (704 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
+**742 as of 2026-09-25 (720 not slow, 22 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
@@ -157,6 +157,16 @@ Practical consequences:
   screen the day before**, under a header saying it was comparing checkpoints and *"not a success
   rate"*. One subtraction against the published value gave 3.3x the tolerance.
   **Before reusing a threshold, state what it can detect in the NEW regime.**
+- **PUT THE UNRESOLVED BAND IN THE VERDICT FUNCTION, NOT ONLY IN THE PROSE.** EXP-068's spec did
+  the hard part right: it stated before dispatch that a share between **0.25 and 0.45** could not
+  be cleanly resolved and must be reported as **unresolved** rather than rounded to the nearest
+  verdict. It measured **0.267**. But the band lived only in the spec's prose, so `aggregate.py`
+  compared against the bar and printed **CONFIRMED**, with the band as a separate warning line.
+  ==A reader running the aggregator sees the verdict the spec forbids.== The code was deliberately
+  NOT edited afterwards, even though the edit would have made the result *weaker*: "it made the
+  result weaker" is exactly the argument that justifies the reverse next time. **A threshold you
+  can state is a threshold you can encode. If a spec names a band where no verdict may be read,
+  the aggregator must return that band as a verdict of its own.**
 - **Amending a gate is legitimate only before a number exists.** EXP-057's threshold was amended
   that way and the amendment is dated in its spec. EXP-058's was not amended, deliberately: by then
   the numbers existed, and editing it would have been the outcome-dependent editing the whole
