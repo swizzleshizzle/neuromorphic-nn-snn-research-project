@@ -188,8 +188,11 @@ EXP-060 was this and nothing else (exact p 0.5066) (`docs/seed-effect.md`).
 EXP-068 then found where the effect lives, and the answer was neither obvious candidate. Crossing
 the task-draw seed against the training-trajectory seed at depth 3, the **interaction** carries 65%
 of the variance, the task draw 27% and the trajectory 8%. A seed's quality is the specific pairing,
-not a property of either part, which is exactly why pairing within seed works. (EXP-069, running at
-the time of writing, asks the same question of the pretrained encoder at depth 5.)
+not a property of either part, which is exactly why pairing within seed works. EXP-069 asked the same question at
+depth 5 with a pretrained encoder and got the same interaction share, 0.652 against 0.650, while the
+main effects changed hands: task draw and trajectory together carry exactly 0.000, and the encoder
+carries 0.348, which its pre-registered band reports as unresolved rather than major. Two
+decompositions in different regimes agree that a seed's quality is mostly the combination of its parts.
 
 ### 4.6 Instruments that were retired
 

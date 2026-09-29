@@ -217,6 +217,10 @@ reintroduce one.
   and nothing else (exact p **0.5066**), and its encoder-manufacturing suspect was wrong.
   **Never compare arms across different seed sets, and run `scripts/seed_effect.py` before
   explaining a block difference.** Full note with the eliminations: `docs/seed-effect.md`.
+  **Where it lives (EXP-068/069): mostly the INTERACTION of a seed's parts, 0.650 at depth 3 and
+  0.652 at depth 5.** The main effects shift with the regime (task draw 0.267 at depth 3; encoder
+  0.348 and split plus trajectory 0.000 at depth 5), which is why only pairing on the whole seed is
+  safe.
 - **Measure the chance floor, do not assume it.** On the cube it is 21% at depth 1, not 1/6, because a random walk with a `2d+3` budget can stumble into solved.
 - **Ask what a control holds fixed besides the thing you named.** A shuffle-null that varies the query state also varies "features of the current observation"; a path-matched control can turn out bit-identical to the arm it is controlling for. EXP-030 is the worked example: `memory` beat the shuffle-null by 10.8 points (p 0.078) and beat the amnesic control by 1.2 (p 0.91). The primary comparison was measuring the harm of *incorrect* memory, not the benefit of correct memory. Three arms would have published a false positive.
 - **FIVE INSTRUMENTS ARE RETIRED and must not gate a decision**: the EXP-033 probe, pretraining
