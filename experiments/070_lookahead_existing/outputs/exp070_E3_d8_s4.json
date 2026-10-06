@@ -1,0 +1,19 @@
+{
+ "depth": 8,
+ "encoder_file": "experiments\\047_encoder_finetuning\\outputs\\exp047_ft_d6_lr0.0001_regionalized_d6_s4_sig0.0_encoder.pt",
+ "eval_revisit_rate": 0.43543956043956045,
+ "git_commit": "0af516b045a7f96bdf0c66df3c75cf9e92bb93e9",
+ "goal_fired_frac": 0.016483516483516484,
+ "greedy_modal_action_frac": 0.4064864766081871,
+ "head_file": "experiments\\062_depth_frontier\\outputs\\exp062_frontier_d8_regionalized_d8_s4_sig0.0_head.pt",
+ "k": 3,
+ "limit_states": null,
+ "mean_steps": 11.0,
+ "mode": "E",
+ "n": 200,
+ "optimality": 0.7272727272727273,
+ "seed": 4,
+ "solved": 20,
+ "success_rate": 0.1,
+ "wall_s": 1420.3
+}
