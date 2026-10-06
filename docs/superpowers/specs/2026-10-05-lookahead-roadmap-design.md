@@ -285,6 +285,16 @@ Each stage has a decision point; the next stage starts only on its answer.
 | **B** | the network predicts the effect of a move (a learned world model) in place of `apply_move`, building on EXP-040's inverse-dynamics pretraining | After stage 3, when there is a working judge to plug it into. |
 | **3x3** | same recipe, larger environment (54 facelets, 12 or 18 moves, no enumerable BFS table) | Gated on random 2x2 scrambles being solved. A 3x3's corners are a 2x2, so a 2x2 skill can become one component. |
 
+> **OUTCOMES, dated.**
+> - **2026-10-06, stage 1 (EXP-070):** the policy head as judge adds below about 0.01 at depth 8
+>   (NOT SIGNIFICANT). The reflex loops on about half its moves.
+> - **2026-10-06, stage 2 (EXP-071, depth 7):** the critic ranks above chance (R1, R3 pass on 12/12
+>   seeds) but critic-guided search is REFUTED (C3 0.0729 vs E3 0.2321; C3 - P3 -0.1725). By this
+>   table's rule the roadmap moves to stage 3. In the same experiment the no-revisit rule was
+>   CONFIRMED (G0V +0.0279, p 0.0115), and the best measured arm is P3V at **0.3217** (secondary,
+>   +0.0762 over P3). The memory row below has therefore been tested in its simplest, non-spiking
+>   form and works.
+
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
 per cell.

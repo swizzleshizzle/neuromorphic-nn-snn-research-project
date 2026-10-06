@@ -1,4 +1,4 @@
-# Session Handoff - 2026-10-06 - WEEK 27. EXP-070 done; the policy head is not a judge.
+# Session Handoff - 2026-10-06 - WEEK 27. EXP-070 and EXP-071 done; no-revisit plus look-ahead is the best arm.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
 > **844 tests, 822 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
@@ -26,17 +26,22 @@ networks with 1-3 move look-ahead, 324 cells, nothing trained.
 - The reflex policy loops on about half its moves at depths 8-9 (already known from EXP-062),
   and policy-guided look-ahead does not break the loops.
 
-## 2. The decision waiting on Michael
+## 2. EXP-071 ran too, and the decision waiting on Michael changed
 
-Which comes next, each with its own short spec and its own random-guided control:
+`experiments/071_critic_and_no_revisit/RESULTS.md` (depth 7, 144 cells, gates all passed).
 
-1. **Stage 2, critic-guided search at depth 7.** No retraining: the 12 EXP-053 arm B critics are
-   now TRACKED (`experiments/053_neuromod_stage3/outputs/exp053_critic_d7_*_critic.pt`). Depths 8
-   and 9 have no saved critics and would need a retrain. First check whether the critic ranks a
-   state's children correctly (BFS distance as yardstick only).
-2. **A visited-state rule inside the search.** Untested as a search mechanism; the memory line
-   tested memory only as a recall input. If the modal-action reading holds (0.668 at depth 9), it
-   is mostly "do not make the fourth quarter turn" and should be framed that narrowly.
+- **The critic is not a judge:** it ranks above chance but critic-guided search is REFUTED
+  (C3 0.0729 vs E3 0.2321). Retired as a judge by the roadmap's stage-2 rule.
+- **No-revisit helps:** CONFIRMED, G0V +0.0279, p 0.0115.
+- **Best arm: P3V at 0.3217** (policy look-ahead plus no-revisit), +0.0762 over P3 as a
+  SECONDARY, 12/12 seeds. Search scaffolding around the frozen network, not network learning.
+
+**Decision waiting on Michael**, each a short spec with R3V as its matched floor:
+
+1. **P3V at depths 8 and 9** (re-evaluation only, no critic needed): does the frontier move?
+2. **Stage 3:** train a judge from its own look-ahead (DeepCubeA-style), the route to a learned
+   "how close am I".
+3. **Make the no-revisit function learned or spiking** (e.g. in the hippocampal region).
 
 ## 3. Things learned this session that will bite again
 

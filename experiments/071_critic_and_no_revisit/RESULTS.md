@@ -21,11 +21,13 @@ gate amendment section 10). Regenerate the verdicts with:
 > **HEADLINE 2: refusing to revisit helps. Claim 2 CONFIRMED.** The reflex with a no-revisit rule
 > solves **0.2346** against **0.2067** (+0.0279, 9 of 12 seeds, one-sided p 0.0115, alpha 0.025).
 >
-> **The strongest result is a secondary, and it is large: no-revisit UNLOCKS look-ahead.**
-> Policy-guided 3-move look-ahead with the rule (P3V) solves **0.3217**, against P3's 0.2454
-> (+0.0762, p 0.0002) and the plain reflex's 0.2067. That is **+0.115 at depth 7 with no
-> training**, a 56% relative gain. EXP-070 found policy-guided look-ahead worth below about 0.01
-> on its own; the reason was the loops, not the judge.
+> **The largest effect is a pre-registered SECONDARY, read as a pattern and not a
+> confirmation:** policy-guided 3-move look-ahead with the rule (P3V) solves **0.3217** against
+> P3's 0.2454 (+0.0762, one-sided p 0.0002, 12 of 12 seeds). It would survive a Bonferroni
+> correction across all seven pre-registered contrasts (0.05 / 7 = 0.007), which is support, not
+> a verdict. The gain is search scaffolding around the same frozen network: the simulator, a
+> 3-move tree, and a hand-coded visited table. The SNN learned nothing new here, and the one
+> learned judge tried (the critic) failed.
 
 ## Gates
 
@@ -63,7 +65,9 @@ candidate always existed, so every V rollout is loop-free by construction.
 9 of 12 seeds. The spec stated in advance that each primary can detect about 0.02; this effect
 sits just above that.
 
-**Secondary (a pattern, never independent confirmations):**
+**Secondary (a pattern, never independent confirmations).** The aggregator prints the primary
+verdict ladder for these too; the labels below follow the spec, which reserves CONFIRMED for the
+two primaries. `aggregate.py` is deliberately not edited after the numbers exist (the EXP-068 rule).
 
 | contrast | diff | p | verdict |
 |---|---|---|---|
@@ -71,14 +75,16 @@ sits just above that.
 | C3V - C3 | -0.0013 | 0.6416 | REFUTED (point estimate <= 0, inside noise) |
 | C1 - G0 | -0.1892 | 1.0000 | REFUTED |
 | E3V - E3 | +0.0254 | 0.0361 | NOT SIGNIFICANT at 0.025 |
-| **P3V - P3** | **+0.0762** | **0.0002** | **CONFIRMED** (per-seed solves +4 to +31, 12/12) |
+| P3V - P3 | +0.0762 | 0.0002 | positive, secondary (per-seed solves +4 to +31, 12/12) |
 
 ## Exploratory, NOT pre-registered
 
 - **P3V - G0V: +0.0871, 12 of 12 seeds** (one-sided p 0.0002). With loops removed, scoring the
-  look-ahead by the policy adds a large amount. Without the rule it adds below about 0.01
-  (EXP-070). **Look-ahead and no-revisit interact; neither alone explains P3V.**
-- **P3V - G0: +0.1150, 12 of 12 seeds.** The practical gain over the published reflex.
+  look-ahead by the policy adds a large amount; without the rule it adds +0.0133 at this depth
+  (P3 - E3, p 0.043; EXP-070's "below about 0.01" bound was measured at depth 8). This SUGGESTS
+  the two interact and that loops were what limited look-ahead; it is not an established cause.
+- **P3V - G0: +0.1150, 12 of 12 seeds (a 56% relative gain over the reflex).** Exploratory: the
+  practical gain over the published reflex, with no training.
 - **Quality does not degrade:** optimality G0 0.709, G0V 0.711, P3 0.748, P3V 0.732. The extra
   solves are not long detours.
 - **Why the critic fails as a driver, as far as this run shows:** a one-step ranker that is right
@@ -89,13 +95,13 @@ sits just above that.
 
 ## What this decides
 
-1. **The critic, as trained, is retired as a search judge.** Stage 3 (train a judge from its own
-   look-ahead, DeepCubeA-style) is the route to a learned judge; this run is the evidence that a
-   reused baseline critic is not one.
-2. **The working recipe is now P3V:** policy-guided 3-move look-ahead plus no-revisit, on the
-   existing networks, no retraining. It is the new reference arm for depth 7. The obvious next
-   measurement is P3V at depths 8 and 9, where EXP-070 left the frontier (and where no critic is
-   needed, so it costs only re-evaluation).
+1. **The critic, as trained, is retired as a search judge, by the roadmap's own stage-2 rule**
+   ("must beat stage 1's P at the same k"): C3 - P3 is -0.1725. By the same roadmap, the route to
+   a learned judge is stage 3 (train it from its own look-ahead, DeepCubeA-style).
+2. **Recommendation, not a decision: treat P3V as the reference arm.** It is the best measured
+   configuration at depth 7, uses the existing networks, and needs no critic. The cheapest next
+   measurement is P3V at depths 8 and 9, where EXP-070 left the frontier. The choice of next
+   stage is Michael's.
 3. **No-revisit is a plain lookup table, not a spiking component.** That is stated, not hidden: the
    gain is real and the mechanism is ordinary search bookkeeping.
 

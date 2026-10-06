@@ -8,10 +8,12 @@ detail, and duplicating it here would create two versions that drift.
 ```
 Picking up the neuromorphic cube project. NOTHING IS RUNNING, the laptop is FREE.
 The goal changed on 2026-10-05: no public release; the target is an SNN that solves a cube,
-via look-ahead plus a learned judgement. EXP-070 ran: the policy head is not a usable judge.
+via look-ahead plus a learned judgement. EXP-070: the policy head is not a judge. EXP-071: the
+critic is not a judge either, but a no-revisit rule works, and policy look-ahead plus no-revisit
+(P3V) lifts depth 7 from 0.207 to 0.322 with no training.
 
 Read docs/handoffs/SESSION-HANDOFF-2026-10-06.md first, then CLAUDE.md. Ignore earlier ones.
 
-Section 2 of the handoff holds the decision waiting on me (critic-guided search at depth 7, or a
-visited-state rule in the search). Ask me which before starting anything.
+Section 2 of the handoff holds the decision waiting on me (P3V at depths 8-9, stage 3, or a
+learned/spiking no-revisit). Ask me which before starting anything.
 ```
