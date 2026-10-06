@@ -567,8 +567,9 @@ separate it from the readout itself (EXP-063).
 **Verdict: closed negative, at its ceiling.** With perfect episodic recall and a readout that
 learns what to attend to, memory does not help this policy. The hippocampus earns no place on
 this task. This is a statement about a reactive policy that chooses one move per step; whether
-memory of visited states earns a place in a policy that searches is a different question, and it
-has not been asked.
+remembering visited states helps a policy that searches is a different question. EXP-071 asked a
+narrow version of it with a plain lookup table rather than the hippocampus, and found that it does
+(section 9).
 
 ### 5.5 The neuromodulatory bus
 
@@ -983,10 +984,34 @@ and are recorded as leads. The goal check on its own, without any scoring, raise
 7 (+0.0254, 11 of 12 seeds) and depth 8 (+0.0150); this is a property of the search procedure, not
 of the network. And the reflex policy's high modal-action fraction, two thirds of moves at depth 9,
 suggests its loops are one face turned repeatedly, an inference from aggregates rather than an
-observation (EXP-070). The roadmap's next stage replaces the policy head as the judge with the
-learned critic of section 5.3, which already exists for the depth-7 checkpoints. A rule inside the
-search that refuses to re-enter a visited state is a separate, untested idea; it is not the memory
-mechanism that section 5.4 closed, which fed recall to the policy head as an input.
+observation (EXP-070).
+
+**The second stage has run too: the critic is not a judge, and refusing to revisit helps.**
+EXP-071 tested two primaries at depth 7, again on the existing checkpoints with nothing trained:
+
+| claim | arm | control | delta | verdict |
+|---|---|---|---|---|
+| 1: the critic of section 5.3 as the judge of a 3-move search | 0.0729 | 0.2321 (look-ahead used only as a goal check) | -0.1592, worse on 12 of 12 seeds | **refuted** |
+| 2: the reflex policy forbidden to re-enter a visited state | 0.2346 | 0.2067 (the reflex alone) | +0.0279, 9 of 12, p 0.0115 | **confirmed** |
+
+The critic ranks positions better than chance, and both pre-registered ranking gates passed, but it
+picks an improving move 34% of the time against the policy head's 50%, and steering by it compounds
+that error over every move. It was trained as a baseline for reducing variance in the policy
+gradient, not as an estimate of distance to solved. By the roadmap's own rule for this stage, which
+required a learned judge to beat the policy head's look-ahead, the critic as trained is retired as a
+judge, and the route to a learned judge moves to the roadmap's third stage: training one from its own
+look-ahead (EXP-071).
+
+The no-revisit rule is a hand-coded visited-state table inside the search, not a spiking component
+and not the memory mechanism that section 5.4 closed, which fed recall to the policy head as an
+input. The largest effect in the experiment is a pre-registered **secondary**, read as a pattern
+and not as a confirmation: policy-scored 3-move look-ahead with the rule solved **0.3217** against
+0.2454 without it (+0.0762, 12 of 12 seeds, p 0.0002). Against the reflex alone the same
+configuration is **+0.1150**, a figure that is **exploratory** and was not pre-registered (EXP-071).
+**The gain is search scaffolding around the frozen network**: a simulator to imagine moves, a
+three-move tree, and a lookup table of visited states. The spiking network learned nothing new in
+either experiment, and the one learned judge tried failed. What remains for the roadmap is a judge
+the network actually learns.
 
 None of this changes the learning rule. Training remains surrogate-gradient backpropagation, and
 the roadmap does not claim that search makes the network neuromorphic in how it learns, or that
