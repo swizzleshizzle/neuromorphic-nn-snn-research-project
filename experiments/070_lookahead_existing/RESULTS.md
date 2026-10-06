@@ -17,11 +17,11 @@ amendments). Regenerate the verdicts with:
 > helps at all it is by less than one cube in a hundred. **The policy head is not a usable judge,
 > which is the outcome stage 2 (the critic) exists for.**
 >
-> **What the run found instead: the reflex policy LOOPS.** Under every network-driven arm, **45 to
-> 55% of moves at depths 8 and 9 return to a state already visited in that episode**, against 19%
-> for a random walk. Look-ahead guided by the same policy does not break the loops (P3 0.457 vs E3
-> 0.449 at depth 8). That is the clearest mechanism finding in the experiment and it points
-> directly at the roadmap's memory stage.
+> **Look-ahead guided by the policy also does not break the policy's loops.** The reflex is known
+> to cycle: EXP-062's published records already show `eval_revisit_rate` **0.445 at depth 8 and
+> 0.552 at depth 9**, and this run reproduces that (G0 0.454, 0.556) against 0.19 for a random
+> walk. What EXP-070 adds is that P3 leaves it unchanged (0.457 vs E3 0.449 at depth 8): a search
+> that asks the same policy to judge inherits the same cycles.
 
 ## Gates
 
@@ -81,6 +81,10 @@ Look-ahead of 3 moves does not move the depth-9 frontier off the floor.
   search the network did not do, so it is a property of the procedure, not of the SNN.
 - **Optimality rises under P3 at depth 9** (0.456 to 0.595) on very few solves, so P3's successes
   there are shorter. Too few solves to read further.
+- **The loops look like one face turned repeatedly.** G0's modal-action fraction is 0.454,
+  0.489 and **0.668** at depths 7, 8 and 9: at depth 9 two thirds of a typical episode's moves are
+  a single action, and a quarter turn has order 4. Per-move traces were not recorded, so this is
+  an inference from two aggregates, not an observation.
 - **The goal check rarely fires** (4.6% of moves at depth 7, 1.4% at 8, 0.3% at 9). The policy
   seldom gets within 3 moves of solved at depths 8 and 9, which is why E barely moves G there.
 
@@ -90,10 +94,14 @@ Look-ahead of 3 moves does not move the depth-9 frontier off the floor.
    in the spec ("summed log-probability usually picks the greedy first move"). The EXP-053 arm B
    critics (`exp053_critic_d7_*_critic.pt`) exist untracked on the VPS, so critic-guided search
    at depth 7 needs no retraining. Track them before anything else.
-2. **The loops are the bigger target.** Roughly half of all moves at depth 8 and 9 revisit a
-   state. A visited-state memory inside the search (the roadmap's memory stage) attacks that
-   directly, and `revisit_rate` measures it. This moves memory earlier than the roadmap ordered
-   it, and it is the first time memory has had a measured job in this project.
+2. **Recommendation, not a decision: consider a visited-state rule inside the search.** Roughly
+   half of all moves at depths 8 and 9 revisit a state. The memory line (EXP-059/061/063) tested
+   memory as a RECALL INPUT to the policy head, and found `revisit_rate` flat (EXP-059: M minus A
+   +0.0157, p 0.4450). A hard rule in the SEARCH that refuses to re-enter a visited state is a
+   different mechanism and is untested. If the modal-action inference above holds, much of what it
+   would do is "do not make the fourth quarter turn", which is narrower than "memory", and should
+   be stated that way. The roadmap's stage order is Michael's to change; this file only records
+   the evidence.
 
 ## Provenance
 
