@@ -157,3 +157,29 @@ are committed (force-added), as EXP-070's are.
 
 Depths 8 and 9 (no saved critics; a retrain is its own decision). Any spiking implementation of V.
 Training the critic for ranking (that is stage 3).
+
+## 10. PRE-LAUNCH GATE AMENDMENT, 2026-10-06 (before any C or V cell has run)
+
+Laptop (SwizzlesDuo), main at `c568c04`. Recorded after step 0 (12 rank records) and the base
+arms (48 cells), and BEFORE the determinism re-run, the calibration wave, or any C or V cell.
+
+**Gate R1 (child level): PASS.** Critic top child improving **0.3375** against chance **0.2203**;
+12 of 12 seeds above chance (per-seed margin 0.065 to 0.147); exact one-sided p = 1/4096.
+
+**Gate R3 (leaf level): PASS.** Critic top leaf closer than the root **0.2329** against chance
+**0.1344**; 12 of 12 seeds above (margin 0.045 to 0.158); p = 1/4096. Top leaf at exactly `d - 3`:
+0.0758 against 0.0082 (reported only).
+
+**Reference, not gated:** the POLICY HEAD's own first move improves **0.4950** of the time, well
+above the critic's 0.3375 at the child level. So the critic is a real but weaker one-step ranker
+than the head; whatever it adds must come from the 3-move scale. Recorded now so that a C3 result
+is read against it rather than explained after the fact.
+
+**Gate 0(b) (continuity with EXP-070, exact): PASS.** All 48 base cells (G0, E3, P3, R3 x 12 seeds)
+equal EXP-070's committed depth-7 records in all 8 outcome fields: 0 mismatches.
+
+**Gate 0(a)** is run next (the `det` phase includes a C3 cell, so it follows this commit) and is
+reported in RESULTS.md; a failure there voids every claim as before.
+
+`GATE_R1_PASSED` and `GATE_R3_PASSED` are set to `True` in `aggregate.py` in this commit.
+

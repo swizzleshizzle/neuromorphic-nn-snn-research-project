@@ -31,8 +31,8 @@ gate1_verdict = a70.gate1_verdict
 
 # Set ONLY in the dated spec-amendment commit after step 0 (laptop pre-flight). None blocks
 # every verdict. The controller sets these, never code.
-GATE_R1_PASSED: bool | None = None
-GATE_R3_PASSED: bool | None = None
+GATE_R1_PASSED: bool | None = True  # set 2026-10-06 by the gate amendment, spec section 10
+GATE_R3_PASSED: bool | None = True  # set 2026-10-06 by the gate amendment, spec section 10
 
 ALPHA = 0.025
 GATE_R_ALPHA = 0.05
