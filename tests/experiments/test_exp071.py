@@ -136,3 +136,32 @@ def test_leaf_check_scores_a_farther_top_leaf_as_a_miss():
     """Catches a leaf hit that cannot fail."""
     r = _leaf_case(False)
     assert r["leaf_closer_hit"] == 0 and 0.0 < r["leaf_closer_chance"] < 1.0
+
+
+run = _load("exp071_run", "run.py")
+
+
+def test_run_cell_writes_a_complete_record(tmp_path):
+    """Catches a record missing a field the aggregator or Gate V reads."""
+    rec = run.run_cell("C", 1, True, 0, tmp_path, limit_states=2)
+    on_disk = json.loads((tmp_path / cells.cell_record_name("C", 1, True, 0)).read_text())
+    assert on_disk == rec
+    for key in ("solved", "n", "success_rate", "eval_revisit_rate", "fallback_frac",
+                "no_revisit", "goal_fired_frac", "mode", "k", "arm", "seed", "critic_file",
+                "limit_states"):
+        assert key in rec, key
+    assert rec["arm"] == "C1V" and rec["no_revisit"] is True and rec["n"] == 2
+
+
+GOLDEN = json.loads((REPO / "tests" / "fixtures" / "exp070_d7_s0_golden.json").read_text())
+
+
+@pytest.mark.parametrize("arm", ["G0", "E3", "P3", "R3"])
+def test_runner_plain_arms_match_the_pre_change_golden_fixture(arm, tmp_path):
+    """THE GATE 0(b) CODE PATH, through the runner. Catches run_cell passing something that
+    moves a plain arm (e.g. a critic changing a non-C arm, or no_revisit defaulting on). The
+    fixture came from the UNMODIFIED code, so this can fail."""
+    mode, k, v = cells.parse_arm(arm)
+    rec = run.run_cell(mode, k, v, 0, tmp_path, limit_states=3)
+    for field, value in GOLDEN[arm].items():
+        assert rec[field] == value, (arm, field)
