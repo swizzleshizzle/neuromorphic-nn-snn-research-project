@@ -183,3 +183,8 @@ reported in RESULTS.md; a failure there voids every claim as before.
 
 `GATE_R1_PASSED` and `GATE_R3_PASSED` are set to `True` in `aggregate.py` in this commit.
 
+
+**Cost, appended 2026-10-06 after the calibration wave (success numbers not read):** C3 and C3V
+cells take about 830 to 880 s at 2 to 3 workers. Gate 0(a) for C3 already holds: the det and
+calib C3 cells (same configuration, separate runs) are identical in every field except `wall_s`
+and `git_commit`. Remaining full launch: 94 cells, estimated 2 to 3 hours at 20 workers.
