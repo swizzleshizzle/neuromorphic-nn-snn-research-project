@@ -1,7 +1,7 @@
 # Session Handoff - 2026-10-06 - WEEK 27. EXP-070 and EXP-071 done; no-revisit plus look-ahead is the best arm.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
-> **844 tests, 822 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> **893 tests, 871 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
 > `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
 >
 > **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
