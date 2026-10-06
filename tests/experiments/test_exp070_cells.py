@@ -64,3 +64,26 @@ def test_cell_record_names_are_unique():
 def test_there_is_no_p1_arm():
     """Spec amendment 2026-10-06: P1 is E1 by construction and must not run."""
     assert ("P", 1) not in cells.ARMS
+
+
+_rspec = importlib.util.spec_from_file_location("exp070_run", EXP / "run.py")
+run = importlib.util.module_from_spec(_rspec)
+_rspec.loader.exec_module(run)
+
+
+def test_run_cell_writes_a_complete_record(tmp_path):
+    """Catches a record missing the fields the aggregator and Gate 0 read."""
+    rec = run.run_cell("E", 1, 8, 0, tmp_path, limit_states=3)
+    on_disk = json.loads((tmp_path / cells.cell_record_name("E", 1, 8, 0)).read_text())
+    assert on_disk == rec
+    for key in ("solved", "n", "success_rate", "goal_fired_frac", "eval_revisit_rate",
+                "mode", "k", "depth", "seed", "wall_s", "git_commit", "limit_states"):
+        assert key in rec, key
+    assert rec["n"] == 3 and rec["limit_states"] == 3
+
+
+def test_parse_arm_rejects_p1():
+    """Catches P1 sneaking back in through the CLI."""
+    with pytest.raises(SystemExit):
+        run.parse_arm("P1")
+    assert run.parse_arm("P3") == ("P", 3)
