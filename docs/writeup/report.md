@@ -750,7 +750,7 @@ exists to prevent.
 | level | grade | why |
 |---|---|---|
 | minimum viable: regions specialise and cooperate on grid navigation | **partial** | the sensory region demonstrably specialises (EXP-027); the regions do not demonstrably cooperate, because only one of them reaches the action |
-| target: solve a 2x2 *"from any scramble"* through reinforcement | **not met** | the learning is genuinely by reinforcement, but the frontier is depth 8 (EXP-062) and a uniformly random 2x2 is most often 11 moves from solved; weighted over the whole state space the current solver handles a random cube well under 1% of the time (roadmap spec section 1) |
+| target: solve a 2x2 *"from any scramble"* through reinforcement | **not met** | the learning is genuinely by reinforcement, but the frontier is depth 8 (EXP-062), depth 9 is at the floor, and a uniformly random 2x2 is most often 11 moves from solved |
 | stretch: continual learning without forgetting | **not attempted** | no experiment trained a second task |
 
 ### 6.3 The roadmap the project set itself
