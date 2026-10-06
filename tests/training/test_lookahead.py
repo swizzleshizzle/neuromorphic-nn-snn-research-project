@@ -499,3 +499,24 @@ def test_imagined_values_reads_the_concept_with_recall_off():
     agent.step = spy
     v = la.imagined_values(agent, critic, [s, s], generator=torch.Generator().manual_seed(0))
     assert seen == [False] and v.shape == (2,)
+
+
+@pytest.mark.parametrize("mode", ["P", "C", "R"])
+def test_scored_modes_fall_back_and_say_so_when_every_sequence_is_visited(mode):
+    """Catches the scored-mode fallback (a separate branch from G's) dropping its flag or
+    taking an argmax over all -inf: with every leaf-path through a visited child, the move
+    must equal the unmasked choice and info must record the fallback."""
+    s = _far_state()
+    agent = _ValueAgent({apply_move(s, 3): 5.0})
+    _, head = _agent_and_head()
+    everything = {apply_move(s, a) for a in range(N_ACTIONS)}
+    root = torch.zeros(N_ACTIONS)
+    kw = dict(agent=agent if mode == "C" else _agent_and_head()[0], head=head,
+              critic=_StubCritic())
+    plain = la.choose_move(mode, s, root, 1, N_ACTIONS,
+                           imag_generator=torch.Generator().manual_seed(2), **kw)
+    info = {}
+    masked = la.choose_move(mode, s, root, 1, N_ACTIONS,
+                            imag_generator=torch.Generator().manual_seed(2),
+                            visited=everything, info=info, **kw)
+    assert masked == plain and info.get("fallback") is True

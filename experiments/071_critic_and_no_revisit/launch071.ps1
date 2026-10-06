@@ -69,6 +69,9 @@ if ($Phase -eq "check") { "CHECK OK"; exit 0 }
 # amendment anyway.
 if ($Phase -eq "det" -or $Phase -eq "calib" -or $Phase -eq "full") {
     $gates = & $py -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','experiments/071_critic_and_no_revisit/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.GATE_R1_PASSED)+' '+str(a.GATE_R3_PASSED))"
+    # Check the exit code too: if aggregate.py fails to import, stdout is empty, "" does not
+    # match "None", and the phase would otherwise run UNGATED.
+    if ($LASTEXITCODE -ne 0 -or $gates -notmatch "^(True|False) (True|False)$") { Write-Error "could not read the gate constants (got '$gates'); refusing to run."; exit 1 }
     if ($gates -match "None") { Write-Error "GATE_R1_PASSED or GATE_R3_PASSED is unset ($gates): commit the dated gate amendment before any C cell, det included."; exit 1 }
     "gates              = $gates"
 }
