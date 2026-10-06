@@ -1,0 +1,60 @@
+# Session Handoff - 2026-10-06 - WEEK 27. EXP-070 done; the policy head is not a judge.
+
+> **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
+> **844 tests, 822 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
+>
+> **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
+> project whose deliverable was a public release. It is not any more.
+
+## 0. The direction changed on 2026-10-05
+
+Michael dropped the "public release". **The goal is a spiking network that actually solves a
+cube, eventually beyond 2x2.** The plan is look-ahead: a general procedure (imagine moves with the
+simulator, compare, choose) plus a learned judgement of "how close is this position". Roadmap and
+its staged decision points: `docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`
+section 4. The report continues as documentation on the parallel track.
+
+## 1. EXP-070, the first stage, ran and closed
+
+`experiments/070_lookahead_existing/RESULTS.md`. Re-evaluation of the tracked EXP-053/062
+networks with 1-3 move look-ahead, 324 cells, nothing trained.
+
+- **Primary NOT SIGNIFICANT:** scoring sequences with the policy head adds below about 0.01 at
+  depth 8, k = 3 (P3 0.0854 vs E3 0.0838, p 0.3818). The policy head is not a usable judge.
+- A bare 3-move goal check helps a little (exploratory, not pre-registered).
+- The reflex policy loops on about half its moves at depths 8-9 (already known from EXP-062),
+  and policy-guided look-ahead does not break the loops.
+
+## 2. The decision waiting on Michael
+
+Which comes next, each with its own short spec and its own random-guided control:
+
+1. **Stage 2, critic-guided search at depth 7.** No retraining: the 12 EXP-053 arm B critics are
+   now TRACKED (`experiments/053_neuromod_stage3/outputs/exp053_critic_d7_*_critic.pt`). Depths 8
+   and 9 have no saved critics and would need a retrain. First check whether the critic ranks a
+   state's children correctly (BFS distance as yardstick only).
+2. **A visited-state rule inside the search.** Untested as a search mechanism; the memory line
+   tested memory only as a recall input. If the modal-action reading holds (0.668 at depth 9), it
+   is mostly "do not make the fourth quarter turn" and should be framed that narrowly.
+
+## 3. Things learned this session that will bite again
+
+- **Worktrees import MAIN's src** through the venv's editable install. Prefix `PYTHONPATH=src`.
+  `.venv` is in `.git/info/exclude` so a symlinked one stays out of commits.
+- **The bundled `sdd-runner` workflow assumed Windows paths and the main checkout.** Its patched
+  copy takes a `cwd` arg; without it, reviewers diff `main` and pass every task on an empty diff.
+- **Evaluation is stochastic** (Poisson spikes). Re-evaluation does not reproduce every published
+  per-seed number; CLAUDE.md's reproducibility bullet now says exactly what does reproduce. Always
+  re-evaluate a baseline rather than pairing against a published per-seed value.
+- **EXP-070 records are tracked** (force-added). Untracked published records are why Gate 0 had to
+  depend on files only two machines held. Do the same for future experiments' small JSON records.
+- **Laptop throughput:** a cube eval cell is about 3x slower per cell at 20 workers than at 3.
+  Total throughput still favours 20, but price runs from a same-worker-count measurement.
+
+## 4. What NOT to do
+
+- Do not re-run P1: it is E1 by construction (spec amendment 2026-10-06).
+- Do not read EXP-070's REFUTED secondary verdicts as harm; they are a non-positive point
+  estimate far inside the noise.
+- Do not schedule work against a publishing date. There is none.
