@@ -1,0 +1,19 @@
+{
+ "depth": 7,
+ "encoder_file": "experiments\\047_encoder_finetuning\\outputs\\exp047_ft_d6_lr0.0001_regionalized_d6_s3_sig0.0_encoder.pt",
+ "eval_revisit_rate": 0.4197411003236246,
+ "git_commit": "cad0a9c4da05f63e542da45039e3f50d5336a488",
+ "goal_fired_frac": 0.04563106796116505,
+ "greedy_modal_action_frac": 0.4657412391530038,
+ "head_file": "experiments\\053_neuromod_stage3\\outputs\\exp053_critic_d7_regionalized_d7_s3_sig0.0_head.pt",
+ "k": 3,
+ "limit_states": null,
+ "mean_steps": 10.26086956521739,
+ "mode": "P",
+ "n": 200,
+ "optimality": 0.6822033898305084,
+ "seed": 3,
+ "solved": 46,
+ "success_rate": 0.23,
+ "wall_s": 3287.8
+}
