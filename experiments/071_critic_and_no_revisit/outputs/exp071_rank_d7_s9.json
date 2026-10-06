@@ -1,0 +1,11 @@
+{
+ "chance": 0.21583333333333332,
+ "critic_hit": 0.34,
+ "leaf_closer_chance": 0.13164351851851852,
+ "leaf_closer_hit": 0.23,
+ "leaf_d3_chance": 0.007893518518518518,
+ "leaf_d3_hit": 0.075,
+ "n": 200,
+ "policy_hit": 0.475,
+ "seed": 9
+}
