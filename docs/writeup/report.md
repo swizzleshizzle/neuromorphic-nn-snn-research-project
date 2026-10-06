@@ -2,7 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1, 2 and 4 are written. Every other section is a **stub**: its
+> **Status of this draft.** Sections 1 to 4 are written. Every other section is a **stub**: its
 > heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
 > are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
 > stub is new; every number is quoted from a committed `RESULTS.md`.
@@ -119,20 +119,91 @@ as well. **The goal the project now works towards is the one the plan called its
 network that solves a randomly scrambled 2x2 cube.** This report is documentation of the work so
 far, not a release, and section 9 points at the road from here.
 
-## 3. The system `STUB`
+## 3. The system
 
-**Must carry:** enough architecture for a reader to follow section 5, and the one invariant that
-decides what can be measured.
+This section gives enough of the architecture and the task to follow section 5, and states the
+one fact that decides what section 5 can and cannot measure. The authoritative descriptions are
+`docs/architecture-spec-v3.md` for the regions and wiring and `docs/adr/0001-multi-region-training-strategy.md`
+for what trains; the figures below were checked against `src/neuromorphic/`.
 
-- The five regions and their neuron counts (192 sensory, 150 hippocampus, 150 prefrontal,
-  12 router, 6 motor). Surrogate-gradient LIF neurons; `brain.step` costs about 90 ms.
-- **The invariant:** with `recall=False` the policy head reads the sensory concept only, so
-  **318 of 510 neurons are off the policy path**. State this before any result, not after.
-- The task: raw facelets in, 6 moves out (the 2x2 simplification holds DLB fixed). Difficulty is
-  exact BFS distance to solved, used as an instrument and never as an input.
-- Train/held-out split per depth shell, capped at 200 held-out states; chance floors measured.
-- **Sources:** `docs/architecture-spec-v1.md` to `v3`, `docs/adr/`, `CLAUDE.md` architecture
-  invariants, EXP-029.
+### 3.1 The brain
+
+Five regions of leaky integrate-and-fire (LIF) neurons, built with snnTorch on PyTorch, 510
+neurons in all:
+
+| region | neurons | structure | role in the design |
+|---|---|---|---|
+| sensory cortex | 192 | feedforward, 144 inputs to 128 hidden to a 64-neuron **concept** | turns the observation into a compact code |
+| hippocampus | 150 | recurrent, a Hebbian attractor with store and recall | episodic memory of states already seen |
+| prefrontal cortex | 150 | 100 state neurons and 50 transform neurons | combines concept and recall into a utility per action |
+| thalamic router | 12 | two per action | gates which utilities reach the motor region |
+| motor cortex | 6 | one per action, winner-take-all | selects the move |
+
+A neuromodulatory bus runs alongside the regions and carries a global reward (dopamine) signal.
+Every region shares the same neuron parameters (decay 0.9, threshold 1.0, reset by subtraction),
+and each decision is a window of 32 simulation steps. Spikes are binary; what one region passes to
+another is a population code, not a decoded number. One full step of the brain costs about 90 ms
+on the project's machines, which dominates every runtime in the project.
+
+Training is by **surrogate gradients**: the spike's step function is replaced by a smooth
+stand-in on the backward pass, so ordinary backpropagation can run through the network. Nothing in
+the system learns by a local rule. A three-factor eligibility trace was built in Phase 2 as a
+demonstration (EXP-021) and never used to train anything.
+
+### 3.2 What is on the policy path
+
+**With `recall=False`, which is every arm in this report except the memory experiments, the
+policy reads the sensory concept and nothing else.** The action comes from a trainable head on the
+64 concept neurons: in the base recipe a single linear layer, 64 x 6 weights and 6 biases, **390
+parameters**, trained by REINFORCE. The prefrontal, router and motor regions still run on every
+step and their activity can be recorded and visualised, but their output does not reach the
+action. The hippocampus is bypassed entirely.
+
+So **318 of the 510 neurons (hippocampus 150, prefrontal 150, router 12, motor 6) are off the
+policy path.** This is stated here, before any result, because it decides what an experiment can
+measure. A comparison that varies an off-path region measures nothing; a comparison against a
+control matched on total neurons measures width, not topology. Section 5.6 follows this through.
+
+The recipe that section 5 arrives at adds three things to that head, all on the same path: a
+curriculum over scramble depth (EXP-034/035), a sensory encoder pretrained on cube dynamics and
+then fine-tuned during RL (EXP-040/047), and a learned critic as a baseline (EXP-056). The memory
+experiments switch recall on and widen what the head reads: the concept plus the hippocampus's
+recall code and a familiarity scalar (EXP-059/061), or a learned attention over a cache of
+earlier states (EXP-063).
+
+### 3.3 The task
+
+**Observation.** The 24 facelets of a 2x2 cube, each one-hot over 6 colours (144 inputs),
+encoded as Poisson spike trains. The network sees raw facelets and nothing else.
+
+**Actions.** Six: clockwise and anticlockwise quarter turns of the U, R and F faces, with the
+down-left-back corner held fixed. This deliberately departs from the plan's 12 moves (section
+2.1). A 2x2 has no centre pieces, so turning the opposite face is the same as turning the whole
+cube and then this face (`U` equals `D'` up to orientation), and holding one corner fixed removes
+the redundancy without losing any state up to whole-cube orientation. **The simplification is 2x2-only**: a 3x3 has
+fixed centres and needs all six faces, 12 or 18 moves.
+
+**Reward.** Sparse: -1 per move and +10 on reaching solved. Episodes are cut off at a step budget
+of `2d + 3` moves for a scramble of depth `d`.
+
+**Difficulty is exact.** Every state's true distance to solved comes from a breadth-first search
+over the whole state space, and states are grouped into **shells** by that distance. "Depth `d`"
+in this report always means a state exactly `d` moves from solved, never "scrambled with `d`
+random moves", which can land closer. The distance is an instrument for choosing and scoring
+states. It is never an input to the network, and a reward-shaping option that would use it exists
+only as an unused fallback.
+
+**Train and held-out states.** Depths 1 and 2 have 6 and 27 states and are evaluated whole, so
+they measure performance on the training distribution. From depth 3, each shell is split into
+training and held-out states, with the held-out side capped at 200: 30 states at depth 3, 133 at
+depth 4, and 200 from depth 5 on (EXP-029). Unless a section says otherwise, every success rate in
+this report is measured on held-out states the policy never trained on.
+
+**Chance is measured, not assumed.** A uniform random policy is run on the same states with the
+same budget. Because a random walk can stumble into solved within `2d + 3` moves, the floor at
+depth 1 is **20.8%**, not 1/6, falling to 4.3% at depth 2 and 1.4% at depth 3 (EXP-029) and to
+exactly 0.0000 by depth 8 (EXP-062). Every "working" verdict in section 5 is made against the
+measured floor at its depth.
 
 ---
 
