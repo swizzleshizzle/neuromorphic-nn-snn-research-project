@@ -116,10 +116,16 @@ the held-out shells and to report results. It is never read by any scorer or by 
 |---|---|---|---|
 | **G** | 0 | greedy argmax, as published | **validity gate** |
 | **E1, E2, E3** | 1, 2, 3 | greedy move, goal test only | what the endgame check buys |
-| **P1, P2, P3** | 1, 2, 3 | policy-guided | under test |
+| **P2, P3** | 2, 3 | policy-guided | under test |
 | **R1, R2, R3** | 1, 2, 3 | random-guided | reported floor |
 
-10 arms x 3 depths x 12 seeds = 360 cells. No retraining, so cells are evaluations.
+9 arms x 3 depths x 12 seeds = 324 cells. No retraining, so cells are evaluations.
+
+> **AMENDMENT 2026-10-06, before any cell has run: P1 is dropped.** At `k = 1` the P score of a
+> sequence is the root's log-probability of its one move, so P1 picks the greedy move whenever the
+> goal test does not fire: **P1 is E1 by construction**, and a P1-versus-E1 contrast is 0 on every
+> cell before it runs. Found while writing the implementation plan. The primary cell (depth 8,
+> k = 3) is unaffected.
 
 ### 2.5 Pre-registered claims
 
@@ -147,14 +153,13 @@ the pair is not stuck on a shared floor or ceiling (EXP-064: two arms at 0.0000 
 or both above **0.98**, that cell's verdict is **UNRESOLVED**, returned by the aggregator as a
 verdict of its own (the EXP-068 rule). E needs one network call per real move and R needs none,
 so **both are measured during the pre-flight on the real held-out shells**, before any P cell
-exists. If E sits at the floor at depth 9, the spec is amended (dated, before launch) to name
-depth 8 as the only primary depth.
+exists. The pre-flight result for each (depth, k) is written into this spec, dated, before launch.
 
 **Claim 1 (primary): scoring the look-ahead beats reflex plus endgame.** One primary cell:
 **depth 8, k = 3.** mean(P3 - E3) > 0 by an exact paired sign-flip permutation test over all
 `2**12` flips, one-sided, p < 0.05. Verdict: CONFIRMED, REFUTED (point estimate <= 0), NOT
 SIGNIFICANT, or UNRESOLVED (Gate 1). The other (depth, k) cells of the same contrast are
-**secondary**: reported with their p-values, read as a pattern, never as independent
+**secondary** (k = 2 at depths 8 and 9, k = 3 at depth 9): reported with their p-values, read as a pattern, never as independent
 confirmations. One honest expectation, recorded in advance: summed log-probability usually picks
 the greedy first move, so P and E may differ little. The contrast exists to show exactly that if
 it is true.
@@ -180,9 +185,9 @@ cell, so a Windows Update restart costs at most one in-flight wave.
 
 1. **Gate 0(b) form:** re-evaluate G for all 36 (depth, seed) cells and compare solved counts
    with the published records. Decides which form of Gate 0(b) applies.
-2. **Gate 1 calibration:** run E1 to E3 and R1 to R3 at all depths. Records which (depth, k)
-   cells are already UNRESOLVED, and whether depth 9 stays primary.
-3. **Calibration wave:** one seed, all P arms, depth 8. Its wall-clock replaces the estimate above.
+2. **Gate 1 calibration:** run E1 to E3 and R1 to R3 at all depths. Records each (depth, k)
+   cell's E level, so a reader can see in advance which cells can resolve.
+3. **Calibration wave:** one seed, P2 and P3, depth 8. Its wall-clock replaces the estimate above.
 
 These pre-flight numbers are for E, R and G only. No P number exists until the gates are fixed.
 
