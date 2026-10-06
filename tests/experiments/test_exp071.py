@@ -165,3 +165,70 @@ def test_runner_plain_arms_match_the_pre_change_golden_fixture(arm, tmp_path):
     rec = run.run_cell(mode, k, v, 0, tmp_path, limit_states=3)
     for field, value in GOLDEN[arm].items():
         assert rec[field] == value, (arm, field)
+
+
+agg = _load("exp071_aggregate", "aggregate.py")
+
+
+def test_claim_verdict_ladder_including_void():
+    """Catches VOID being checked after significance, and the 0.025 alpha being 0.05."""
+    assert agg.claim_verdict([0.05] * 12, 0.2, 0.25, gate_ok=False)[0] == "VOID"
+    assert agg.claim_verdict([0.05] * 12, 0.2, 0.25, gate_ok=True)[0] == "CONFIRMED"
+    assert agg.claim_verdict([-0.01] * 12, 0.2, 0.19, gate_ok=True)[0] == "REFUTED"
+    # p for 9 positive of 12 equal-magnitude diffs is 299/4096 = 0.073: NOT SIGNIFICANT at
+    # either alpha. 10 of 12 is 79/4096 = 0.0193: CONFIRMED at 0.025.
+    nine = [0.01] * 9 + [-0.01] * 3
+    ten = [0.01] * 10 + [-0.01] * 2
+    assert agg.claim_verdict(nine, 0.2, 0.205, gate_ok=True)[0] == "NOT SIGNIFICANT"
+    assert agg.claim_verdict(ten, 0.2, 0.207, gate_ok=True)[0] == "CONFIRMED"
+    # A VOID check placed after the significance branch would, on these non-significant
+    # diffs, fall through to "NOT SIGNIFICANT" instead of "VOID" (p=0.073 never reaches a
+    # p < ALPHA branch, so a mutation that only checks gate_ok inside that branch is never
+    # exercised). This is the case the plan's own mutation table predicts can survive.
+    assert agg.claim_verdict(nine, 0.2, 0.205, gate_ok=False)[0] == "VOID"
+
+
+def test_alpha_is_the_split_family_value():
+    """Catches the two primaries each being tested at 0.05."""
+    assert agg.ALPHA == 0.025
+    # Measured when the plan was written: p = 0.0486, inside (0.025, 0.05).
+    between = [0.02] * 10 + [-0.03] * 2
+    p = agg.one_sided_p(between)
+    assert 0.025 < p < 0.05
+    assert agg.claim_verdict(between, 0.2, 0.211, gate_ok=True)[0] == "NOT SIGNIFICANT"
+
+
+def test_gate_v_is_a_ratio():
+    """Catches an absolute bar: 0.19 against a reflex at 0.40 passes; 0.21 fails. A bar of
+    0.2 absolute would also pass 0.19 and fail 0.21, so add a case the absolute bar gets
+    wrong: 0.15 against 0.25 (ratio bar 0.125) must FAIL under the true ratio rule."""
+    assert agg.gate_v_verdict(0.19, 0.40) is True
+    assert agg.gate_v_verdict(0.21, 0.40) is False
+    assert agg.gate_v_verdict(0.15, 0.25) is False
+
+
+def test_gate_r_fails_at_chance_and_passes_well_above_it():
+    """Catches a gate that cannot fail (e.g. comparing the critic to 0 instead of chance)."""
+    at_chance = [{"critic_hit": 0.22, "chance": 0.22}] * 12
+    above = [{"critic_hit": 0.40, "chance": 0.22}] * 12
+    assert agg.gate_r_verdict(at_chance)[0] is False
+    assert agg.gate_r_verdict(above)[0] is True
+
+
+def test_gate_r3_reads_the_leaf_keys():
+    """Catches R3 silently reusing the child-level keys: here the children are at chance and
+    the leaves are well above it, so R1 fails and R3 passes."""
+    rows = [{"critic_hit": 0.22, "chance": 0.22,
+             "leaf_closer_hit": 0.40, "leaf_closer_chance": 0.13}] * 12
+    assert agg.gate_r_verdict(rows)[0] is False
+    assert agg.gate_r_verdict(rows, "leaf_closer_hit", "leaf_closer_chance")[0] is True
+
+
+def test_gate0b_fails_on_one_field_off():
+    """Catches a tolerance or a skipped field in the continuity gate."""
+    base = {f: 1 for f in agg.OUTCOME_FIELDS}
+    r70 = {("G0", s): dict(base) for s in range(2)}
+    r71 = {("G0", s): dict(base) for s in range(2)}
+    assert agg.gate0b_verdict(r71, r70) == "PASS"
+    r71[("G0", 1)]["optimality"] = 0.999
+    assert agg.gate0b_verdict(r71, r70) == "FAIL"
