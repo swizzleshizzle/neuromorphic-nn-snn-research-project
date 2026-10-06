@@ -2,7 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1 to 6 are written. Every other section is a **stub**: its
+> **Status of this draft.** Sections 1 to 7 are written. Every other section is a **stub**: its
 > heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
 > are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
 > stub is new; every number is quoted from a committed `RESULTS.md`.
@@ -767,14 +767,82 @@ That was written before the budget law existed. It was right about the science a
 the arithmetic: with the policy as built, it is the exchange rate between compute and depth that
 stops it. Section 9 takes up what would change that exchange rate.
 
-## 7. Reproducing the results `STUB`
-- **The guarantee: re-evaluate the checkpoints, never retrain from the seed.** Re-evaluation matches
-  every headline metric to full float representation across machines, with one derived mean off by
-  1 ULP. Retraining is byte-identical on one machine and not across two: 0 of 390 parameters match,
-  and per-seed success scatters by up to 0.30, while the task layer (states, splits, scrambles) is
-  byte-identical on 12 of 12 seeds (EXP-067).
-- Commands, tracked artifacts, environment (torch 2.13.0+cpu; Python 3.10 and 3.13 both tested).
-- **Sources:** `docs/reproducibility-audit.md`, EXP-067, `scripts/verify_*`.
+## 7. Reproducing the results
+
+### 7.1 The guarantee
+
+**Published numbers reproduce by re-evaluating the tracked checkpoints. They do not reproduce by
+retraining from a seed.** Both halves were measured on two x86 machines running the same torch
+(`docs/reproducibility-audit.md`, EXP-067).
+
+- **Re-evaluation is portable.** EXP-036's published depth-3 checkpoints, loaded and re-evaluated
+  on both machines, agree on success rate, mean steps, optimality and revisit rate to the full
+  floating-point representation. One derived mean, the modal-action fraction, differs by 1 to 2
+  units in the last place on two of three seeds, because it is a mean of per-episode fractions and
+  its summation order is the one thing that moves.
+- **Retraining is reproducible on one machine and not across two.** On the machine that made them,
+  seeded runs are byte-identical across worker scheduling, which the project has used repeatedly as
+  a correctness check on its seeding. On a second machine, a retrained EXP-036 head shares **0 of
+  its 390 parameters** with the published one (cosine 0.524), and that cell uses no pretrained
+  encoder, so the divergence is not specific to pretraining. Across 12 seeds the retrained
+  success rates move by -0.3000 to +0.2333 per seed (EXP-067).
+- **The task layer is fully portable.** States, held-out splits and scramble streams were
+  byte-identical on 12 of 12 seeds across the two machines; every bit of the divergence is in
+  training (EXP-067).
+- **Findings mostly survive retraining.** Two of three pre-registered verdicts replicated on the
+  second machine and the numeric bar did not (section 5.7). That is one experiment, not a general
+  result.
+
+So the claim this report makes is: **every published number can be reproduced from a fresh clone
+by loading the tracked checkpoints and re-evaluating; retraining from a seed reproduces the
+findings, as far as has been tested, but not the numbers.** Do not read "seeded runs are
+byte-identical" without the qualifier "on the same machine".
+
+### 7.2 What is tracked, and what is not
+
+- **Tracked:** every trained policy head (`*_head.pt`), the pretrained and fine-tuned encoders that
+  later experiments load (the E0 encoders were added after the audit found them laptop-only), each
+  experiment's `run.py` and `aggregate.py`, its pre-registered spec under
+  `docs/superpowers/specs/`, and its `RESULTS.md` with provenance and regeneration commands. About
+  1,080 checkpoint files in all.
+- **Not tracked:** the per-run JSON records under each `experiments/*/outputs/`, which are
+  gitignored. **A fresh clone therefore cannot re-run an `aggregate.py` directly**; the numbers in
+  each `RESULTS.md` are the committed record of what those aggregators printed. Re-deriving them
+  from a clone means re-evaluating the checkpoints to regenerate the records first.
+
+### 7.3 Commands
+
+Environment: Python 3.10 or later (3.10 on the Linux machine, 3.13 on the Windows laptop that ran
+most experiments), torch 2.13.0 CPU build, snnTorch, Gymnasium. Install into a virtual environment
+and run everything through it.
+
+```bash
+# Re-evaluate published checkpoints and print metrics plus an action-sequence digest
+.venv/bin/python -u scripts/verify_eval_portability.py --depth 3 --seeds 0 1 2
+
+# Retrain a published cell into a scratch directory and compare its head byte for byte
+.venv/bin/python -u scripts/verify_e2e_reproduction.py --depth 3 --seeds 0
+
+# Encoder pretraining: regenerate and compare against the tracked encoders
+.venv/bin/python -u experiments/040_pretrained_encoder_policy/verify_regeneration.py --seeds 0
+
+# The seed-effect numbers of section 4.5
+.venv/bin/python -u scripts/seed_effect.py
+```
+
+Each experiment's own launch and aggregation commands are at the foot of its `RESULTS.md`. Most
+experiments were run on a 22-core laptop over SSH with a PowerShell launcher; the cube `run.py` drivers
+themselves are plain Python and most take `--workers`.
+
+### 7.4 Limits of the guarantee
+
+- **The re-evaluation tool covers one experiment.** `verify_eval_portability.py` is written
+  against EXP-036 and was run on three of its seeds. That the same holds for the other experiments'
+  checkpoints is expected, because they share the evaluation code, but it has not been run for
+  each of them, and there is no general re-evaluation driver yet.
+- **Two x86 CPU machines only.** No GPU, no ARM.
+- **The `dashboard/` JavaScript app** has its own toolchain and lockfile and was not part of the
+  audit.
 
 ## 8. Limitations and what would come next `STUB`
 - 2x2 only; the 6-move set does not transfer to a 3x3. Depth 11 not attempted. Topology untested
