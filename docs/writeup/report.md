@@ -2,10 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1 to 8 and Appendix A are written; section 9 is not yet drafted. Every other section is a **stub**: its
-> heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
-> are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
-> stub is new; every number is quoted from a committed `RESULTS.md`.
+> **Status of this draft.** Every section is written, sections 1 to 9 and Appendix A.
 >
 > **Ground rules for the whole report.** Every number cites the experiment that produced it.
 > Every claim that was pre-registered says whether it was confirmed, refuted, void or unresolved,
@@ -953,6 +950,47 @@ one, and no experiment here has made that comparison.
 is solved.
 
 What the project does point at is in section 9.
+
+## 9. The road from here
+
+The goal is now the one the plan called its target: a spiking network that solves a randomly
+scrambled 2x2 (section 2.3). The budget law says more of the same will not reach it, since depth
+11 costs about 33 days of compute per seed (section 5.1). But that law describes a **reactive**
+policy, which must choose correctly about 11 times in a row with one forward pass per move.
+Nothing in it constrains a policy that looks ahead. The roadmap that follows from this
+(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`, sections 1 and 4) splits the
+skill into a general procedure (imagine moves, compare where they lead, choose) and a learned
+judgement (how close does this position look), the shape of the strongest published cube solvers.
+Each stage has a pre-registered decision point, and the next starts only on its answer.
+
+**The first stage has run, and its primary was not significant.** EXP-070 added a look-ahead of
+up to three moves to the existing checkpoints, retraining nothing, and scored candidate sequences
+with the policy head itself. At depth 8 with three-move look-ahead, scoring reached **0.0854**
+against **0.0838** for the matched control, which runs the same look-ahead only to check whether
+any sequence reaches solved (+0.0017, p 0.3818, **not significant**). The test could detect about
+0.01, so any benefit of the policy head as a judge is below that, not shown to be zero. Of the
+three secondary cells, two were **refuted** by the spec's mechanical rule for a non-positive point
+estimate (depth 8 and depth 9 at two moves; differences far inside the noise, so "no benefit"
+rather than harm) and one was **not significant** (depth 9 at three moves). Claim 2, the practical
+target of 0.10 at depth 9, was **not met**: scored look-ahead reached 0.0250 there, against the reflex policy's 0.0171 (EXP-070).
+Look-ahead scored by the policy also left the policy's tendency to revisit states unchanged, at
+about 0.45 of moves at depth 8. That tendency is not a new finding: EXP-062's records already
+showed revisit rates of 0.445 at depth 8 and 0.552 at depth 9. What EXP-070 adds is that a search
+judged by the same policy inherits the same cycles.
+
+**What it points at, as leads rather than findings.** Two observations were not pre-registered
+and are recorded as leads. The goal check on its own, without any scoring, raised success at depth
+7 (+0.0254, 11 of 12 seeds) and depth 8 (+0.0150); this is a property of the search procedure, not
+of the network. And the reflex policy's high modal-action fraction, two thirds of moves at depth 9,
+suggests its loops are one face turned repeatedly, an inference from aggregates rather than an
+observation (EXP-070). The roadmap's next stage replaces the policy head as the judge with the
+learned critic of section 5.3, which already exists for the depth-7 checkpoints. A rule inside the
+search that refuses to re-enter a visited state is a separate, untested idea; it is not the memory
+mechanism that section 5.4 closed, which fed recall to the policy head as an input.
+
+None of this changes the learning rule. Training remains surrogate-gradient backpropagation, and
+the roadmap does not claim that search makes the network neuromorphic in how it learns, or that
+learned weights will transfer from a 2x2 to a 3x3. What it aims to transfer is the recipe.
 
 ## Appendix A. Experiment index
 
