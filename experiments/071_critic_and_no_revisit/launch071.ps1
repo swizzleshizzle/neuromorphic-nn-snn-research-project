@@ -59,14 +59,17 @@ if ($alive -gt 2) { Write-Error "$alive python processes already running; refusi
 
 if ($Phase -eq "check") { "CHECK OK"; exit 0 }
 
-# calib and full both run a committed C cell, which decides a claim: no C cell may run before
-# the dated gate amendment lands. That commit sets GATE_R1_PASSED and GATE_R3_PASSED together,
-# so checking both is one check, not two. det also touches C3, but into a throwaway folder
-# outside the repo's committed outputs (exp071-det), purely for the determinism check, so it is
-# not gated here.
-if ($Phase -eq "calib" -or $Phase -eq "full") {
+# det, calib and full all run a committed C cell, which decides a claim: no C cell may run
+# before the dated gate amendment lands. That commit sets GATE_R1_PASSED and GATE_R3_PASSED
+# together, so checking both is one check, not two. det writes into a throwaway folder outside
+# the repo's committed outputs (exp071-det), but it still produces a real C3 success number on
+# disk before the amendment would otherwise land, which is the exact regime the repo's
+# gate-calibration rule forbids; gating it costs nothing, since det "re-runs" G0V/C3/R3V, which
+# presupposes they already ran once, i.e. after base, calib and full, which is after the
+# amendment anyway.
+if ($Phase -eq "det" -or $Phase -eq "calib" -or $Phase -eq "full") {
     $gates = & $py -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','experiments/071_critic_and_no_revisit/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.GATE_R1_PASSED)+' '+str(a.GATE_R3_PASSED))"
-    if ($gates -match "None") { Write-Error "GATE_R1_PASSED or GATE_R3_PASSED is unset ($gates): commit the dated gate amendment before any C cell beyond det."; exit 1 }
+    if ($gates -match "None") { Write-Error "GATE_R1_PASSED or GATE_R3_PASSED is unset ($gates): commit the dated gate amendment before any C cell, det included."; exit 1 }
     "gates              = $gates"
 }
 
@@ -77,7 +80,6 @@ $arms = switch ($Phase) {
     "calib" { @("C3", "C3V") }
     "full"  { @("G0V", "E3V", "P3V", "C1", "C1V", "C3", "C3V", "R3V") }
 }
-if ($Workers -eq 0) { $Workers = 20 }
 
 if ($Phase -eq "rank") {
     $w = if ($Workers -eq 0) { 12 } else { $Workers }
@@ -90,6 +92,8 @@ if ($Phase -eq "rank") {
     & $py -u $script @cliArgs 2>&1 | Tee-Object -FilePath $log
     exit 0
 }
+
+if ($Workers -eq 0) { $Workers = 20 }
 
 $script  = "experiments\071_critic_and_no_revisit\run.py"
 $cliArgs = @("--arms") + $arms + @("--workers", $Workers)
