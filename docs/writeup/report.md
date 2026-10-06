@@ -604,12 +604,57 @@ section 5.3, was confirmed in the same experiment. Across the whole project, the
 which a neuromorphic component took part in learning is when the spiking encoder began to train
 (section 5.2); this experiment is not a second one.
 
-### 5.6 Topology, and why it cannot be measured here `STUB`
-- The monolithic control had 2.66x the on-path capacity and still lost narrowly at depths 2 and 3.
-- The on-path-matched contrast is vacuous: bit-identical weights and outputs across 6 seeds
-  (`tests/training/test_topology_contrast_is_vacuous.py`). The brain's own motor pathway collapses
-  at every region learning rate tried (EXP-064/066). **Answering the topology question needs an
-  architecture change, not an experiment.**
+### 5.6 Topology, and why it cannot be measured here
+
+The question the architecture was built to answer is whether dividing a spiking network into
+specialised regions helps. The plan's test was a monolithic network with the same neuron count
+(section 2.1). That test was run, and it turned out not to measure topology.
+
+**The monolithic comparison measured width, in the control's favour.** In the v1 baseline the
+regionalized brain and a 510-neuron monolithic stack tied at depth 1 (87.5% each), and the
+regionalized brain led at depth 2 (38.0% against 30.6%) and depth 3 (2.2% against 0.8%) (EXP-029).
+The paired differences were inside the seed noise (+7.4 points at depth 2 with an sd of 38.1, 7
+wins to 5), so the pre-registered reading was a null. Section 3.2 explains why the comparison was
+lopsided: the monolithic network puts all 510 of its neurons on the policy path, while the
+regionalized brain puts 192 there. **The control had 2.66 times the usable capacity and still did
+not win.** That makes the regionalized result less likely to be a width artifact, but it is not
+evidence that the topology helps.
+
+**Matching the path instead is vacuous.** The natural fix is a monolithic network of 192 neurons,
+matched on the policy path. But that network is the same module with the same arguments and the
+same seed as the brain's own sensory region. Checked through the real agent-construction path
+across 6 seeds, every weight is bit-identical and the concept differs by exactly 0.000. Removing
+the off-path regions from the brain instead changes nothing either, because they are already
+disconnected from the action. This was caught before any compute was spent, and
+`tests/training/test_topology_contrast_is_vacuous.py` locks it in; a failure of that test would be
+good news, because it would mean topology had become measurable (`docs/phase3-honest-assessment.md`
+section 2a).
+
+**Putting the brain's own pathway on the policy path does not work.** The remaining route was to
+let the action come from the prefrontal, router and motor regions themselves, trained end to end.
+EXP-064 did this at depth 5 (arm P) against a control whose head was widened to match its
+parameter count (arm C). Both validity gates passed: the regions genuinely trained (drift 2.71) and
+the spiking pathway genuinely fired (no silent steps). **Both arms scored exactly 0.0000**, so the
+primary contrast was zero by construction and nothing about topology may be read from it (EXP-064).
+The control was broken: the same configuration with a linear head had scored 0.3229 over 24 seeds,
+and the one added hidden layer collapsed it to a single action (entropy 0.0120). Arm P failed
+differently: it kept exploring (entropy 1.11, revisit rate 0.259 against the control's 0.669) and
+never learned to solve anything.
+
+**And it fails at every learning rate tried.** EXP-064's arm P had used a region learning rate
+whose drift looked high, so EXP-066 swept it over three orders of magnitude. All three arms were at
+the floor (0.0017 at 1e-4, 0.0000 at 1e-3 and 1e-2), on a configuration where the 390-parameter
+linear head scores 0.3229 (EXP-066). The relationship ran the wrong way: the further the regions
+moved, the more completely the policy collapsed onto one move (modal fraction 0.850, 0.969, 1.000).
+The per-stage trace shows the pathway learning something real on the shallow curriculum, about 8
+times its floor at depth 3, and then collapsing as depth rises. It is not incapable; it is
+unstable.
+
+**Verdict: not testable in this configuration.** No arm-versus-arm contrast can measure topology
+when the topology is not on the policy path, and the one attempt to put it there produced a
+pathway that the training signal destroys. **Answering the topology question needs an architecture
+change, not another experiment.** The plan's Phase 3 criterion 2 is graded with this in mind in
+section 6.
 
 ### 5.7 Reproducibility and the seed effect `STUB`
 - EXP-067, EXP-068 and `docs/seed-effect.md`; see sections 4.5 and 7.
