@@ -49,10 +49,14 @@ the **method** in section 4, which is the reason any of the negative results abo
 believed. It detected, repeatedly and before publication, when the project's own ideas were not
 working.
 
-**What a reader can reproduce, and how.** Re-evaluating any of the committed checkpoints
-reproduces the published numbers exactly, on any machine tested. Retraining from a seed does not:
-on a second machine the per-seed results scatter by up to 0.30 while two of three pre-registered
-verdicts survive (EXP-067). Section 7 states the guarantee precisely.
+**What a reader can reproduce, and how.** Re-evaluating a committed checkpoint reproduces a
+previous re-evaluation exactly, measured across two machines for EXP-036. It reproduces a
+*published* per-seed number only where that has been checked: evaluation encodes the cube as
+random spikes, and the published runs drew them from a different point in the random stream. For
+the depth 7 to 9 checkpoints, 27 of 36 re-evaluated cells differ from their published solved
+counts, while each depth's pooled mean agrees within a 95% interval (EXP-070). Retraining from a
+seed reproduces neither: on a second machine the per-seed results scatter by up to 0.30 while two
+of three pre-registered verdicts survive (EXP-067). Section 7 states the guarantee precisely.
 
 ---
 
@@ -772,15 +776,27 @@ stops it. Section 9 takes up what would change that exchange rate.
 
 ### 7.1 The guarantee
 
-**Published numbers reproduce by re-evaluating the tracked checkpoints. They do not reproduce by
-retraining from a seed.** Both halves were measured on two x86 machines running the same torch
-(`docs/reproducibility-audit.md`, EXP-067).
+**Re-evaluating the tracked checkpoints reproduces re-evaluation exactly, and reproduces a
+published per-seed number only where that has been checked. Retraining from a seed reproduces
+neither.** These were measured on two x86 machines running the same torch
+(`docs/reproducibility-audit.md`, EXP-067, EXP-070).
 
-- **Re-evaluation is portable.** EXP-036's published depth-3 checkpoints, loaded and re-evaluated
-  on both machines, agree on success rate, mean steps, optimality and revisit rate to the full
-  floating-point representation. One derived mean, the modal-action fraction, differs by 1 to 2
-  units in the last place on two of three seeds, because it is a mean of per-episode fractions and
-  its summation order is the one thing that moves.
+- **Re-evaluation is deterministic and portable.** EXP-036's published depth-3 checkpoints, loaded
+  and re-evaluated on both machines, agree on success rate, mean steps, optimality and revisit
+  rate to the full floating-point representation. One derived mean, the modal-action fraction,
+  differs by 1 to 2 units in the last place on two of three seeds, because it is a mean of
+  per-episode fractions and its summation order is the one thing that moves. EXP-070's harness,
+  re-run on one machine into a separate directory, was identical in every field except wall-clock
+  time (EXP-070, Gate 0(a)).
+- **Re-evaluation does not always reproduce the published number.** Evaluation is stochastic: the
+  observation is encoded as Poisson spikes drawn from the evaluation generator. A published record
+  was evaluated on whatever state of that stream training had left behind, and a re-evaluation
+  starts a fresh one. For EXP-036 the two agree. For the 36 depth 7 to 9 cells of EXP-053 arm B and
+  EXP-062, **27 differ from their published solved counts**, the largest being depth 8 seed 3 at
+  22 of 200 published against 8 of 200 re-evaluated. Pooled per depth, every re-evaluated mean lies
+  inside the Wilson 95% interval of the published one: 0.2067 against 0.2004 at depth 7, 0.0688
+  against 0.0783 at depth 8 (inside by 0.0006), and 0.0171 against 0.0163 at depth 9 (EXP-070,
+  Gate 0(b); the per-depth figures are in the roadmap spec's pre-launch amendment).
 - **Retraining is reproducible on one machine and not across two.** On the machine that made them,
   seeded runs are byte-identical across worker scheduling, which the project has used repeatedly as
   a correctness check on its seeding. On a second machine, a retrained EXP-036 head shares **0 of
@@ -794,10 +810,12 @@ retraining from a seed.** Both halves were measured on two x86 machines running 
   second machine and the numeric bar did not (section 5.7). That is one experiment, not a general
   result.
 
-So the claim this report makes is: **every published number can be reproduced from a fresh clone
-by loading the tracked checkpoints and re-evaluating; retraining from a seed reproduces the
-findings, as far as has been tested, but not the numbers.** Do not read "seeded runs are
-byte-identical" without the qualifier "on the same machine".
+So the claim this report makes is: **re-evaluating a tracked checkpoint from a fresh clone
+reproduces any other re-evaluation of it exactly, and reproduces the published per-seed numbers
+where that has been checked (EXP-036); elsewhere it reproduces the published per-depth means
+within sampling error, not the per-seed counts (EXP-053 arm B, EXP-062). Retraining from a seed
+reproduces the findings, as far as has been tested, but not the numbers.** Do not read "seeded
+runs are byte-identical" without the qualifier "on the same machine".
 
 ### 7.2 What is tracked, and what is not
 
@@ -807,9 +825,11 @@ byte-identical" without the qualifier "on the same machine".
   `docs/superpowers/specs/`, and its `RESULTS.md` with provenance and regeneration commands. About
   1,080 checkpoint files in all.
 - **Not tracked:** the per-run JSON records under each `experiments/*/outputs/`, which are
-  gitignored. **A fresh clone therefore cannot re-run an `aggregate.py` directly**; the numbers in
-  each `RESULTS.md` are the committed record of what those aggregators printed. Re-deriving them
-  from a clone means re-evaluating the checkpoints to regenerate the records first.
+  gitignored, with one exception: EXP-070 commits its 324 records. **A fresh clone therefore cannot
+  re-run any other experiment's `aggregate.py` directly**; the numbers in each `RESULTS.md` are the
+  committed record of what those aggregators printed. Re-deriving them from a clone means
+  re-evaluating the checkpoints to regenerate the records first, which reproduces per-depth means
+  rather than per-seed counts wherever the two have not been checked against each other.
 
 ### 7.3 Commands
 
@@ -837,10 +857,13 @@ themselves are plain Python and most take `--workers`.
 
 ### 7.4 Limits of the guarantee
 
-- **The re-evaluation tool covers one experiment.** `verify_eval_portability.py` is written
-  against EXP-036 and was run on three of its seeds. That the same holds for the other experiments'
-  checkpoints is expected, because they share the evaluation code, but it has not been run for
-  each of them, and there is no general re-evaluation driver yet.
+- **Published per-seed numbers have been checked for two experiments.** EXP-036 (three seeds,
+  exact) and EXP-053 arm B with EXP-062 (36 cells, pooled means only). For every other experiment,
+  a re-evaluated per-seed number should be expected to differ from the published one by sampling
+  error. **A published per-seed value must never be used as the paired baseline for a re-evaluated
+  arm**: re-evaluate the baseline too, on the same stream discipline, which is what EXP-070 did.
+- **There is no general re-evaluation driver.** `verify_eval_portability.py` is written against
+  EXP-036, and EXP-070's harness against the depth 7 to 9 checkpoints.
 - **Two x86 CPU machines only.** No GPU, no ARM.
 - **The `dashboard/` JavaScript app** has its own toolchain and lockfile and was not part of the
   audit.
