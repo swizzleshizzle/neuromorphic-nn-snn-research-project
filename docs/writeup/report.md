@@ -471,9 +471,45 @@ the gain. It is **not** neuromorphic in its learning rule. Both pretraining and 
 backpropagate surrogate gradients through the spiking layers; nothing here is local, Hebbian or
 reward-modulated at the synapse.
 
-### 5.3 The critic `STUB`
-- Works; its benefit is within-episode state-dependence, not calibration (EXP-056/057).
-  Replicated on fresh seeds at -0.0925, p 0.0156 (EXP-060). Ordinary RL.
+### 5.3 The critic
+
+The roadmap's Stage 3 asked for a denser learning signal. The ordinary RL answer is a learned
+critic: a value estimate `V(s)` subtracted from the return, so the head learns from how much better
+or worse an outcome was than expected from that state. Here the critic is a linear readout of the
+same 64-neuron concept, 65 parameters, replacing the lagging moving-average baseline the head had
+used until then.
+
+**It works, narrowly at first.** At depth 7 the critic raised success from 0.1471 to **0.2004**
+(+0.0533, 8-4-0, p 0.0498), against a pre-registered bar of +0.05 at alpha 0.05 (EXP-053, Claim 1,
+confirmed). Both margins were thin, and the report at the time said so. Worse, the instrument meant
+to show the mechanism said it was absent: the critic's explained variance in the final stage was
+0.0021, no better than a constant.
+
+**The mechanism is within-episode state-dependence.** EXP-056 kept the critic but flattened its
+output to its own episode mean, so it could still track how well episodes go on average but could
+no longer distinguish one state in an episode from another. That cost **-0.0646** (p 0.0234) and
+put the arm level with the plain moving-average baseline (-0.0112 against it, p 0.6709). The
+flattened critic fitted returns slightly *better* than the full one at every stage while performing
+worse, so explained variance had not merely missed the mechanism; it had pointed the wrong way, and
+it was retired (section 4.6).
+
+**Calibration is not the mechanism.** The alternative reading was that the critic helps because it
+is fitted by least squares and so better calibrated than a lagging average. A single learned
+scalar, fitted the same way but blind to state, was indistinguishable from the moving average
+(+0.0088, p 0.7822; EXP-057). Every arm without state-dependence landed between about 0.14 and
+0.16; only the full critic reached 0.2004.
+
+**It replicates.** Because EXP-056 had cleared its bar with little room, it was repeated on 10
+seeds that had never been used for the question (seeds 14 to 23, with encoders manufactured for
+them). The flattening cost was **-0.0925** (2-8-0, p 0.0156), larger than the original, clearing
+the -0.05 bar and a Bonferroni correction (EXP-060, confirmed). Pooled over 22 seeds it is -0.0773,
+p 0.0005. A level difference between the two seed blocks that this replication showed was later
+traced entirely to the seed effect of section 4.5.
+
+**What kind of win this is.** The critic is standard reinforcement learning. It reads the spiking
+encoder's output, but nothing about it is neuromorphic, and it was the recipe component that made
+depth 7 and beyond work at all (EXP-062's validity gate requires it). The neuromorphic version of
+the same idea, routing the learning signal through the neuromodulatory bus, is section 5.5.
 
 ### 5.4 Episodic memory `STUB`
 - EXP-030 null on a policy that had learned nothing; EXP-059 memory hurts (-0.0954, p 0.0056);
