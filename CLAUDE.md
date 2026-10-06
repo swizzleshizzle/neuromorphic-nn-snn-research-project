@@ -287,7 +287,16 @@ so wrap everything in `powershell -NoProfile -Command`.
   experiment uses **no pretrained encoder**. **Re-evaluating a tracked checkpoint IS portable** -
   every headline metric matches to full float repr, with one derived mean differing by 1 ULP. So
   the reproducibility guarantee is *re-evaluate the checkpoints*, never *retrain from the seed*.
-  See `docs/reproducibility-audit.md`. **EXP-067 then measured what SURVIVES:
+  See `docs/reproducibility-audit.md`. **But "re-evaluation reproduces the PUBLISHED number" is
+  NOT general (measured 2026-10-06, EXP-070 pre-flight).** Evaluation is stochastic: the Poisson
+  spike encoder draws from the eval generator, and a published record evaluated on whatever stream
+  state training left behind, while a re-evaluation seeds a fresh one. For EXP-036 the two agree;
+  for EXP-053 arm B and EXP-062, **27 of 36 re-evaluated cells differ from their published solved
+  counts** (depth 8 seed 3: 22/200 published, 8/200 re-evaluated), while the per-depth pooled
+  means agree within a Wilson 95% interval. So: **re-evaluation reproduces re-evaluation exactly,
+  on any machine; it reproduces a published per-seed number only where that has been checked.**
+  Never use a published per-seed value as the paired baseline for a re-evaluated arm; re-evaluate
+  the baseline too, on the same stream discipline. **EXP-067 then measured what SURVIVES:
   2 of 3 pre-registered verdicts replicated on a second machine and the numeric bar did not, and
   the task layer (shells, held-out splits, scramble streams) is byte-identical on 12 of 12 seeds,
   so every bit of the divergence is in training.** See
