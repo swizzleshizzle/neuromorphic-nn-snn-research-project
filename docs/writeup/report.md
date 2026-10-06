@@ -22,8 +22,9 @@ the regionalized network solves 2x2 cubes from scrambles up to **depth 8** (0.07
 a measured chance floor of exactly 0.0000, EXP-062), far past the 1-move checkpoint the plan set
 and the 3-move stretch goal.
 
-**It mostly did not work for the reasons the architecture was built to test.** Across 68 completed
-numbered experiments, almost every architectural idea lost to a training idea:
+**It mostly did not work for the reasons the architecture was built to test.** Across 69 numbered
+experiments, 53 of them with a committed results file (Appendix A), almost every architectural
+idea lost to a training idea:
 
 | idea | kind | verdict |
 |---|---|---|
