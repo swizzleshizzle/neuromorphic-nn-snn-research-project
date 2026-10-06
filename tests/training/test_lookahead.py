@@ -233,3 +233,97 @@ def test_p_picks_the_first_move_of_the_best_scored_sequence():
     action, fired = la.choose_move("P", s, root, 2, N_ACTIONS, agent=agent, head=head,
                                    imag_generator=torch.Generator().manual_seed(0))
     assert (action, fired) == (4, False)
+
+
+from neuromorphic.training.cube_baseline import evaluate_states
+
+
+def _shell(depth, n):
+    return shell_states(ExactBFSDistance(max_depth=depth), depth)[:n]
+
+
+def test_mode_g_reproduces_evaluate_states_exactly():
+    """THE GATE 0 CODE PATH. Catches any drift between G and the published evaluator: a
+    different generator draw, budget, termination rule or metric formula. Every field must
+    match at full float repr."""
+    agent, head = _agent_and_head()
+    states = _shell(2, 8)
+    ref = evaluate_states(agent, head, states, depth=2,
+                          generator=torch.Generator().manual_seed(4), rng_seed=4)
+    got = la.evaluate_lookahead(agent, head, states, depth=2, mode="G", k=0,
+                                generator=torch.Generator().manual_seed(4), rng_seed=4)
+    for key, value in ref.items():
+        assert got[key] == value, key
+    assert got["solved"] == round(ref["success_rate"] * ref["n"])
+
+
+def test_e_matches_g_move_for_move_until_the_goal_test_first_fires():
+    """Catches E consuming the evaluation stream differently from G: before E's first fired
+    step, the two must play identical moves on every state."""
+    agent, head = _agent_and_head()
+    states = _shell(4, 6)
+    tg, te = [], []
+    la.evaluate_lookahead(agent, head, states, depth=4, mode="G", k=0,
+                          generator=torch.Generator().manual_seed(2), rng_seed=2, trace=tg)
+    la.evaluate_lookahead(agent, head, states, depth=4, mode="E", k=1,
+                          generator=torch.Generator().manual_seed(2), rng_seed=2, trace=te)
+    compared = 0
+    for g_steps, e_steps in zip(tg, te):
+        for (ga, _, _), (ea, fired, _) in zip(g_steps, e_steps):
+            if fired:
+                break
+            assert ga == ea
+            compared += 1
+    assert compared >= 10  # the test must actually compare something
+
+
+def test_p_real_logits_match_g_while_their_moves_agree():
+    """Catches imagined states drawing from the EVALUATION stream inside evaluate_lookahead:
+    while P has played exactly G's moves, its real-state logits must be bit-identical to G's.
+    Any imagined draw on the real stream shifts every later real encoding."""
+    agent, head = _agent_and_head()
+    with torch.no_grad():
+        head.bias.zero_()
+        head.bias[3] = 20.0  # P and G then agree on every move; logits still read the concept
+    states = _shell(5, 8)
+    tg, tp = [], []
+    la.evaluate_lookahead(agent, head, states, depth=5, mode="G", k=0,
+                          generator=torch.Generator().manual_seed(6), rng_seed=6, trace=tg)
+    la.evaluate_lookahead(agent, head, states, depth=5, mode="P", k=2,
+                          generator=torch.Generator().manual_seed(6), rng_seed=6, trace=tp)
+    compared_after_first = 0
+    for g_steps, p_steps in zip(tg, tp):
+        for t, ((ga, _, gl), (pa, _, pl)) in enumerate(zip(g_steps, p_steps)):
+            assert gl == pl, f"real logits diverged at step {t} while moves agreed"
+            if t > 0:
+                compared_after_first += 1
+            if ga != pa:
+                break
+    assert compared_after_first >= 20  # the test must reach well past the first move
+
+
+def test_the_bfs_provider_is_never_consulted_during_a_rollout(monkeypatch):
+    """Catches an oracle leak at run time: if any code path in a P rollout reads distance,
+    this raises."""
+    agent, head = _agent_and_head()
+    states = _shell(3, 2)  # built BEFORE the provider is poisoned
+
+    def boom(*_a, **_k):
+        raise AssertionError("BFS distance read inside the procedure")
+
+    monkeypatch.setattr(ExactBFSDistance, "distance", boom)
+    monkeypatch.setattr(ExactBFSDistance, "__init__", boom)
+    out = la.evaluate_lookahead(agent, head, states, depth=3, mode="P", k=2,
+                                generator=torch.Generator().manual_seed(0), rng_seed=0)
+    assert out["n"] == 2
+
+
+def test_rollouts_are_deterministic():
+    """Gate 0(a). Catches any unseeded randomness in the procedure (e.g. torch's global RNG)."""
+    agent, head = _agent_and_head()
+    states = _shell(3, 4)
+    runs = [la.evaluate_lookahead(agent, head, states, depth=3, mode="R", k=2,
+                                  generator=torch.Generator().manual_seed(1), rng_seed=1,
+                                  imag_seed=1)
+            for _ in range(2)]
+    assert runs[0] == runs[1]

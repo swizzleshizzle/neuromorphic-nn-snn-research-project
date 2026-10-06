@@ -57,6 +57,10 @@ def sequence_scores(level_logp, k, n_actions):
 
 import numpy as np
 
+from neuromorphic.envs.cube import CubeEnv
+from neuromorphic.training.cube_baseline import max_steps_for, modal_action_fraction
+from neuromorphic.training.reinforce import action_distribution
+
 MODES = ("G", "E", "P", "R")
 
 
@@ -102,3 +106,65 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
         scores = sequence_scores(level_logp, k, n_actions)
     best = int(scores.argmax())  # first maximum, so ties go to the lowest product index
     return best // n_actions ** (k - 1), False
+
+
+def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_seed=0,
+                       imag_seed=0, trace=None):
+    """`evaluate_states` with a look-ahead move rule. At mode G, k 0 it IS `evaluate_states`.
+
+    Every mode draws the real state's logits from `generator` exactly once per real move, the
+    same call `greedy_action` makes. That is what keeps G's stream, and therefore Gate 0, intact,
+    and what makes E and P see bit-identical real encodings while they play the same moves.
+    """
+    if mode == "G" and k != 0:
+        raise ValueError("mode G is the published evaluator and takes k=0")
+    limit = max_steps_for(depth)
+    env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
+    n_actions = env.action_space.n
+    solved = 0
+    steps_solved: list[int] = []
+    eval_revisits = 0
+    eval_steps = 0
+    fired_moves = 0
+    modal_fracs: list[float] = []
+    for i, state in enumerate(states):
+        obs, _ = env.reset(options={"state": state})
+        visited = [env._state]
+        actions: list[int] = []
+        state_trace: list[tuple[int, bool, list[float]]] = []
+        for t in range(1, limit + 1):
+            with torch.no_grad():
+                _, logits = action_distribution(agent, head, obs, generator=generator)
+            imag = torch.Generator().manual_seed(imag_seed_for(imag_seed, i, t))
+            action, fired = choose_move(mode, env._state, logits, k, n_actions,
+                                        agent=agent, head=head, imag_generator=imag)
+            fired_moves += int(fired)
+            actions.append(int(action))
+            state_trace.append((int(action), bool(fired), logits.reshape(-1).tolist()))
+            obs, _, terminated, truncated, _ = env.step(action)
+            visited.append(env._state)
+            eval_steps += 1
+            if terminated:
+                solved += 1
+                steps_solved.append(t)
+                break
+            if truncated:
+                break
+        eval_revisits += len(visited) - len(set(visited))
+        modal_fracs.append(modal_action_fraction(actions))
+        if trace is not None:
+            trace.append(state_trace)
+    n = len(states)
+    total_steps = sum(steps_solved)
+    return {
+        "success_rate": solved / n if n else 0.0,
+        "mean_steps": total_steps / len(steps_solved) if steps_solved else 0.0,
+        "optimality": (depth * len(steps_solved) / total_steps) if total_steps else 0.0,
+        "n": n,
+        "eval_revisit_rate": (eval_revisits / eval_steps) if eval_steps else 0.0,
+        "greedy_modal_action_frac": (sum(modal_fracs) / len(modal_fracs)) if modal_fracs else 0.0,
+        "solved": solved,
+        "goal_fired_frac": (fired_moves / eval_steps) if eval_steps else 0.0,
+        "mode": mode,
+        "k": k,
+    }
