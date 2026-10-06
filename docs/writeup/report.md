@@ -2,7 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1 to 4 are written. Every other section is a **stub**: its
+> **Status of this draft.** Sections 1 to 6 are written. Every other section is a **stub**: its
 > heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
 > are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
 > stub is new; every number is quoted from a committed `RESULTS.md`.
@@ -336,7 +336,7 @@ section 5.
 
 ---
 
-## 5. Results `STUB`
+## 5. Results
 
 Each line of inquiry is reported as a claim, its verdict, and its mechanism where one was found,
 in roughly the order the project learned them. Unless stated otherwise, a success rate is the mean
@@ -701,10 +701,71 @@ this effect cancels exactly, and never across two different seed sets, where it 
 of noise to effects of 0.05 to 0.09. EXP-068's aggregator printed CONFIRMED for a result inside the
 band its spec had declared unresolvable; the report follows the spec (section 4.1).
 
-## 6. Graded against the plan `STUB`
-- Phase 3 checkpoint: 3 of 4 criteria met or exceeded, 1 partial (criterion 2, and why it stays
-  partial). The self-set roadmap: Stages 1 to 3 closed, Stage 4 priced out at about 33 days per
-  seed. **Sources:** `docs/phase3-honest-assessment.md` sections 1 and 2.
+## 6. Graded against the plan
+
+This section grades the project against the targets quoted in section 2, in their own words. The
+Phase 2 and Phase 3 grades are the ones recorded at those checkpoints
+(`docs/phase2-honest-assessment.md`, `docs/phase3-honest-assessment.md`); they are restated here,
+not re-awarded.
+
+### 6.1 The phase checkpoints
+
+**Phase 0** was a checkpoint of understanding (explain a LIF neuron, backpropagation, an RL agent;
+narrate PyTorch). It produced no artifact that can be graded after the fact, and none is claimed.
+
+**Phase 1: met, late in one item.** Spiking MNIST classifiers reached 95.08% to 98.05% across three
+variants (EXP-009, recorded in `docs/2026-05-25-phase-1-audit.md` because that experiment predates
+the results-file rule). A recurrent spiking network on row-at-a-time MNIST reached 79.12% against a
+feed-forward control's 41.84% (EXP-011). The STDP demonstration was missing at the Phase 1 audit and
+was built the same day: three of four outputs became cleanly selective for one pattern each
+(EXP-012). The "what I learned" document is the week-8 wrap-up note in the project vault.
+
+**Phase 2: one met, three partial**, as graded at the time:
+
+| criterion | grade | note |
+|---|---|---|
+| (1) architecture spec | partial | regions and wiring accurate; the training strategy lived only in an ADR |
+| (2) multi-region SNN on grid navigation | partial | it navigates held-out goals, but 1 of 5 regions is on the policy path and the brain itself did not learn |
+| (3) monitoring dashboard | met | renders real multi-region traces; a replay tool, not a live monitor |
+| (4) regional specialisation | partial, then strong | the trained sensory concept decodes task structure (R2 0.86 to 0.90) and beats every other region on 12 of 12 seeds (EXP-027); "through learning" leans on another experiment's contrast |
+| (5) honest assessment | the assessment itself | |
+
+**Phase 3: three of four met or exceeded, one partial.**
+
+| criterion | grade | note |
+|---|---|---|
+| (1) solves from 1-move scrambles, 3-move stretch | **exceeded** | depth 1 at 87.5% in the v1 baseline (EXP-029); the depth-3 stretch reached 50.0% (EXP-035); the series runs to depth 8 at 0.0783 against a floor of exactly 0.0000 (EXP-062) |
+| (2) comparison against a monolithic network | **partial** | it exists and is committed (EXP-029), but it measured width rather than topology, and the path-matched version is vacuous (section 5.6) |
+| (3) interpretability analysis | **met, then substantially retracted** | extensive (EXP-027, EXP-033, EXP-056/057, EXP-061, EXP-063), but five instruments were retired and many original conclusions were withdrawn (section 4.6) |
+| (4) clear documentation | **met** | all 35 Phase 3 experiments carry a committed results file with provenance and a regeneration command; 28 have a pre-registered spec |
+
+Criterion 2 stays partial deliberately. Re-running the old comparison on the working recipe would
+reproduce the same width confound at a higher success rate, and the only design that could close
+it needs an architecture in which a region other than the sensory one influences the action
+(section 5.6). Closing a checkbox with a comparison whose flaw is understood is what the grading
+exists to prevent.
+
+### 6.2 The plan's three levels of success
+
+| level | grade | why |
+|---|---|---|
+| minimum viable: regions specialise and cooperate on grid navigation | **partial** | the sensory region demonstrably specialises (EXP-027); the regions do not demonstrably cooperate, because only one of them reaches the action |
+| target: solve a 2x2 *"from any scramble"* through reinforcement | **not met** | the learning is genuinely by reinforcement, but the frontier is depth 8 (EXP-062) and a uniformly random 2x2 is most often 11 moves from solved; weighted over the whole state space the current solver handles a random cube well under 1% of the time (roadmap spec section 1) |
+| stretch: continual learning without forgetting | **not attempted** | no experiment trained a second task |
+
+### 6.3 The roadmap the project set itself
+
+| stage | goal | status |
+|---|---|---|
+| 1 | prove generalisation, find the break point | **done** (EXP-036), and the break point later turned out to be a budget, not a wall (section 5.1) |
+| 2 | train the encoder | **delivered** (EXP-040/047/048), though its stated success metric, the probe ceiling, was retired along the way; the gain does not compound (EXP-049) |
+| 3 | a dense signal through the neuromodulatory bus | **closed on both threads**: the critic works and replicates (EXP-053/056/057/060); the bus was made load-bearing and bought nothing (EXP-053) |
+| 4 | depth-11 random scrambles, *"the actual deliverable"* | **priced out**: about 33 days of compute per seed with the current reactive policy (EXP-062) |
+
+The roadmap had judged Stage 4 *"genuinely achievable... nothing about it requires new science."*
+That was written before the budget law existed. It was right about the science and wrong about
+the arithmetic: with the policy as built, it is the exchange rate between compute and depth that
+stops it. Section 9 takes up what would change that exchange rate.
 
 ## 7. Reproducing the results `STUB`
 - **The guarantee: re-evaluate the checkpoints, never retrain from the seed.** Re-evaluation matches
