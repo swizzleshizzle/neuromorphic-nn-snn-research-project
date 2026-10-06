@@ -568,9 +568,41 @@ this task. This is a statement about a reactive policy that chooses one move per
 memory of visited states earns a place in a policy that searches is a different question, and it
 has not been asked.
 
-### 5.5 The neuromodulatory bus `STUB`
-- Made load-bearing and bought nothing (EXP-053 arm G). The neuromorphic claim for credit
-  assignment is refuted.
+### 5.5 The neuromodulatory bus
+
+The design's neuromorphic answer to credit assignment was a neuromodulatory bus: a global dopamine
+signal that, as in three-factor learning rules, decides *when* plasticity happens. Until EXP-053 the
+bus existed in code but nothing read it; `Brain.learn()` wrote the reward to it and no synapse ever
+changed as a result.
+
+**EXP-053 made it load-bearing.** In arm G, the encoder's fine-tuning updates (section 5.2) were
+applied only on steps where a signed dopamine signal, the reward against a moving average, cleared
+a running-median threshold. The gate behaved exactly as designed, opening on 0.4987 of updates
+against an intended half, with no tuned constant. Two comparisons were pre-registered at depth 6:
+
+| claim | arm G | control | delta | W-L-T | exact p | bar | verdict |
+|---|---|---|---|---|---|---|---|
+| 2: gating against ungated fine-tuning | 0.3004 | 0.2700 | +0.0304 | 9-3-0 | 0.1323 | +0.05 | **not confirmed** |
+| 3: dopamine gate against a random gate at the same rate | 0.3004 | 0.2654 | +0.0350 | 7-5-0 | 0.1167 | +0.03 | **not confirmed** |
+
+The direction is positive in both, and in Claim 3 the delta clears its bar while the significance
+does not. But the spec had fixed the reading of exactly this outcome before any number existed:
+with neither claim confirmed, *"the neuromorphic claim is REFUTED, not deferred. 'We need a better
+gate' is NOT an available conclusion from this experiment"* (EXP-053). That verdict stands.
+
+**One mechanism number moved, and it is a lead, not a rescue.** Against the random gate at the
+same rate, the dopamine-gated arm revisited states less often (revisit rate -0.0262, p 0.0083).
+That comparison isolates the gate's signal from its rate, and it moved in the predicted direction.
+It was one of six descriptive tests with no bar, so its p sits exactly at the Bonferroni threshold
+and no lower, and the random control matches rate but not the timing structure of the dopamine
+gate. The honest statement is that the dopamine signal changes trajectories relative to random
+gating, and that change did not convert into a significant difference in success.
+
+**Verdict: the bus was wired in and bought nothing measurable.** The neuromorphic claim for
+Stage 3's credit assignment is refuted. The ordinary RL answer to the same problem, the critic of
+section 5.3, was confirmed in the same experiment. Across the whole project, the only point at
+which a neuromorphic component took part in learning is when the spiking encoder began to train
+(section 5.2); this experiment is not a second one.
 
 ### 5.6 Topology, and why it cannot be measured here `STUB`
 - The monolithic control had 2.66x the on-path capacity and still lost narrowly at depths 2 and 3.
