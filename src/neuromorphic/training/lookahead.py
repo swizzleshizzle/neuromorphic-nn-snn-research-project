@@ -53,3 +53,52 @@ def sequence_scores(level_logp, k, n_actions):
         move = (j // n_actions ** (k - l - 1)) % n_actions
         scores = scores + level_logp[l][parent, move]
     return scores
+
+
+import numpy as np
+
+MODES = ("G", "E", "P", "R")
+
+
+def imag_seed_for(base: int, state_index: int, step: int) -> int:
+    """A distinct, deterministic seed per (cell, held-out state, real step)."""
+    return (base * 1_000_003 + state_index) * 1_009 + step
+
+
+def imagined_logp(agent, head, states, *, generator):
+    """Log-probabilities over moves for many states, in ONE batched brain call.
+
+    Must read exactly what `action_distribution` reads for a single state: the sensory concept's
+    mean rate over the window, with recall off. A test pins this against the evaluation path.
+    """
+    with torch.no_grad():
+        out = agent.step(np.array(states), recall=False, generator=generator)
+        features = out["concept"].mean(dim=0)  # [B, content]
+        return torch.log_softmax(head(features), dim=-1)
+
+
+def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None,
+                imag_generator=None):
+    """One real move. Returns (action, goal_fired). Never sees the evaluation generator."""
+    if mode not in MODES:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
+    greedy = int(root_logits.argmax())
+    if mode == "G":
+        return greedy, False
+    if k < 1:
+        raise ValueError(f"mode {mode} needs k >= 1, got {k}")
+    prefix = solving_prefix(state, k, n_actions)
+    if prefix is not None:
+        return prefix[0], True
+    if mode == "E":
+        return greedy, False
+    if mode == "R":
+        scores = torch.rand(n_actions ** k, generator=imag_generator)
+    else:  # "P"
+        levels = tree_levels(state, k, n_actions)
+        level_logp = [torch.log_softmax(root_logits.reshape(1, -1), dim=-1)]
+        for l in range(1, k):
+            level_logp.append(imagined_logp(agent, head, levels[l], generator=imag_generator))
+        scores = sequence_scores(level_logp, k, n_actions)
+    best = int(scores.argmax())  # first maximum, so ties go to the lowest product index
+    return best // n_actions ** (k - 1), False
