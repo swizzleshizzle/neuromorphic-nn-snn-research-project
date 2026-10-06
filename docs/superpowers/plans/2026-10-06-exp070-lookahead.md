@@ -22,6 +22,18 @@
 - Never write an assertion that cannot fail. Each test in this plan names the bug it catches; keep that in its docstring.
 - Arms are exactly: `G0, E1, E2, E3, P2, P3, R1, R2, R3`. Depths `7, 8, 9`. Seeds `0..11`. P1 does not exist (spec amendment 2026-10-06).
 
+## Step 0 (controller, before Task 1)
+
+Work on a branch in a worktree, never on `main`: a parallel report session also commits.
+
+```bash
+git worktree add /root/projects/.wt/exp-070 -b exp-070-lookahead
+cd /root/projects/.wt/exp-070
+ln -s /root/projects/neuromorphic-nn-snn-research-project/.venv .venv
+```
+
+Every command in this plan runs from the worktree root. The untracked published records Task 4 reads live in the MAIN checkout; `extract_published.py` and the record-matching test take their path from `cells.REPO`, so in the worktree pass the main checkout explicitly: run Task 4 Step 4 as `NN_PUBLISHED_ROOT=/root/projects/neuromorphic-nn-snn-research-project .venv/bin/python experiments/070_lookahead_existing/extract_published.py` (see `published_record_path` below).
+
 ---
 
 ## File Structure
@@ -257,8 +269,8 @@ def _agent_and_head(seed=0):
 
 
 def _far_state():
-    """A depth-6 state: no solve within k <= 3, so the goal test never fires."""
-    return _state_from([0, 2, 4, 1, 3, 5])
+    """A state at exact depth 6, proven by BFS (tests may use it): no solve within k <= 3."""
+    return shell_states(ExactBFSDistance(max_depth=6), 6)[0]
 
 
 def test_imagined_logp_for_one_state_matches_the_evaluation_path():
@@ -285,20 +297,6 @@ def test_sensory_batch_rows_are_independent():
         batched = agent.sensory(spikes)
         alone = agent.sensory(spikes[:, 1:2, :])
     assert torch.equal(batched[:, 1:2, :], alone)
-
-
-def test_p_with_k2_does_not_advance_the_evaluation_generator():
-    """Catches imagined states drawing from the real stream, which would shift every later
-    real encoding and confound P against E."""
-    agent, head = _agent_and_head()
-    eval_gen = torch.Generator().manual_seed(11)
-    s = _far_state()
-    with torch.no_grad():
-        _, root = action_distribution(agent, head, np.array(s), generator=eval_gen)
-    before = eval_gen.get_state().clone()
-    la.choose_move("P", s, root, 2, N_ACTIONS, agent=agent, head=head,
-                   imag_generator=torch.Generator().manual_seed(99))
-    assert torch.equal(eval_gen.get_state(), before)
 
 
 def test_r_scores_do_not_depend_on_the_head():
@@ -535,6 +533,9 @@ def test_p_real_logits_match_g_while_their_moves_agree():
     while P has played exactly G's moves, its real-state logits must be bit-identical to G's.
     Any imagined draw on the real stream shifts every later real encoding."""
     agent, head = _agent_and_head()
+    with torch.no_grad():
+        head.bias.zero_()
+        head.bias[3] = 20.0  # P and G then agree on every move; logits still read the concept
     states = _shell(5, 8)
     tg, tp = [], []
     la.evaluate_lookahead(agent, head, states, depth=5, mode="G", k=0,
@@ -549,7 +550,7 @@ def test_p_real_logits_match_g_while_their_moves_agree():
                 compared_after_first += 1
             if ga != pa:
                 break
-    assert compared_after_first >= 3  # the test must reach past the first move somewhere
+    assert compared_after_first >= 20  # the test must reach well past the first move
 
 
 def test_the_bfs_provider_is_never_consulted_during_a_rollout(monkeypatch):
@@ -670,7 +671,7 @@ Expected: PASS, all tests in the file.
 | `imag = torch.Generator().manual_seed(...)` becomes `imag = generator` | `test_p_real_logits_match_g_while_their_moves_agree` |
 | `imag_seed_for` returns `torch.seed()` | `test_rollouts_are_deterministic` |
 
-Revert after each with `git checkout -- src/neuromorphic/training/lookahead.py` and confirm `git diff --stat` is clean. Record outcomes in the commit body.
+Revert after each with `git checkout -- src/neuromorphic/training/lookahead.py` and confirm `git diff --stat` is clean. If any mutation survives, strengthen that test until it fails, then re-run the table. Record outcomes in the commit body.
 
 - [ ] **Step 6: Commit**
 
@@ -788,6 +789,7 @@ Spec: docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md, section 2.2
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import torch
@@ -832,7 +834,10 @@ def published_config(depth: int, seed: int) -> CubeConfig:
 
 
 def published_record_path(depth: int, seed: int) -> Path:
-    return REPO / PUBLISHED_DIR[depth] / record_filename(published_config(depth, seed))
+    """The UNTRACKED published record. `NN_PUBLISHED_ROOT` points at a checkout that holds
+    them (the main checkout, when working in a worktree); defaults to this repo."""
+    root = Path(os.environ.get("NN_PUBLISHED_ROOT", REPO))
+    return root / PUBLISHED_DIR[depth] / record_filename(published_config(depth, seed))
 
 
 def head_path(depth: int, seed: int) -> Path:
@@ -905,8 +910,8 @@ Expected: `wrote 36 cells`. Then `mkdir -p experiments/070_lookahead_existing/ou
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `.venv/bin/python -m pytest tests/experiments/test_exp070_cells.py -q` (Bash timeout 300000)
-Expected: PASS (no skips on this VPS, where the records exist).
+Run: `NN_PUBLISHED_ROOT=/root/projects/neuromorphic-nn-snn-research-project .venv/bin/python -m pytest tests/experiments/test_exp070_cells.py -q` (Bash timeout 300000)
+Expected: PASS with no skips (the main checkout holds the records).
 
 - [ ] **Step 6: Smoke one real cell (read the real output, do not trust green tests)**
 
@@ -1196,13 +1201,17 @@ def test_gate0_fails_without_determinism_in_either_form():
 
 
 def test_gate0_wilson_is_per_depth_on_pooled_counts():
-    """Catches the Wilson form being applied per seed (too strict) or across depths (too loose).
-    Published pooled 120/2400 at depth 8; G pooled 118/2400 passes, 60/2400 fails."""
+    """Catches the Wilson form being applied per cell. A per-cell interval at n=200 is WIDER
+    than the pooled one at n=2400, so per-cell is the LOOSER rule: every cell at 8/200 against a
+    published 10/200 sits inside its own interval (about [0.027, 0.090]) but pooled 96/2400 =
+    0.040 is below the pooled lower bound (about 0.042) and must FAIL."""
     pub = {f"d8_s{s}": {"solved": 10, "n": 200} for s in range(12)}
     near = {f"d8_s{s}": (10 if s else 8) for s in range(12)}
     far = {f"d8_s{s}": 5 for s in range(12)}
+    shifted = {f"d8_s{s}": 8 for s in range(12)}
     assert agg.gate0_verdict("wilson", near, pub, True) == "PASS"
     assert agg.gate0_verdict("wilson", far, pub, True) == "FAIL"
+    assert agg.gate0_verdict("wilson", shifted, pub, True) == "FAIL"
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1375,7 +1384,7 @@ Expected: PASS.
 | Wilson form compares per cell instead of pooled per depth | `test_gate0_wilson_is_per_depth_on_pooled_counts` |
 | `if form is None: raise` deleted | `test_gate0_refuses_to_run_before_the_preflight_fixes_its_form` |
 
-Revert after each (`git checkout -- experiments/070_lookahead_existing/aggregate.py`), confirm `git diff --stat` is clean, and record outcomes in the commit body.
+Revert after each (`git checkout -- experiments/070_lookahead_existing/aggregate.py`), confirm `git diff --stat` is clean. If any mutation survives, strengthen that test until it fails, then re-run the table. Record outcomes in the commit body.
 
 - [ ] **Step 6: Commit**
 
@@ -1390,7 +1399,7 @@ git commit -m "EXP-070: aggregator, gates and the unresolved band as verdicts"
 
 Follow `docs/playbooks/remote-experiment-runs.md` for every laptop step (ssh via the `ssh laptop` alias only; drive PowerShell from a `.ps1` file; `python -u`; `Tee-Object` to a log; progress from the record count, not the log). Use `experiments/062_depth_frontier/launch062_wt.ps1` as the launcher template.
 
-- [ ] **7.1** Merge the implementation branch, push, and update the laptop worktree with `scripts/wt-switch-branch.ps1` (never `git checkout -f`).
+- [ ] **7.1** Run the controller's chunked suite per CLAUDE.md (the `--ignore=tests/training` chunk, the `test_cube_baseline.py` chunk, and the `tests/training` remainder in the BACKGROUND), confirm the new count with `--collect-only`, update the count line in CLAUDE.md, then merge `exp-070-lookahead` with `--no-ff` (`Merge exp-070-lookahead: <summary>`), push, and update the laptop worktree with `scripts/wt-switch-branch.ps1` (never `git checkout -f`).
 - [ ] **7.2** Confirm the laptop's tracked heads and E1 encoders match this VPS: `git ls-files -s` hashes for the 36 heads and 12 E1 encoders.
 - [ ] **7.3 Pre-flight step 1 (Gate 0 form):** `run.py --arms G0 --workers 20`. Compare each cell's `solved` to `published_counts.json`. Re-run 3 cells into a second directory and diff the records byte for byte (Gate 0(a)).
 - [ ] **7.4 Pre-flight step 2 (Gate 1 calibration):** `run.py --arms E1 E2 E3 R1 R2 R3 --workers 20`. Print E and R means per (depth, k).
