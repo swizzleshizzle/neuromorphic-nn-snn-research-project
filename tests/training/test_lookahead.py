@@ -131,8 +131,8 @@ def test_imagined_logp_for_one_state_matches_the_evaluation_path():
     with torch.no_grad():
         _, logits = action_distribution(agent, head, np.array(s),
                                         generator=torch.Generator().manual_seed(7))
-    # 1e-6, not 0: a [1, 64] matmul and a [64] matvec may differ in the last bit. recall=True
-    # or a different reduction moves these by orders of magnitude more.
+    # 1e-6, not 0: a [1, 64] matmul and a [64] matvec may differ in the last bit. A different
+    # reduction moves these by orders of magnitude more; recall is caught by the spy above.
     assert torch.allclose(got[0], torch.log_softmax(logits, dim=-1), atol=1e-6, rtol=0)
 
 
@@ -200,6 +200,17 @@ def test_g_ignores_the_goal_test():
     root = torch.zeros(N_ACTIONS)
     root[0] = 1.0
     assert la.choose_move("G", s, root, 0, N_ACTIONS) == (0, False)
+
+
+def test_g_ignores_a_solve_in_reach_even_when_given_a_lookahead_depth():
+    """Catches G consulting the goal test. At k=0 the goal test is structurally empty, so the
+    test above only catches this via the k<1 guard; here k=2 and a 1-move solve IS in reach,
+    and G must still play the greedy move."""
+    s = _state_from([2])
+    root = torch.zeros(N_ACTIONS)
+    root[0] = 1.0
+    assert inverse_action(2) != 0
+    assert la.choose_move("G", s, root, 2, N_ACTIONS) == (0, False)
 
 
 class _StubAgent:
