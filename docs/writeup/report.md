@@ -338,18 +338,79 @@ section 5.
 
 ## 5. Results `STUB`
 
-**Must carry:** each line of inquiry as a claim, its verdict, and its mechanism where one was
-found. In the order the project learned them, following `docs/phase3-honest-assessment.md` section
-5, extended through week 25.
+Each line of inquiry is reported as a claim, its verdict, and its mechanism where one was found,
+in roughly the order the project learned them. Unless stated otherwise, a success rate is the mean
+held-out success over 12 seeds, and a p-value is an exact paired permutation test over all 4,096
+sign flips of the per-seed differences.
 
-### 5.1 Depth, and the budget law `STUB`
-- v1 baseline 2.2% at depth 3 against a 1.4% floor (EXP-029); collapse diagnosed, not incapacity
-  (EXP-031/032). Curriculum: 2.2% to 50.0% (EXP-034/035).
-- Break point at depth 5 (EXP-036), later **reframed as a budget, not a wall** (EXP-044/045/046):
-  about 0.22 success per log10 of spend, no knee. Held out of sample at depth 8: predicted 0.0588,
-  measured 0.0783, 95% interval [0.0523, 0.1044] (EXP-062).
-- Frontier: depth 8 at 0.0783; depth 9 at 0.0163, at the floor. **The censoring trap**: steps near
-  a bounded floor look cheaper than they are; use only steps clear of it.
+### 5.1 Depth, and the budget law
+
+**The first cube result was a failure, as the pre-registration expected.** The v1 recipe (a frozen,
+randomly initialised encoder and a linear REINFORCE head) solved 87.5% at depth 1 and 38.0% at
+depth 2, then **2.2% at depth 3 against a measured floor of 1.4%** (EXP-029). The predicted shape,
+solid at depth 1, degrading at 2, near chance by 3, was confirmed.
+
+**The policy had collapsed, not run out of capacity.** At depth 3 the trained policy spent 0.932 of
+each episode on its single most common move, against 0.354 for a uniform policy, and 9 of 12 seeds
+were at or above 0.95 (EXP-031). The stabilisers that had fixed collapse on the grid did not
+transfer: across a sweep of entropy bonus and advantage normalisation, no cell passed the
+pre-registered gate, normalisation alone made collapse worse, and the best cell still had 3 of 12
+seeds collapsed with success at 0.006 (EXP-032). An oracle-supervised fit of the same 390 weights on
+the same frozen features, with labels taken from the distance table, solved 0.481 of depth-3
+states against REINFORCE's 0.022 (EXP-033). That is a reference rather than an agent, but it
+showed the signal was in the representation and the learner was not finding it.
+
+**The curriculum was the lever.** Splitting the same episode budget across depths 1, 2 and 3
+instead of spending it all at depth 3 raised depth-3 success from 0.0222 to 0.2556 at 3,000
+episodes (+0.2361, 11-0-1, p 0.0010), while five times the episodes without a curriculum moved it
+by -0.0028 (p 1.0000): with no reward to learn from, more training only drove the policy further
+into a constant action (EXP-034). Given more budget the curve kept climbing, to **0.5000 at 30,000
+episodes**, 22.7 times the v1 baseline, and it had not saturated (+0.1028 from 10,000 to 30,000
+against a pre-registered 0.02 bar; EXP-035). This is the largest single improvement in the
+project, and it changed nothing in the architecture.
+
+**A break point at depth 5, which turned out to be a budget.** At a fixed 10,000 episodes the
+curriculum worked at depth 4 (0.1591) and broke at depth 5 (0.0396, under the 0.10 bar) and depth
+6 (0.0000 on all 12 seeds), exactly where the pre-registration had predicted (EXP-036). The
+train-to-held-out gap was real (+0.1093, p 0.0059) but below the 0.15 magnitude bar, so that
+question was reported as inconclusive by its own rule. Two later changes moved the break point:
+the pretrained encoder of section 5.2, and a fix for a trap at depth 1. A face move has order 4, so a
+policy that plays one move over and over still solves exactly a third of depth-1 episodes within
+their 5-move budget; the first curriculum stage therefore rewards collapse, and the two seeds that
+fell into it never recovered (EXP-041). Capping the depth-1 training budget at 2 moves raised depth 4 from 0.3471 to
+0.5351 and helped every seed (EXP-042), and depth 6 then worked at 0.1800 (EXP-043).
+
+The decisive step was depth 7. At 10,000 episodes it missed the bar (0.0621, refuted); at 44,000 it
+cleared it on all 12 seeds (0.1971, confirmed; EXP-044). The obvious explanation, that the bigger
+budget simply gave the deepest stage more episodes, was tested directly and **refuted with the
+wrong sign**: giving depth 7 the same deepest-stage episodes inside the 10,000 budget dropped
+success to 0.0142 (-0.0479, 0-11-1, p 0.0010), with the policy collapsing onto one move (EXP-045).
+The operative variable is total budget. Depth 6 then responded to the same 4.4x multiplier by
++0.1425 (12-0-0, p 0.0005), and a midpoint at 25,000 episodes landed on the straight line through
+the endpoints in log spend (EXP-046).
+
+**The budget law.** Success at a given depth rises by about **0.22 per tenfold increase in
+training episodes** (0.2215 measured at depth 6), with **no knee**: the midpoint deviated from the
+log-linear prediction by +0.0048 against a standard error of 0.0242 (EXP-046). A depth at 4.4 times
+the budget scores like the depth above it at the original budget. **Every "depth N stopped working"
+in this project had meant "depth N stopped working at 10,000 episodes."**
+
+**The law held out of sample.** Fitted at depths 3 to 7, it predicted **0.0588** at depth 8. The
+measurement was **0.0783**, 95% interval **[0.0523, 0.1044]**, which contains the prediction; every
+one of the 12 seeds solved something, against a chance floor of exactly 0.0000 (EXP-062, confirmed).
+Depth 9 measured **0.0163**, below the pre-registered 0.02 bar, so it is reported as at the floor,
+although 7 of its 12 seeds score above zero. **The frontier is depth 8.**
+
+**The censoring trap.** EXP-062 also priced the plan's target. The two measured steps are unequal:
+depth 7 to 8 costs 0.1221 and depth 8 to 9 costs 0.0620. Averaging them would make depth 11 look
+far cheaper, but the second step is compressed because success cannot fall below zero, so an arm
+near the floor must show a smaller decline. Using only the step with both endpoints clear of the
+floor, **depth 11 at depth-7 parity costs about 33 days of compute per seed**, about 18 days of
+wall clock for a 12-seed arm (EXP-062). The censored average would have said 9.4 days. The general
+rule is to extrapolate a bounded metric only from steps that are well clear of its bound.
+
+What the budget law does and does not say matters for section 9. It describes the reactive policy
+measured here, which makes one forward pass and one move per step and never looks ahead.
 
 ### 5.2 The spiking encoder, the one neuromorphic win `STUB`
 - Pretraining by inverse dynamics: +0.1880 at depth 4, +0.1908 at depth 5, depth 6 off the floor
