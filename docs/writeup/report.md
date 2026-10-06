@@ -2,7 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1 to 7 are written. Every other section is a **stub**: its
+> **Status of this draft.** Sections 1 to 8 are written. Every other section is a **stub**: its
 > heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
 > are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
 > stub is new; every number is quoted from a committed `RESULTS.md`.
@@ -844,11 +844,91 @@ themselves are plain Python and most take `--workers`.
 - **The `dashboard/` JavaScript app** has its own toolchain and lockfile and was not part of the
   audit.
 
-## 8. Limitations and what would come next `STUB`
-- 2x2 only; the 6-move set does not transfer to a 3x3. Depth 11 not attempted. Topology untested
-  for the reason in 5.6. Surrogate gradients throughout.
-- Extensions from the plan (local learning rules, neuromorphic hardware, scaling), each stated
-  against what this project actually showed rather than as a promise.
+## 8. Limitations and what would come next
+
+### 8.1 Limitations
+
+**What was solved.** A 2x2 cube, from held-out states up to 8 moves from solved, at 0.0783 at
+depth 8 (EXP-062). Depth 9 is at the floor and depth 11, the modal distance of a random cube, was
+priced out rather than attempted. The plan's target, a cube solved *"from any scramble"*, is not
+met (section 6.2).
+
+**What the solver is.** With `recall=False`, the policy is the 192-neuron sensory region and a
+390-parameter linear head, plus a 65-parameter critic; 318 of the 510 neurons do not reach the
+action (section 3.2). The results in section 5 that are positive are results about that path. They
+are not evidence about the five-region brain as a whole, and the report does not present them as
+such.
+
+**The topology was never tested.** No arm-versus-arm contrast in this configuration can measure it,
+and the attempt to put the brain's own pathway on the policy path collapsed at every learning rate
+tried (section 5.6). Whether regionalisation helps is an open question, not a negative answer.
+
+**Nothing learns by a local rule.** All training backpropagates surrogate gradients. A three-factor
+eligibility trace was built as a demonstration in Phase 2 (EXP-021) and never trained anything; the
+one attempt to let a neuromodulatory signal govern plasticity was refuted (EXP-053). The project's
+neuromorphic content is the spiking substrate, not the learning.
+
+**The policy is reactive.** It makes one forward pass and one move per step, with no look-ahead.
+Every depth result, and the budget law that prices them, describes that kind of policy (section
+5.1). The memory result is also about a reactive policy (section 5.4).
+
+**2x2 only.** The 6-move action set is a 2x2 simplification that does not carry to a 3x3, which has
+fixed centres and needs 12 or 18 moves (section 3.3). The exact distance-to-solved table that every
+depth result is built on exists because the 2x2 state space is small enough to enumerate. A 3x3
+has no such table, so the project's main instrument would have to be replaced, not just scaled.
+
+**Scale.** 510 neurons, against the plan's *"thousands to tens of thousands"*. Nothing here says
+how any result changes with size.
+
+**Effect sizes are close to the noise.** Most published effects are 0.05 to 0.09 in success rate,
+at n = 12 seeds. Seed quality alone moves success with an sd of about 0.09 and puts about 0.039 of
+noise on any comparison between two different seed sets (section 4.5). Every comparison in this
+report is paired on seeds, which removes that noise, but a reader comparing numbers from two
+different experiments should not assume they share seeds.
+
+**Mechanism claims are weaker than score claims.** Five instruments were retired after they failed
+to track outcomes (section 4.6), and several original mechanism conclusions were withdrawn with
+them. Where a section names a mechanism, it rests on an arm-versus-arm contrast (as for the critic
+in section 5.3) or is marked as a lead.
+
+**Reproduction is of checkpoints, not of training.** Retraining on a different machine reproduces
+findings, as far as one experiment has tested, but not numbers; only two x86 CPU machines were
+tested (section 7).
+
+**Efficiency was never measured.** The plan's motivation was the efficiency of brain-like
+computation. No experiment measured energy, synaptic operations or any other cost of the spiking
+implementation against a conventional network, and this report makes no efficiency claim.
+
+**One task family, and no continual learning.** The plan's stretch goal, a second task learned
+without forgetting the first, was not attempted (section 6.2).
+
+### 8.2 The plan's extensions, against what was found
+
+The plan listed four extensions for Phase 4 (section 2.1). Each is stated here against what the
+project actually showed, not as a promise.
+
+**Scaling to more neurons.** Nothing here suggests that size is the binding constraint. A
+monolithic control with 2.66 times the on-path capacity did not beat the regionalized brain
+(EXP-029), adding a hidden layer to the head collapsed the policy (EXP-064), and the depth series
+turned out to be governed by training budget, not by any measured limit of the network (section
+5.1). Scaling is worth testing only alongside a change that puts more of the network on the policy
+path, or it measures nothing.
+
+**Neuromorphic hardware.** The trained parts of this network could in principle run on a spiking
+chip, since they are LIF populations with binary spikes. But training would stay off-chip, because
+it uses surrogate gradients, and the efficiency benefit that motivates hardware was never measured
+in software. Porting first would answer a question this project has not yet posed.
+
+**Replacing surrogate gradients with local learning.** This is the extension the evidence is least
+encouraging about. The one component that clearly pays, the trained spiking encoder, was trained
+with surrogate gradients (section 5.2), and the one test of reward-gated plasticity bought nothing
+(section 5.5). A local rule would have to match a gradient-trained encoder before it could replace
+one, and no experiment here has made that comparison.
+
+**Continual learning.** Not attempted, and not a near-term step: it presupposes a first task that
+is solved.
+
+What the project does point at is in section 9.
 
 ## Appendix A. Experiment index `STUB`
 - One row per EXP-001 to EXP-069: question, verdict, `RESULTS.md` path. Generate from the
