@@ -412,12 +412,64 @@ rule is to extrapolate a bounded metric only from steps that are well clear of i
 What the budget law does and does not say matters for section 9. It describes the reactive policy
 measured here, which makes one forward pass and one move per step and never looks ahead.
 
-### 5.2 The spiking encoder, the one neuromorphic win `STUB`
-- Pretraining by inverse dynamics: +0.1880 at depth 4, +0.1908 at depth 5, depth 6 off the floor
-  at 0.1037 (EXP-040). Fine-tuning during RL: +0.0900 at depth 6, 10-1-1, p 0.0020 (EXP-047).
-  The gain lives in the encoder, not the head: +0.1312, p 0.0059 (EXP-048). It does not compound
-  (EXP-049).
-- Say plainly: surrogate gradients, not local learning.
+### 5.2 The spiking encoder, the one neuromorphic win
+
+Until week 20 every cube result used a sensory encoder frozen at its random initialisation; only
+the 390-parameter head learned. The roadmap's Stage 2 was to train it.
+
+**Pretraining by inverse dynamics.** The encoder was trained, self-supervised and without any
+distance labels, to name the move that connects two cube states, on 48,233 state pairs for 40
+epochs (EXP-039). Frozen into the usual policy, it raised held-out success at every depth tested
+(EXP-040, all paired against EXP-036 on the same seeds):
+
+| depth | random encoder (EXP-036) | pretrained encoder (EXP-040) | delta | exact p |
+|---|---|---|---|---|
+| 4 | 0.1591 | **0.3471** | +0.1880 | 0.0337 |
+| 5 | 0.0396 | **0.2304** | +0.1908 | 0.0020 |
+| 6 | 0.0000 | **0.1037** | +0.1037 | 0.0039 |
+
+Depth 4 more than doubled, depth 5 went from broken to working, and depth 6 left the floor. Only
+the encoder's weights changed; the head and every other setting were held fixed.
+
+**More pretraining is worse, and its own metric cannot tell.** Doubling pretraining to 80 epochs
+halved depth-6 success (0.0887 against 0.1800, -0.0912, p 0.0078; EXP-050). Scanning the epoch
+count showed the benefit saturating early: 10 epochs (0.2012) bought everything 40 did, and 20
+against 40 was a null (+0.0050, p 0.8418), so the inherited 40 was not wrong (EXP-052). Meanwhile
+the pretraining objective's move-accuracy kept rising all the way to 80 epochs. At the other edge,
+one epoch was not enough (0.0854, 42.5% of the 10-epoch value), and epochs 2 to 10 bought a further
++0.1158 (p 0.0098; EXP-055).
+
+**Fine-tuning during RL.** Letting the encoder's two layers (26,816 parameters) train alongside
+the head raised depth-6 success from 0.1800 to **0.2700** at the same episode count (+0.0900,
+10-1-1, p 0.0020; EXP-047). For scale, the budget law needed 4.4 times the episodes to take the
+same cell to 0.3225; fine-tuning costs 1.33 times per step. **The gain lives in the encoder, not in
+a head co-adapted to it**: the fine-tuned encoder, frozen and paired with a fresh head, scored
+0.3112 (+0.1312 over the pretrained encoder, 11-1-0, p 0.0059; EXP-048). And it is RL's
+*objective* that matters, not the extra gradient steps: spending the same steps on more
+pretraining is the 80-epoch arm above, which lost to the fine-tuned encoder by 0.2225 (1-11-0,
+p 0.0010; EXP-050).
+
+**What did not hold up.**
+
+- **The mechanism claim failed its own control.** The probe said the fine-tuned representation
+  improved (+0.0398, p 0.0010); a leak-free slice of the same measurement said it did not
+  (+0.0050, p 0.5732), and the spec had committed to reporting the weaker (EXP-047). The score
+  improved; that the representation generalised could not be shown. The probe itself was later
+  retired (section 4.6): re-analysed, it got the direction of pretraining's effect right and
+  carried no information about which seeds gained or by how much (`experiments/probe_reanalysis/`).
+- **It does not compound.** A second round of fine-tuning bought the same fixed increment over its
+  own compute as the first: +0.0628, +0.0504 and +0.0540 above the budget-equivalent across three
+  arms, flat (EXP-049). The best depth-6 cell, two rounds of fine-tuning, reached 0.3525.
+- **Its advantage over budget fades at depth 7.** The fine-tuned encoder transferred to a depth it
+  had never trained on (+0.0850, 10-1-1, p 0.0039), but only 0.65 of the depth-6 gain arrived, and
+  its excess over simply buying budget fell from about +0.05 at depth 6 to **+0.0079** at depth 7
+  (EXP-051). Its value is largest where budget is cheapest.
+
+**What kind of win this is.** This is the one change in the project that is neuromorphic in
+substrate and clearly pays: the trained component is the spiking encoder itself, and it carries
+the gain. It is **not** neuromorphic in its learning rule. Both pretraining and fine-tuning
+backpropagate surrogate gradients through the spiking layers; nothing here is local, Hebbian or
+reward-modulated at the synapse.
 
 ### 5.3 The critic `STUB`
 - Works; its benefit is within-episode state-dependence, not calibration (EXP-056/057).
