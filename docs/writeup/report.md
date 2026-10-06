@@ -656,8 +656,50 @@ pathway that the training signal destroys. **Answering the topology question nee
 change, not another experiment.** The plan's Phase 3 criterion 2 is graded with this in mind in
 section 6.
 
-### 5.7 Reproducibility and the seed effect `STUB`
-- EXP-067, EXP-068 and `docs/seed-effect.md`; see sections 4.5 and 7.
+### 5.7 Reproducibility and the seed effect
+
+The last three experiments asked how far the results above can be trusted outside the machine and
+the seeds that produced them. Section 4.5 gives the seed effect as a method; section 7 gives the
+reproduction guarantee. This section reports the verdicts.
+
+**Retraining on a second machine reproduces the conclusions, not the numbers.** EXP-067 retrained
+EXP-036's depth-3 cell, 12 seeds, on a different x86 machine with the same torch version, and
+imported EXP-036's own thresholds rather than setting new ones:
+
+| claim | published | retrained | verdict |
+|---|---|---|---|
+| 1: mean within 0.02 | 0.3972 | 0.4250 (+0.0278) | **not replicated** |
+| 2: the "working" verdict | working | working, 15x its floor | **replicated** |
+| 3: the gap verdict | +0.1093, inconclusive | +0.0602, inconclusive | **replicated** |
+
+Two of three pre-registered verdicts survived and the numeric bar did not. Each needs its caveat.
+Claim 1's tolerance had been calibrated where replication noise is exactly zero, on one machine;
+across machines the per-seed deltas have an sd of 0.1496, and under the null of equivalent machines
+the 0.02 bar fails about two times in three. Claim 1 stands as not replicated, because rewriting a
+gate after its number exists is the mistake section 4.3 describes, but it carries little weight
+(section 4.3, last row). Claim 2 had a wide margin on both machines and was never at risk, and
+Claim 3's inconclusive zone is 0.10 wide, the easiest verdict to land in twice (EXP-067).
+
+**The divergence is all in training.** The floor arm, which does no training, was byte-identical on
+12 of 12 seeds across the two machines, so states, held-out splits and scramble streams are fully
+portable. Per seed, the trained results moved by between -0.3000 and +0.2333 while the mean moved
+0.0278 (EXP-067).
+
+**Seed quality is large, persistent and mostly an interaction.** Across 8 depth-5 arms from five
+experiments, per-seed success correlated at +0.419, positive in 28 of 28 pairs of arms
+(`docs/seed-effect.md`). Two crossed designs then decomposed it:
+
+| | regime | interaction share | main effects | primary verdict |
+|---|---|---|---|---|
+| EXP-068 | depth 3, task draw x training trajectory, 10 x 10 | **0.650** | task draw 0.267, trajectory 0.084 | Claim 1 (the task draw is a minority of the effect, share under 0.35) **unresolved**: 0.267 is under the bar but inside the pre-registered 0.25 to 0.45 band; Claim 2 (trajectory resolves) **confirmed**, p 0.0235 |
+| EXP-069 | depth 5, pretrained encoder x task draw and trajectory, 8 x 8 | **0.652** | encoder 0.348, task draw and trajectory together 0.000 | Claim 1 (the encoder is a major carrier, share at least 0.35) **unresolved**: 0.348, real (p 0.0001) but inside the band; Claim 2 (interaction replicates) **replicated** |
+
+Two decompositions in different regimes agree that a seed's quality is mostly the specific
+combination of its parts, while the main effects change hands with the regime (EXP-068, EXP-069).
+The practical consequence is the one already in use: compare arms only on the same seeds, where
+this effect cancels exactly, and never across two different seed sets, where it adds about 0.039
+of noise to effects of 0.05 to 0.09. EXP-068's aggregator printed CONFIRMED for a result inside the
+band its spec had declared unresolvable; the report follows the spec (section 4.1).
 
 ## 6. Graded against the plan `STUB`
 - Phase 3 checkpoint: 3 of 4 criteria met or exceeded, 1 partial (criterion 2, and why it stays
