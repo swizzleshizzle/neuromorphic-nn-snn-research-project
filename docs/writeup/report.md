@@ -511,10 +511,62 @@ encoder's output, but nothing about it is neuromorphic, and it was the recipe co
 depth 7 and beyond work at all (EXP-062's validity gate requires it). The neuromorphic version of
 the same idea, routing the learning signal through the neuromodulatory bus, is section 5.5.
 
-### 5.4 Episodic memory `STUB`
-- EXP-030 null on a policy that had learned nothing; EXP-059 memory hurts (-0.0954, p 0.0056);
-  EXP-061 the recall is noise (+0.0210, p 0.4989 against matched noise); EXP-063 a learned
-  attention over a *perfect* cache is still 0.198 worse than no memory. Closed at its ceiling.
+### 5.4 Episodic memory
+
+The hippocampal region was built to remember states already visited in an episode, on the theory
+that a policy which can recognise where it has been can stop going in circles. Every memory
+experiment compared three arms, not two: **memory** (the head reads the concept plus the
+hippocampus's recall of the current state), **shuffled** (the same, but recall is computed from a
+different earlier state, so the memory is real but wrong), and **amnesic** (the same feed-forward
+transform of the current state, queried against an emptied memory). Memory minus amnesic isolates
+the stored content; memory minus shuffled alone, the obvious two-arm design, can be won by wrong
+memory doing harm.
+
+**First attempt: a null on a policy that had learned nothing.** At depths 1 to 3, memory beat
+shuffled by +10.8 points at depth 2 (p 0.078) and beat amnesic by +1.2 (p 0.908) (EXP-030). The
+primary comparison was measuring the harm of wrong memory, not the benefit of right memory, and
+a two-arm design would have reported a near-significant win. The whole experiment was then found
+to have run on a collapsed policy that played one move regardless of input (EXP-031), so no
+change to its features could have shown up.
+
+**Second attempt: void.** Re-asked on a working policy, EXP-058's validity gate required each
+episode to store more than 10 memories on average. Episodes at that depth average fewer steps than
+that because the policy solves them, so the gate could not pass; it measured 6.17, and by the
+contract every claim was void (EXP-058). The data was valid; the specification was not. That cost
+about 20 hours of compute and produced the gate-calibration rule of section 4.3.
+
+**Third attempt: memory hurts.** At depth 5 on 24 seeds, with a gate that could pass and did,
+memory scored **0.2183** against amnesic **0.3138**: **-0.0954, p 0.0056**, clearing the
+pre-registered bar and a Bonferroni correction (EXP-059). The spec had committed in advance to
+reporting this as a real finding rather than a failed confirmation. And correct memory was
+indistinguishable from wrong memory: memory minus shuffled was +0.0204 (p 0.4268). What cost the
+policy was reading the stored content at all.
+
+**The recall is noise.** EXP-061 replaced the recall with noise matched to its magnitude. Real
+memory and matched noise were indistinguishable (+0.0210, p 0.4989), and both cost about 0.1
+against amnesic (noise minus amnesic -0.1165, p 0.0001). The recall block is useful for what its
+transform says about the current state, and mixing in stored content destroys that as thoroughly
+as random noise does. The primary was a null, which the spec had pre-registered as a bound rather
+than evidence, so the hypothesis is reported as supported, not confirmed.
+
+**The ceiling: perfect memory still loses.** The last possibility was that the attractor's recall
+was too lossy and a better readout could use memory that the existing one could not. EXP-063
+built a ceiling instrument to answer that: a learned attention over a **perfect** cache of the
+episode's earlier states. It scored **0.1154**, 0.198 below amnesic (p 0.0000) and below the raw
+attractor read as well (p 0.0059); both secondaries were refuted in the wrong direction. Its
+primary, real content against matched noise, was confirmed by the pre-registered rule (+0.0612,
+p 0.0358), but the effect sat on seeds where the control's training had collapsed to zero; on the
+10 seeds where it had not, the difference was +0.0320 (p 0.5078, 5 up and 5 down). The confirmed
+primary is substantially a difference in how often training collapsed, and it is not read as
+evidence that memory helps. A second confound, that the learned readout also puts a larger block
+of features on the policy path, was not pre-registered, and the two cross-arm secondaries cannot
+separate it from the readout itself (EXP-063).
+
+**Verdict: closed negative, at its ceiling.** With perfect episodic recall and a readout that
+learns what to attend to, memory does not help this policy. The hippocampus earns no place on
+this task. This is a statement about a reactive policy that chooses one move per step; whether
+memory of visited states earns a place in a policy that searches is a different question, and it
+has not been asked.
 
 ### 5.5 The neuromodulatory bus `STUB`
 - Made load-bearing and bought nothing (EXP-053 arm G). The neuromorphic claim for credit
