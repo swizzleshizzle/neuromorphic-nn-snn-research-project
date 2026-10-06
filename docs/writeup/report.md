@@ -2,7 +2,7 @@
 
 **Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
 
-> **Status of this draft.** Sections 1 and 4 are written. Every other section is a **stub**: its
+> **Status of this draft.** Sections 1, 2 and 4 are written. Every other section is a **stub**: its
 > heading, the claim it has to carry, the numbers it will cite, and where they come from. Stubs
 > are marked `STUB` so a reader can tell drafted prose from scaffolding at a glance. Nothing in a
 > stub is new; every number is quoted from a committed `RESULTS.md`.
@@ -55,19 +55,69 @@ verdicts survive (EXP-067). Section 7 states the guarantee precisely.
 
 ---
 
-## 2. What was asked `STUB`
+## 2. What was asked
 
-**Must carry:** the original 12-month plan and its four phase checkpoints, quoted, so section 6
-can grade against the plan as written rather than as remembered.
+This section quotes the targets as they were written, so that section 6 can grade the project
+against the plan rather than against a memory of it. Two documents set targets: the original plan
+of 2026-03-31, and a harder roadmap the project wrote for itself on 2026-08-02. Quotations keep the
+source's words; long dashes in the originals are rendered as colons or commas.
 
-- The 2026-03-31 plan: Phase 0 foundations, Phase 1 single-region SNNs, Phase 2 multi-region
-  brain, Phase 3 the cube capstone, Phase 4 this report and a public release.
-- The Phase 3 criteria, verbatim from `neuromorphic-project-plan.md`: (1) solve from 1-move
-  scrambles, 3-move stretch; (2) comparison against a monolithic network on at least one metric;
-  (3) interpretability analysis; (4) clear documentation.
-- The later, harder roadmap the project set itself: `road-to-a-solved-cube.md`, Stages 1 to 4.
-- **Sources:** vault `neuromorphic-project-plan.md`, `docs/phase2-honest-assessment.md`,
-  `docs/phase3-honest-assessment.md` section 1.
+### 2.1 The original plan
+
+The plan (`neuromorphic-project-plan.md`, in the project vault) set a 12-month programme whose
+deliverable was *"a regionalized spiking neural network that learns to solve a 2x2 Rubik's Cube
+through experience, with observable specialization across brain-inspired functional regions,
+running on commodity hardware."* It named three levels of success:
+
+| level | as written |
+|---|---|
+| Minimum viable | *"A multi-region spiking network where regions demonstrably specialize and cooperate on a spatial reasoning task (grid navigation)"* |
+| Target | *"The regionalized system learns to solve a 2x2 Rubik's Cube from any scramble, trained through experience (reinforcement) rather than supervised labels"* |
+| Stretch | *"The system demonstrates continual learning: it can learn a second task without catastrophic forgetting of the first"* |
+
+The work was divided into phases, four of them closing on a written checkpoint:
+
+| phase | dates | checkpoint, as written |
+|---|---|---|
+| 0. Foundations | Apr 6 to May 3 | *"(1) Explain what a LIF neuron does and why it's different. (2) Explain what backprop accomplishes and why it's problematic for spiking networks. (3) Explain what an RL agent needs to learn a task. (4) Read a 20-line PyTorch code block and narrate what each section does."* |
+| 1. Single-region SNNs | May 4 to May 31 | *"(1) Working spiking MNIST classifier (95%+). (2) Recurrent SNN handling sequential input. (3) STDP demo showing unsupervised pattern learning. (4) Written 'what I learned' document."* |
+| 2. The regionalized brain | Jun 1 to Jul 19 | *"(1) Architecture spec document. (2) Working multi-region SNN on grid navigation. (3) Monitoring dashboard. (4) Evidence of regional specialization. (5) Honest assessment of what works and doesn't."* |
+| 3. The Rubik's cube challenge | Jul 25 to Sep 27 | *"(1) Regionalized SNN solves 2x2 cubes from at least 1-move scrambles (3-move is stretch). (2) Comparison vs monolithic on at least one metric. (3) Interpretability analysis. (4) Clear documentation."* |
+| 4. Documentation and capstone | Oct 5 to Dec 27 | no checkpoint; technical documentation, a research write-up, and extension planning |
+
+Three details of the plan matter later. Its cube environment specified *"24 facelets, 12 possible
+moves"* and a motor region expanded *"from 4 to 12 actions"*; the system uses 6, for the reason
+given in section 3. Its Phase 3 training protocol asked for a *"monolithic baseline comparison
+(same neuron count, single region)"*, which is the comparison that section 5.6 finds cannot answer
+the question it was meant to. And its extension list for Phase 4 (scaling, neuromorphic hardware,
+*"replacing surrogate gradients with fully local learning"*, continual learning) is the list
+section 8 answers.
+
+### 2.2 The roadmap the project set itself
+
+On 2026-08-02, immediately after the curriculum reached 50% at depth 3 (EXP-035), the project wrote
+a harder roadmap (`road-to-a-solved-cube.md`, also in the vault), on the grounds that the Phase 3
+checkpoint had already been passed and the plan's *target*, a cube solved *"from any scramble"*,
+had not. It set four stages:
+
+| stage | goal, as written |
+|---|---|
+| 1 | *"prove generalisation, find the break point"* |
+| 2 | *"unfreeze the brain (the architectural moment)"*: train the encoder, by cube-dynamics pretraining or end to end |
+| 3 | *"dense signal"*: a *"value function carried through the `neuromod` pathway"* |
+| 4 | *"full 2x2 (the actual deliverable)"*: depth-11 random scrambles, judged *"genuinely achievable... nothing about it requires new science"* |
+
+Stage 4 is the plan's target restated as a number: 11 is the modal distance of a random 2x2 from
+solved under this move set (a property of the exact BFS table, not an experimental result; stated
+in `docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md` section 1). It is the harder of the two tests, and section 6 grades against both.
+
+### 2.3 What changed on 2026-10-05
+
+The plan's Phase 4 included tagging a public release. That came from a parallel media and
+publishing track which was dropped on 2026-06-25, and on 2026-10-05 the release itself was dropped
+as well. **The goal the project now works towards is the one the plan called its target: a spiking
+network that solves a randomly scrambled 2x2 cube.** This report is documentation of the work so
+far, not a release, and section 9 points at the road from here.
 
 ## 3. The system `STUB`
 
