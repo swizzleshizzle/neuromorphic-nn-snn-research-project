@@ -191,6 +191,58 @@ cell, so a Windows Update restart costs at most one in-flight wave.
 
 These pre-flight numbers are for E, R and G only. No P number exists until the gates are fixed.
 
+> **PRE-LAUNCH AMENDMENT 2026-10-06, written after pre-flight steps 1 and 2 and BEFORE any P
+> number exists.** Laptop (SwizzlesDuo), main at `0af516b`, 252 records.
+>
+> **Gate 0(b) form: WILSON.** A fresh-generator re-evaluation does NOT reproduce the published
+> per-cell counts: **27 of 36 cells differ** (largest: depth 8 seed 3, published 22/200,
+> re-evaluated 8/200). Cause: evaluation is stochastic (Poisson spike encoding on the eval
+> generator) and the published records evaluated on the stream state training left behind.
+> Pooled per depth, each re-evaluated mean lies inside the Wilson 95% interval of the published
+> one:
+>
+> | depth | published | interval | re-evaluated G |
+> |---|---|---|---|
+> | 7 | 481/2400 = 0.2004 | [0.1849, 0.2169] | 496/2400 = 0.2067 |
+> | 8 | 188/2400 = 0.0783 | [0.0682, 0.0898] | 165/2400 = 0.0688 |
+> | 9 | 39/2400 = 0.0163 | [0.0119, 0.0221] | 41/2400 = 0.0171 |
+>
+> Depth 8 clears by 0.0006. That is not a near-miss to repair: the pooled Wilson check is weak by
+> construction. **The real evidence that the harness is right is the unit test pinning G to
+> `evaluate_states` at full float repr** (`test_mode_g_reproduces_evaluate_states_exactly`).
+> Consequence for every claim: **G re-evaluated, not the published table, is the reference.**
+>
+> **Gate 0(a): PASS.** G0, E3 and R3 at depth 8 seed 0 re-run into a separate directory are
+> identical in every field except `wall_s`, which is a wall clock and is excluded by definition.
+>
+> **Gate 1 calibration (E and R levels, mean of 12 seeds):**
+>
+> | depth | G0 | E1 | E2 | E3 | R1 | R2 | R3 |
+> |---|---|---|---|---|---|---|---|
+> | 7 | 0.2067 | 0.2179 | 0.2150 | 0.2321 | 0.0000 | 0.0008 | 0.0025 |
+> | 8 | 0.0688 | 0.0708 | 0.0750 | 0.0838 | 0.0000 | 0.0004 | 0.0013 |
+> | 9 | 0.0171 | 0.0179 | 0.0200 | 0.0200 | 0.0000 | 0.0004 | 0.0008 |
+>
+> The primary cell's E3 (0.0838) is clear of the 0.02 floor, so Claim 1 can resolve. Depth 9's
+> E2 and E3 sit exactly at 0.0200: those secondary cells resolve only if P lifts them, and
+> otherwise come back UNRESOLVED, which is the verdict the gate exists to return. E is not
+> monotone in k at depth 7 (E1 0.2179 > E2 0.2150): once E's moves diverge from G's, the two see
+> different encoding draws, so per-arm levels carry that noise. R confirms random search is near
+> zero at every depth.
+>
+> **What the primary contrast can detect (the EXP-067 rule: state a threshold's power in the regime
+> it runs in).** The G0-versus-published differences are pure encoding noise on identical
+> checkpoints and states. At depth 8 their per-seed sd is **0.0244**, so the se of a mean over 12
+> seeds is **0.0071**, and a one-sided test at alpha 0.05 has about 80% power at a true effect of
+> **0.0175** (normal approximation, (1.645 + 0.84) x se). This is an UPPER bound on the noise in
+> P3 - E3, because P and E share the real stream while their moves agree. **So Claim 1 can see a
+> look-ahead benefit of roughly 0.02 success or more at depth 8, and will likely miss a smaller
+> one.** A NOT SIGNIFICANT verdict is therefore "below about 0.02", not "zero".
+>
+> **Cost.** A G/E/R cell takes about 250 s at 3 workers and 760 to 1640 s at 20 (contention, not
+> work). The calibration wave (P2 and P3, depth 8, seed 0) runs next, for wall-clock only, and its
+> success counts are part of the full P dataset, read only by the aggregator.
+
 ### 2.7 Outputs
 
 `experiments/070_lookahead_existing/`: `run.py`, `aggregate.py` (verdict function encodes Gate 0,

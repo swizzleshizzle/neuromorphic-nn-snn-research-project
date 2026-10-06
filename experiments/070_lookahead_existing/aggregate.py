@@ -18,7 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 # Set ONLY in the dated spec-amendment commit after pre-flight step 1. None blocks every verdict.
-GATE0_FORM: str | None = None
+GATE0_FORM: str | None = "wilson"  # set 2026-10-06 by the pre-launch spec amendment
 ALPHA = 0.05
 FLOOR = 0.02
 CEILING = 0.98
