@@ -81,6 +81,8 @@ def claim_verdict(diffs, a_mean: float, b_mean: float, gate_ok: bool) -> tuple[s
 def load_071(out_dir: Path) -> dict:
     recs = {}
     for p in sorted(out_dir.glob("exp071_*.json")):
+        if p.name.startswith("exp071_rank_"):
+            continue  # rank.py writes its per-seed records into this same directory
         r = json.loads(p.read_text())
         if r.get("limit_states") is not None:
             continue
@@ -134,8 +136,13 @@ def main() -> None:
         row.append(f"{arm} {st.mean(vals):.4f}" if vals else f"{arm} -")
     print("  " + "  ".join(row))
 
-    # Gate 0(b): continuity with EXP-070 for the plain arms.
+    # Gate 0(b): continuity with EXP-070 for the plain arms, all 4 arms x 12 seeds.
     plain071 = {k: v for k, v in recs071.items() if k[0] in ("G0", "E3", "P3", "R3")}
+    expected = 4 * len(SEEDS)
+    if len(plain071) != expected:
+        print(f"\nGATE 0(b): only {len(plain071)}/{expected} plain-arm cells on disk. "
+              "No claim may be read until all are present.")
+        return
     g0b = gate0b_verdict(plain071, recs070)
     print(f"\nGATE 0(b) (continuity with EXP-070): {g0b}")
     if g0b != "PASS":

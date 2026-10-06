@@ -232,3 +232,15 @@ def test_gate0b_fails_on_one_field_off():
     assert agg.gate0b_verdict(r71, r70) == "PASS"
     r71[("G0", 1)]["optimality"] = 0.999
     assert agg.gate0b_verdict(r71, r70) == "FAIL"
+
+
+def test_load_071_ignores_rank_records_sharing_the_output_directory(tmp_path):
+    """Catches load_071 crashing (KeyError on 'arm') once rank.py's per-seed records sit in
+    the same outputs/ directory as the cell records: a rank record has no 'arm' key and its
+    'limit_states' is absent (None), so a naive filter does not skip it."""
+    (tmp_path / "exp071_G0_d7_s0.json").write_text(json.dumps(
+        {"arm": "G0", "seed": 0, "success_rate": 0.28, "limit_states": None}))
+    (tmp_path / "exp071_rank_d7_s0.json").write_text(json.dumps(
+        {"seed": 0, "n": 200, "critic_hit": 0.3, "chance": 0.22}))
+    recs = agg.load_071(tmp_path)
+    assert set(recs.keys()) == {("G0", 0)}
