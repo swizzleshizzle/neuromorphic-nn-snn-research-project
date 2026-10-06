@@ -1,0 +1,42 @@
+{
+ "E3": {
+  "eval_revisit_rate": 0.3333333333333333,
+  "goal_fired_frac": 0.0,
+  "greedy_modal_action_frac": 0.6470588235294117,
+  "mean_steps": 0.0,
+  "n": 3,
+  "optimality": 0.0,
+  "solved": 0,
+  "success_rate": 0.0
+ },
+ "G0": {
+  "eval_revisit_rate": 0.3333333333333333,
+  "goal_fired_frac": 0.0,
+  "greedy_modal_action_frac": 0.6470588235294117,
+  "mean_steps": 0.0,
+  "n": 3,
+  "optimality": 0.0,
+  "solved": 0,
+  "success_rate": 0.0
+ },
+ "P3": {
+  "eval_revisit_rate": 0.4634146341463415,
+  "goal_fired_frac": 0.07317073170731707,
+  "greedy_modal_action_frac": 0.6050420168067226,
+  "mean_steps": 7.0,
+  "n": 3,
+  "optimality": 1.0,
+  "solved": 1,
+  "success_rate": 0.3333333333333333
+ },
+ "R3": {
+  "eval_revisit_rate": 0.19607843137254902,
+  "goal_fired_frac": 0.0,
+  "greedy_modal_action_frac": 0.29411764705882354,
+  "mean_steps": 0.0,
+  "n": 3,
+  "optimality": 0.0,
+  "solved": 0,
+  "success_rate": 0.0
+ }
+}

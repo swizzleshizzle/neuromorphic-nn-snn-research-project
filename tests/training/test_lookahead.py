@@ -338,3 +338,185 @@ def test_rollouts_are_deterministic():
                                   imag_seed=1)
             for _ in range(2)]
     assert runs[0] == runs[1]
+
+
+class _StubCritic(nn.Module):
+    """Value = the concept's first coordinate, so a stub agent can dictate the ranking."""
+
+    def forward(self, x):
+        return x[..., :1]
+
+
+class _ValueAgent:
+    """Concept [v, 0] where v is looked up per state (default 0); T=1."""
+
+    def __init__(self, values):
+        self.values = {tuple(k): v for k, v in values.items()}
+
+    def step(self, obs, *, recall=False, generator=None, **_):
+        rows = np.asarray(obs)
+        rows = rows[None, :] if rows.ndim == 1 else rows
+        feats = torch.tensor([[float(self.values.get(tuple(r), 0.0)), 0.0]
+                              for r in rows.tolist()])
+        return {"concept": feats.unsqueeze(0)}
+
+
+def test_c1_plays_the_child_the_critic_rates_highest():
+    """Catches C reading the policy instead of the critic: the root prefers move 0, the
+    critic prefers the child reached by move 3."""
+    s = _far_state()
+    agent = _ValueAgent({apply_move(s, 3): 5.0})
+    root = torch.tensor([9.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    got = la.choose_move("C", s, root, 1, N_ACTIONS, agent=agent, critic=_StubCritic(),
+                         imag_generator=torch.Generator().manual_seed(0))
+    assert got == (3, False)
+
+
+def test_c3_scores_sequences_by_their_leaf_not_their_first_child():
+    """Catches C scoring level 1 instead of the leaves: the only high-value state is a leaf
+    reached by (2, 4, 1), whose first child is unremarkable. C3 must play 2."""
+    s = _far_state()
+    leaf = apply_move(apply_move(apply_move(s, 2), 4), 1)
+    agent = _ValueAgent({leaf: 5.0, apply_move(s, 0): 1.0})
+    got = la.choose_move("C", s, torch.zeros(N_ACTIONS), 3, N_ACTIONS, agent=agent,
+                         critic=_StubCritic(), imag_generator=torch.Generator().manual_seed(0))
+    assert got == (2, False)
+
+
+def test_c_takes_a_solve_in_reach_before_consulting_the_critic():
+    """Catches C skipping the goal test."""
+    s = _state_from([2])
+    agent = _ValueAgent({apply_move(s, 0): 99.0})
+    got = la.choose_move("C", s, torch.zeros(N_ACTIONS), 1, N_ACTIONS, agent=agent,
+                         critic=_StubCritic(), imag_generator=torch.Generator().manual_seed(0))
+    assert got == (inverse_action(2), True)
+
+
+def test_sequence_eligibility_excludes_any_sequence_through_a_visited_state():
+    """Catches checking only the leaf (or only the first move): a visited state at level 2
+    must exclude exactly the n sequences through it, and nothing else."""
+    def stub_apply(s, a):
+        return s + (a,)
+    levels = la.tree_levels((), 3, 3, apply_fn=stub_apply)
+    mask = la.sequence_eligibility(levels, 3, 3, {(1, 2)})
+    excluded = [j for j in range(27) if not mask[j]]
+    assert excluded == [1 * 9 + 2 * 3 + c for c in range(3)]
+
+
+def test_g_with_v_plays_the_best_unvisited_move():
+    """Catches V being ignored by G: the greedy move leads to a visited state, so G0V must
+    take the next-best logit."""
+    s = _far_state()
+    root = torch.tensor([0.0, 9.0, 5.0, 0.0, 0.0, 0.0])
+    info = {}
+    got = la.choose_move("G", s, root, 0, N_ACTIONS, visited={apply_move(s, 1)}, info=info)
+    assert got == (2, False) and not info.get("fallback", False)
+
+
+def test_v_falls_back_and_says_so_when_every_candidate_is_visited():
+    """Catches a crash or a silent masked argmax over all -inf when nothing is eligible."""
+    s = _far_state()
+    root = torch.tensor([0.0, 9.0, 5.0, 0.0, 0.0, 0.0])
+    everything = {apply_move(s, a) for a in range(N_ACTIONS)}
+    info = {}
+    got = la.choose_move("G", s, root, 0, N_ACTIONS, visited=everything, info=info)
+    assert got == (1, False) and info["fallback"] is True
+
+
+def test_r_draws_exactly_n_actions_to_the_k_random_numbers_and_nothing_else():
+    """Catches ANY extra draw in R's path, conditional or not, against an independent
+    from-scratch reference: scores must be torch.rand(n_actions**k, generator=g) from a fresh
+    generator seeded identically, with nothing drawn before it (interface contract, Task 1).
+
+    Added because the plan's own mutation table entry for an UNCONDITIONAL extra draw ('in the
+    R branch, add torch.rand(1, generator=imag_generator) before the real draw') does not fail
+    the committed golden fixture test: empirically the bucket-collapse rate for this exact
+    perturbation is about 2.75% per real move (measured directly), so the golden fixture's 3
+    states x 17 steps has about a 24% chance of missing it by pure luck, and in fact does miss
+    it. The golden fixture is pinned and must not be touched (plan constraint), so this test
+    checks the same invariant directly and with much higher power (200 seeds here; the mutation
+    above was confirmed to produce 5/200 mismatches against 0/200 on correct code)."""
+    s = _far_state()
+    root = torch.zeros(N_ACTIONS)
+    for seed in range(200):
+        ref = torch.rand(N_ACTIONS ** 3, generator=torch.Generator().manual_seed(seed))
+        got = la.choose_move("R", s, root, 3, N_ACTIONS,
+                             imag_generator=torch.Generator().manual_seed(seed))
+        want = int(ref.argmax()) // N_ACTIONS ** 2
+        assert got == (want, False), seed
+
+
+def test_r_draws_the_same_random_scores_with_and_without_v():
+    """Catches V changing R's stream: with nothing visited, R3 and R3V must choose alike.
+
+    Checked over many seeds, not just one: an extra draw consumed only on the visited branch
+    does shift torch.rand's output (verified directly), but a single badly-chosen seed can still
+    collapse to the same first-move bucket by coincidence (216 leaves map onto 6 first moves).
+    Seed 4 alone does not discriminate this mutation; seed 43 does, confirmed empirically against
+    both the correct code (always equal here) and the mutation (differs at seed 43). Plan note:
+    the plan's one-seed version of this test did not catch its own listed mutation; the input was
+    widened rather than the threshold weakened."""
+    s = _far_state()
+    root = torch.zeros(N_ACTIONS)
+    for seed in range(60):
+        a = la.choose_move("R", s, root, 3, N_ACTIONS,
+                           imag_generator=torch.Generator().manual_seed(seed))
+        b = la.choose_move("R", s, root, 3, N_ACTIONS,
+                           imag_generator=torch.Generator().manual_seed(seed), visited=set())
+        assert a == b, seed
+
+
+def test_no_revisit_cuts_the_revisit_rate_of_a_looping_reflex():
+    """Catches V not reaching the rollout: a head with a dominant bias turns one face over
+    and over (revisit rate high); with no_revisit=True the same head must revisit far less."""
+    agent, head = _agent_and_head()
+    with torch.no_grad():
+        head.bias.zero_()
+        head.bias[3] = 20.0
+    states = _shell(5, 6)
+    plain = la.evaluate_lookahead(agent, head, states, depth=5, mode="G", k=0,
+                                  generator=torch.Generator().manual_seed(1), rng_seed=1)
+    v = la.evaluate_lookahead(agent, head, states, depth=5, mode="G", k=0,
+                              generator=torch.Generator().manual_seed(1), rng_seed=1,
+                              no_revisit=True)
+    assert plain["eval_revisit_rate"] > 0.5
+    assert v["eval_revisit_rate"] < 0.5 * plain["eval_revisit_rate"]
+    assert v["no_revisit"] is True and plain["no_revisit"] is False
+
+
+def test_imagined_values_reads_the_concept_with_recall_off():
+    """Catches the critic path reading something other than what the critic was trained on."""
+    agent, _ = _agent_and_head()
+    critic = nn.Linear(agent.content, 1)
+    s = _far_state()
+    seen = []
+    real_step = agent.step
+
+    def spy(obs, **kw):
+        seen.append(kw.get("recall"))
+        return real_step(obs, **kw)
+
+    agent.step = spy
+    v = la.imagined_values(agent, critic, [s, s], generator=torch.Generator().manual_seed(0))
+    assert seen == [False] and v.shape == (2,)
+
+
+@pytest.mark.parametrize("mode", ["P", "C", "R"])
+def test_scored_modes_fall_back_and_say_so_when_every_sequence_is_visited(mode):
+    """Catches the scored-mode fallback (a separate branch from G's) dropping its flag or
+    taking an argmax over all -inf: with every leaf-path through a visited child, the move
+    must equal the unmasked choice and info must record the fallback."""
+    s = _far_state()
+    agent = _ValueAgent({apply_move(s, 3): 5.0})
+    _, head = _agent_and_head()
+    everything = {apply_move(s, a) for a in range(N_ACTIONS)}
+    root = torch.zeros(N_ACTIONS)
+    kw = dict(agent=agent if mode == "C" else _agent_and_head()[0], head=head,
+              critic=_StubCritic())
+    plain = la.choose_move(mode, s, root, 1, N_ACTIONS,
+                           imag_generator=torch.Generator().manual_seed(2), **kw)
+    info = {}
+    masked = la.choose_move(mode, s, root, 1, N_ACTIONS,
+                            imag_generator=torch.Generator().manual_seed(2),
+                            visited=everything, info=info, **kw)
+    assert masked == plain and info.get("fallback") is True
