@@ -68,6 +68,78 @@ ln -s /root/projects/neuromorphic-nn-snn-research-project/.venv /root/projects/.
 - P, C, R with `visited`: compute scores as without V, then set ineligible entries to `-inf` if at least one is eligible; otherwise leave scores unmasked and fallback.
 - R must draw `torch.rand(n_actions ** k, generator=imag_generator)` exactly as before, BEFORE any masking, so R3 and R3V see the same random numbers.
 
+- [ ] **Step 0: Capture the golden fixture BEFORE touching `lookahead.py`**
+
+This is what makes the continuity check able to fail: every later comparison is against numbers
+produced by the UNMODIFIED code. Run from the worktree root (timeout 600000):
+
+```bash
+cd /root/projects/.wt/exp-071 && git diff --quiet src/ && mkdir -p tests/fixtures && PYTHONPATH=src .venv/bin/python - <<'PY'
+import importlib.util, json, torch
+torch.set_num_threads(1)
+s = importlib.util.spec_from_file_location("c", "experiments/070_lookahead_existing/cells.py")
+c = importlib.util.module_from_spec(s); s.loader.exec_module(c)
+from neuromorphic.training.lookahead import evaluate_lookahead
+agent, head, states, ts = c.load_cell(7, 0)
+FIELDS = ("solved", "n", "success_rate", "mean_steps", "optimality", "eval_revisit_rate",
+          "greedy_modal_action_frac", "goal_fired_frac")
+out = {}
+for mode, k in (("G", 0), ("E", 3), ("P", 3), ("R", 3)):
+    r = evaluate_lookahead(agent, head, states[:3], depth=7, mode=mode, k=k,
+                           generator=torch.Generator().manual_seed(ts), rng_seed=ts, imag_seed=ts)
+    out[f"{mode}{k}"] = {f: r[f] for f in FIELDS}
+open("tests/fixtures/exp070_d7_s0_golden.json", "w").write(json.dumps(out, indent=1, sort_keys=True) + "\n")
+print(out)
+PY
+```
+
+Then add `tests/training/test_lookahead_golden.py`:
+
+```python
+"""Continuity with EXP-070: the C and V changes must not move any existing arm by one bit.
+
+The fixture was produced by the UNMODIFIED lookahead.py (EXP-071 plan, Task 1 Step 0). Compare,
+never regenerate: regenerating from modified code would make this test unable to fail.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+import pytest
+import torch
+
+from neuromorphic.training.lookahead import evaluate_lookahead
+
+REPO = Path(__file__).resolve().parents[2]
+GOLDEN = json.loads((REPO / "tests" / "fixtures" / "exp070_d7_s0_golden.json").read_text())
+_s = importlib.util.spec_from_file_location(
+    "c70", REPO / "experiments" / "070_lookahead_existing" / "cells.py")
+c70 = importlib.util.module_from_spec(_s)
+_s.loader.exec_module(c70)
+
+
+@pytest.mark.parametrize("arm,mode,k", [("G0", "G", 0), ("E3", "E", 3), ("P3", "P", 3),
+                                        ("R3", "R", 3)])
+def test_existing_arms_match_the_pre_change_golden_fixture(arm, mode, k):
+    """Catches any change to the shared code path (stream draws, scoring, budget, metrics)."""
+    agent, head, states, ts = c70.load_cell(7, 0)
+    r = evaluate_lookahead(agent, head, states[:3], depth=7, mode=mode, k=k,
+                           generator=torch.Generator().manual_seed(ts), rng_seed=ts, imag_seed=ts)
+    for field, value in GOLDEN[arm].items():
+        assert r[field] == value, (arm, field)
+```
+
+Run it (timeout 600000); it must PASS on the unmodified code. Commit the fixture and the test on
+their own, before Step 1:
+
+```bash
+git add tests/fixtures/exp070_d7_s0_golden.json tests/training/test_lookahead_golden.py
+git commit -m "EXP-071: golden fixture of EXP-070's arms, captured before the procedure changes"
+```
+
 - [ ] **Step 1: Write the failing tests** (append to `tests/training/test_lookahead.py`)
 
 ```python
@@ -307,7 +379,8 @@ Initialise `fallback_moves = 0` with the other counters. Nothing else in the fun
 
 - [ ] **Step 4: Run to verify pass**
 
-Same command. Expected: every test in the file passes (EXP-070's tests unchanged).
+Same command, plus `tests/training/test_lookahead_golden.py`. Expected: every test passes, the
+golden test included (EXP-070's tests unchanged).
 
 - [ ] **Step 5: Mutation check**
 
@@ -319,6 +392,7 @@ Same command. Expected: every test in the file passes (EXP-070's tests unchanged
 | `_greedy_unvisited` returns `int(root_logits.argmax())` unconditionally | `test_g_with_v_plays_the_best_unvisited_move` |
 | R branch draws `torch.rand` AFTER building `levels` with an extra `torch.rand(1, generator=imag_generator)` | `test_r_draws_the_same_random_scores_with_and_without_v` (only if that extra draw is under `visited is not None`; place it there) |
 | fallback branch no longer sets `info["fallback"]` | `test_v_falls_back_and_says_so_when_every_candidate_is_visited` |
+| in the R branch, add `torch.rand(1, generator=imag_generator)` before the real draw (unconditionally) | `test_existing_arms_match_the_pre_change_golden_fixture[R3]` |
 
 Revert after each with `git checkout -- src/neuromorphic/training/lookahead.py`; confirm `git diff --stat` shows only the test file. If a mutation survives, strengthen the test until it fails, then re-run the table. Record outcomes in the commit body.
 
@@ -342,9 +416,9 @@ git commit -m "EXP-071: critic scorer C and the no-revisit modifier V in the loo
 **Interfaces:**
 - Consumes: EXP-070 `cells.py` (`load_cell`, `published_config`, `REPO`); Task 1's `imagined_values`, `imagined_logp`, `imag_seed_for`.
 - Produces (`cells.py`): `DEPTH = 7`, `SEEDS = tuple(range(12))`, `ARMS` = list of `(mode, k, v)` in the order `G0 G0V E3 E3V P3 P3V C1 C1V C3 C3V R3 R3V`; `arm_name(mode, k, v) -> str` (e.g. `"C3V"`); `parse_arm(text) -> (mode, k, v)` raising `SystemExit` on anything not in `ARMS`; `critic_path(seed) -> Path`; `load_critic(seed) -> nn.Linear`; `cell_record_name(mode, k, v, seed) -> str` = `f"exp071_{arm_name(mode, k, v)}_d7_s{seed}.json"`.
-- Produces (`rank.py`): `rank_state(agent, head, critic, state, n_actions, provider, generator) -> dict` with keys `critic_hit` (0/1), `policy_hit` (0/1), `chance` (float); `rank_seed(seed, out_dir) -> dict` writing `exp071_rank_d7_s{seed}.json` with per-seed means `critic_hit`, `policy_hit`, `chance`, `n`.
+- Produces (`rank.py`): `rank_state(agent, head, critic, state, n_actions, provider, generator) -> dict` with keys `critic_hit`, `policy_hit`, `chance` (child level, spec R1) and `leaf_closer_hit`, `leaf_closer_chance`, `leaf_d3_hit`, `leaf_d3_chance` (leaf level, spec R3); `rank_seed(seed, out_dir) -> dict` writing `exp071_rank_d7_s{seed}.json` with the per-seed mean of each of those seven keys plus `seed` and `n`.
 
-`rank_state`: build `children = [apply_move(state, a) for a in range(n_actions)]`; compute `logp = imagined_logp(agent, head, [state], generator=generator)[0]` FIRST, then `values = imagined_values(agent, critic, children, generator=generator)`; `d = provider.distance(state)`; `improving = [provider.distance(c) == d - 1 for c in children]`; return `critic_hit = int(improving[int(values.argmax())])`, `policy_hit = int(improving[int(logp.argmax())])`, `chance = sum(improving) / n_actions`. `rank_seed` uses `ExactBFSDistance(max_depth=DEPTH + 1)` and a generator seeded `imag_seed_for(train_seed, i, 0)` per held-out state `i` (step 0 is never used by rollouts, whose steps start at 1).
+`rank_state`, in this draw order on the one generator: `logp = imagined_logp(agent, head, [state])[0]`, then `values = imagined_values(agent, critic, children)` for `children = [apply_move(state, a) for a in range(n_actions)]`, then `leaf_values = imagined_values(agent, critic, leaves)` for `leaves = tree_levels(state, 3, n_actions)[3]`. With `d = provider.distance(state)`: child level as before (`improving = [dist(c) == d - 1]`, `critic_hit`, `policy_hit`, `chance = mean(improving)`); leaf level `leaf_d = [dist(l) for l in leaves]`, `top = int(leaf_values.argmax())`, `leaf_closer_hit = int(leaf_d[top] < d)`, `leaf_closer_chance = mean(x < d for x in leaf_d)`, `leaf_d3_hit = int(leaf_d[top] == d - 3)`, `leaf_d3_chance = mean(x == d - 3 for x in leaf_d)`. `rank_seed` uses `ExactBFSDistance(max_depth=DEPTH + 3)` (leaves reach depth 10) and a generator seeded `imag_seed_for(train_seed, i, 0)` per held-out state `i` (step 0 is never used by rollouts, whose steps start at 1). Spec pre-flight chance values at depth 7: child 0.2203, leaf-closer 0.1344, leaf-at-d-3 0.0082.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -456,6 +530,32 @@ def test_rank_state_scores_a_critic_that_prefers_a_worsening_child_as_a_miss():
     head = nn.Linear(2, N_ACTIONS)
     r = rank.rank_state(agent, head, critic, s, N_ACTIONS, provider, torch.Generator())
     assert r["critic_hit"] == 0
+
+
+def _leaf_case(want_closer):
+    from neuromorphic.training.lookahead import tree_levels
+    provider = ExactBFSDistance(max_depth=6)
+    s = shell_states(provider, 3)[0]
+    leaves = tree_levels(s, 3, N_ACTIONS)[3]
+    target = next(l for l in leaves if (provider.distance(l) < 3) == want_closer)
+    agent = _Stub({target: 5.0})
+    critic = nn.Linear(2, 1)
+    with torch.no_grad():
+        critic.weight.copy_(torch.tensor([[1.0, 0.0]]))
+        critic.bias.zero_()
+    head = nn.Linear(2, N_ACTIONS)
+    return rank.rank_state(agent, head, critic, s, N_ACTIONS, provider, torch.Generator())
+
+
+def test_leaf_check_scores_a_closer_top_leaf_as_a_hit():
+    """Catches the leaf check reading children instead of leaves, or comparing to d + 3."""
+    assert _leaf_case(True)["leaf_closer_hit"] == 1
+
+
+def test_leaf_check_scores_a_farther_top_leaf_as_a_miss():
+    """Catches a leaf hit that cannot fail."""
+    r = _leaf_case(False)
+    assert r["leaf_closer_hit"] == 0 and 0.0 < r["leaf_closer_chance"] < 1.0
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -549,7 +649,9 @@ import torch
 
 from neuromorphic.envs.cube import apply_move
 from neuromorphic.envs.cube_distance import ExactBFSDistance
-from neuromorphic.training.lookahead import imag_seed_for, imagined_logp, imagined_values
+from neuromorphic.training.lookahead import (
+    imag_seed_for, imagined_logp, imagined_values, tree_levels,
+)
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("exp071_cells", HERE / "cells.py")
@@ -561,14 +663,22 @@ torch.set_num_threads(1)
 
 def rank_state(agent, head, critic, state, n_actions, provider, generator) -> dict:
     children = [apply_move(state, a) for a in range(n_actions)]
+    leaves = tree_levels(state, 3, n_actions)[3]
     logp = imagined_logp(agent, head, [state], generator=generator)[0]
     values = imagined_values(agent, critic, children, generator=generator)
+    leaf_values = imagined_values(agent, critic, leaves, generator=generator)
     d = provider.distance(state)
     improving = [provider.distance(c) == d - 1 for c in children]
+    leaf_d = [provider.distance(l) for l in leaves]
+    top = int(leaf_values.argmax())
     return {
         "critic_hit": int(improving[int(values.argmax())]),
         "policy_hit": int(improving[int(logp.argmax())]),
         "chance": sum(improving) / n_actions,
+        "leaf_closer_hit": int(leaf_d[top] < d),
+        "leaf_closer_chance": sum(x < d for x in leaf_d) / len(leaf_d),
+        "leaf_d3_hit": int(leaf_d[top] == d - 3),
+        "leaf_d3_chance": sum(x == d - 3 for x in leaf_d) / len(leaf_d),
     }
 
 
@@ -576,15 +686,14 @@ def rank_seed(seed: int, out_dir: Path) -> dict:
     torch.set_num_threads(1)
     agent, head, states, train_seed = cells.load_cell(seed)
     critic = cells.load_critic(seed)
-    provider = ExactBFSDistance(max_depth=cells.DEPTH + 1)
+    provider = ExactBFSDistance(max_depth=cells.DEPTH + 3)
     n_actions = head.head.out_features
     rows = [rank_state(agent, head, critic, s, n_actions, provider,
                        torch.Generator().manual_seed(imag_seed_for(train_seed, i, 0)))
             for i, s in enumerate(states)]
-    rec = {"seed": seed, "n": len(rows),
-           "critic_hit": st.mean(r["critic_hit"] for r in rows),
-           "policy_hit": st.mean(r["policy_hit"] for r in rows),
-           "chance": st.mean(r["chance"] for r in rows)}
+    rec = {"seed": seed, "n": len(rows)}
+    for key in rows[0]:
+        rec[key] = st.mean(r[key] for r in rows)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / f"exp071_rank_d{cells.DEPTH}_s{seed}.json").write_text(
         json.dumps(rec, indent=1, sort_keys=True) + "\n")
@@ -599,8 +708,9 @@ def main() -> None:
     args = ap.parse_args()
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for r in pool.map(rank_seed, args.seeds, [args.out_dir] * len(args.seeds)):
-            print(f"  s{r['seed']}: critic {r['critic_hit']:.4f}  policy {r['policy_hit']:.4f}  "
-                  f"chance {r['chance']:.4f}", flush=True)
+            print(f"  s{r['seed']}: child critic {r['critic_hit']:.4f} policy {r['policy_hit']:.4f} "
+                  f"chance {r['chance']:.4f} | leaf-closer {r['leaf_closer_hit']:.4f} "
+                  f"chance {r['leaf_closer_chance']:.4f}", flush=True)
 
 
 if __name__ == "__main__":
@@ -621,7 +731,7 @@ r = importlib.util.module_from_spec(s); s.loader.exec_module(r)
 from neuromorphic.envs.cube_distance import ExactBFSDistance
 agent, head, states, ts = r.cells.load_cell(0)
 critic = r.cells.load_critic(0)
-p = ExactBFSDistance(max_depth=8)
+p = ExactBFSDistance(max_depth=10)
 print([r.rank_state(agent, head, critic, x, 6, p, torch.Generator().manual_seed(i)) for i, x in enumerate(states[:10])])
 EOF
 ```
@@ -633,7 +743,8 @@ EOF
 | mutation | test that must fail |
 |---|---|
 | `improving = [... == d + 1 ...]` | `test_rank_state_scores_a_critic_that_prefers_an_improving_child_as_a_hit` |
-| `critic_hit` computed from `logp.argmax()` | both rank tests |
+| `critic_hit` computed from `logp.argmax()` | both child-level rank tests |
+| `top = int(values.argmax())` (children instead of leaves) | `test_leaf_check_scores_a_closer_top_leaf_as_a_hit` |
 | `parse_arm` accepts any `mode+k` | `test_parse_arm_rejects_arms_outside_the_spec` |
 
 Revert after each; confirm clean. Strengthen any survivor. Record outcomes in the commit body.
@@ -675,18 +786,18 @@ def test_run_cell_writes_a_complete_record(tmp_path):
     assert rec["arm"] == "C1V" and rec["no_revisit"] is True and rec["n"] == 2
 
 
-def test_plain_arms_reproduce_exp070_exactly_on_a_small_slice(tmp_path):
-    """THE GATE 0(b) CODE PATH. Catches the C/V changes altering the shared path: G0 here on
-    3 states must equal evaluate_lookahead's EXP-070 configuration on the same 3 states."""
-    from neuromorphic.training.lookahead import evaluate_lookahead
-    rec = run.run_cell("G", 0, False, 0, tmp_path, limit_states=3)
-    agent, head, states, ts = cells.load_cell(0)
-    ref = evaluate_lookahead(agent, head, states[:3], depth=7, mode="G", k=0,
-                             generator=torch.Generator().manual_seed(ts), rng_seed=ts,
-                             imag_seed=ts)
-    for key in ("solved", "success_rate", "mean_steps", "optimality", "eval_revisit_rate",
-                "greedy_modal_action_frac", "goal_fired_frac"):
-        assert rec[key] == ref[key], key
+GOLDEN = json.loads((REPO / "tests" / "fixtures" / "exp070_d7_s0_golden.json").read_text())
+
+
+@pytest.mark.parametrize("arm", ["G0", "E3", "P3", "R3"])
+def test_runner_plain_arms_match_the_pre_change_golden_fixture(arm, tmp_path):
+    """THE GATE 0(b) CODE PATH, through the runner. Catches run_cell passing something that
+    moves a plain arm (e.g. a critic changing a non-C arm, or no_revisit defaulting on). The
+    fixture came from the UNMODIFIED code, so this can fail."""
+    mode, k, v = cells.parse_arm(arm)
+    rec = run.run_cell(mode, k, v, 0, tmp_path, limit_states=3)
+    for field, value in GOLDEN[arm].items():
+        assert rec[field] == value, (arm, field)
 ```
 
 - [ ] **Step 2: Verify failure.** Same test command (timeout 600000).
@@ -702,7 +813,7 @@ def test_plain_arms_reproduce_exp070_exactly_on_a_small_slice(tmp_path):
 
 and adds `"arm": cells.arm_name(mode, k, v)` and `"critic_file": str(cells.critic_path(seed).relative_to(cells.REPO))` to the record. `main()` parses `--arms` with `cells.parse_arm`, defaults to every arm, and builds jobs `(mode, k, v, seed)`.
 
-- [ ] **Step 4: Implement `launch071.ps1`** by copying `experiments/070_lookahead_existing/launch070.ps1` and changing: the module check expects `G,E,P,R,C`; the presence check counts 12 heads (depth 7), 12 E1 encoders and 12 critics via this folder's `cells.py`; phases are `check`, `rank` (runs `rank.py --workers 12`), `base` (`G0 E3 P3 R3`), `det` (re-runs `G0V C3 R3V` seed 0 into `C:\Users\mlgbr\exp071-det`), `calib` (`C3 C3V`, seed 0, workers 2), and `full` (`G0V E3V P3V C1 C1V C3 C3V R3V`, gated on `GATE_R_PASSED` in `aggregate.py` not being `None`, exactly as launch070 gates `p` on `GATE0_FORM`). Keep every warning comment from launch070 (no backticks, no commas across ssh, PYTHONPATH check).
+- [ ] **Step 4: Implement `launch071.ps1`** by copying `experiments/070_lookahead_existing/launch070.ps1` and changing: the module check expects `G,E,P,R,C`; the presence check counts 12 heads (depth 7), 12 E1 encoders and 12 critics via this folder's `cells.py`; phases are `check`, `rank` (runs `rank.py --workers 12`), `base` (`G0 E3 P3 R3`), `det` (re-runs `G0V C3 R3V` seed 0 into `C:\Users\mlgbr\exp071-det`), `calib` (`C3 C3V`, seed 0, workers 2), and `full` (`G0V E3V P3V C1 C1V C3 C3V R3V`). BOTH `calib` and `full` are gated on `GATE_R1_PASSED` and `GATE_R3_PASSED` in `aggregate.py` not being `None`, exactly as launch070 gates `p` on `GATE0_FORM`: no C cell may run before the gate amendment is committed. Keep every warning comment from launch070 (no backticks, no commas across ssh, PYTHONPATH check).
 
 - [ ] **Step 5: Verify pass**; then measure one C3 cell's cost on the VPS: `run.py --arms C3 --seeds 0 --limit-states 3 --workers 1 --out-dir /root/scratch/exp071-smoke` (timeout 600000) and report `wall_s` and the real-move count.
 
@@ -723,12 +834,12 @@ git commit -m "EXP-071: runner and laptop launcher"
 
 **Interfaces:**
 - Consumes: EXP-070 `aggregate.py` (import `one_sided_p`, `gate1_verdict` via importlib; do not copy them).
-- Produces: `ALPHA = 0.025`; `GATE_R_PASSED: bool | None = None` (set by the controller in the dated amendment after step 0, never by code); `V_RATIO = 0.5`; `OUTCOME_FIELDS = ("solved", "n", "success_rate", "mean_steps", "optimality", "eval_revisit_rate", "greedy_modal_action_frac", "goal_fired_frac")`;
+- Produces: `ALPHA = 0.025`; `GATE_R1_PASSED: bool | None = None` and `GATE_R3_PASSED: bool | None = None` (set by the controller in the dated amendment after step 0, never by code); `V_RATIO = 0.5`; `OUTCOME_FIELDS = ("solved", "n", "success_rate", "mean_steps", "optimality", "eval_revisit_rate", "greedy_modal_action_frac", "goal_fired_frac")`;
   - `gate0b_verdict(recs071: dict, recs070: dict) -> str` ("PASS"/"FAIL"): for arms G0, E3, P3, R3 and every seed, every `OUTCOME_FIELDS` value equal to EXP-070's depth-7 record of the same arm and seed.
-  - `gate_r_verdict(rank_rows: list[dict]) -> tuple[bool, float]`: `(p < 0.05 and mean > 0, p)` on per-seed `critic_hit - chance`.
+  - `gate_r_verdict(rank_rows: list[dict], hit_key: str = "critic_hit", chance_key: str = "chance") -> tuple[bool, float]`: `(p < 0.05 and mean > 0, p)` on per-seed `row[hit_key] - row[chance_key]`. R1 uses the defaults; R3 uses `("leaf_closer_hit", "leaf_closer_chance")`.
   - `gate_v_verdict(g0v_revisit: float, g0_revisit: float) -> bool`: `g0v_revisit <= V_RATIO * g0_revisit`.
   - `claim_verdict(diffs, a_mean, b_mean, gate_ok) -> tuple[str, float]`: `VOID` if not `gate_ok`; then `UNRESOLVED` per `gate1_verdict`; `REFUTED` if mean <= 0; `CONFIRMED` if p < ALPHA; else `NOT SIGNIFICANT`.
-  - `main()` prints the success and revisit tables (12 arms), all four gates, Claim 1 (C3 - E3, gated on R), Claim 2 (G0V - G0, gated on V), secondaries (C3 - P3, C1 - G0, E3V - E3, P3V - P3, C3V - C3), and fallback fractions. Refuses every claim if Gate 0(b) fails or `GATE_R_PASSED` is None.
+  - `main()` prints the success and revisit tables (12 arms), every gate, Claim 1 (C3 - E3, gated on R3), Claim 2 (G0V - G0, gated on V), secondaries (C3 - P3 and C3V - C3 gated on R3; C1 - G0 gated on R1; E3V - E3, P3V - P3 ungated), and fallback fractions. Refuses every claim if Gate 0(b) fails or either `GATE_R1_PASSED` or `GATE_R3_PASSED` is None. It recomputes R1 and R3 from the rank records and refuses to run if they disagree with the committed constants.
 
 - [ ] **Step 1: Failing tests** (append)
 
@@ -773,6 +884,15 @@ def test_gate_r_fails_at_chance_and_passes_well_above_it():
     assert agg.gate_r_verdict(above)[0] is True
 
 
+def test_gate_r3_reads_the_leaf_keys():
+    """Catches R3 silently reusing the child-level keys: here the children are at chance and
+    the leaves are well above it, so R1 fails and R3 passes."""
+    rows = [{"critic_hit": 0.22, "chance": 0.22,
+             "leaf_closer_hit": 0.40, "leaf_closer_chance": 0.13}] * 12
+    assert agg.gate_r_verdict(rows)[0] is False
+    assert agg.gate_r_verdict(rows, "leaf_closer_hit", "leaf_closer_chance")[0] is True
+
+
 def test_gate0b_fails_on_one_field_off():
     """Catches a tolerance or a skipped field in the continuity gate."""
     base = {f: 1 for f in agg.OUTCOME_FIELDS}
@@ -797,6 +917,7 @@ Note on `gate0b_verdict`'s keys: in the test it compares whatever `(arm, seed)` 
 | VOID check moved after the significance check | `test_claim_verdict_ladder_including_void` |
 | `gate_v_verdict` uses `g0v_revisit <= 0.2` | `test_gate_v_is_a_ratio` (0.19 vs 0.40 still passes; add a case 0.15 vs 0.25 that must FAIL under the ratio, if the mutation survives) |
 | `gate_r_verdict` compares `critic_hit` to 0 | `test_gate_r_fails_at_chance_and_passes_well_above_it` |
+| `gate_r_verdict` ignores `hit_key`/`chance_key` and always reads the child keys | `test_gate_r3_reads_the_leaf_keys` |
 | `gate0b_verdict` skips `optimality` | `test_gate0b_fails_on_one_field_off` |
 
 Revert, confirm clean, strengthen survivors, record outcomes in the commit body.
@@ -813,9 +934,10 @@ git commit -m "EXP-071: aggregator, four gates and two primaries at alpha 0.025"
 ### Task 5 (CONTROLLER): verify, merge, pre-flight, launch
 
 - [ ] **5.1** Chunked suite per CLAUDE.md from the worktree with `PYTHONPATH=src` (the 2 EXP-054 tests that need untracked records are known to fail in a worktree), `--collect-only` count, update CLAUDE.md's count line, merge `--no-ff` as `Merge exp-071-critic: <summary>`, push, remove the worktree and branch, sync the laptop with `scripts/laptop/sync_repo.ps1`, scp `launch071.ps1`, run `-Phase check`.
-- [ ] **5.2 Step 0, ranking:** `-Phase rank`. Fetch the 12 rank records. Compute Gate R. **Do not run any C arm yet.**
+- [ ] **5.2 Step 0, ranking:** `-Phase rank`. Fetch the 12 rank records. Compute R1 and R3. **Do not run any C arm yet.**
 - [ ] **5.3 Base and determinism:** `-Phase base` (G0, E3, P3, R3: 48 cells; Gate 0(b) against EXP-070's records), then `-Phase det` (Gate 0(a)).
-- [ ] **5.4 Calibration:** `-Phase calib` (C3, C3V seed 0) for wall-clock only.
-- [ ] **5.5 Dated amendment to the spec, BEFORE the full launch:** Gate R result with per-seed critic and policy hit rates; Gate 0(a) and 0(b) results; measured cost. Set `GATE_R_PASSED` in `aggregate.py` in the same commit. If Gate R failed, the full launch still runs (V track is independent) but the amendment records Claim 1 as VOID before any C number is read.
+- [ ] **5.4 Dated gate amendment to the spec, BEFORE any C cell:** R1 and R3 with per-seed hit and chance rates (and the policy head's child-level rate); Gate 0(a) and 0(b). Set `GATE_R1_PASSED` and `GATE_R3_PASSED` in `aggregate.py` in the same commit; push; sync the laptop. If R3 failed, the V track still runs but the amendment records Claim 1 as VOID before any C number exists.
+- [ ] **5.5 Calibration:** `-Phase calib` (C3, C3V seed 0) for wall-clock only; append the cost to the spec, dated, before the full launch. Do not read its success numbers.
+- [ ] **5.5b** Hash-check the critics: after `sync_repo`, compare any EXP-053 `*_critic.pt` moved into the laptop's `repo-attic` against the committed files. A mismatch means that seed's critic did not come from the run that produced its head; stop and report.
 - [ ] **5.6 Full launch:** `-Phase full -Workers 20 -SkipExisting`. Poll the record count (144 + 12 rank) rather than trusting the ssh callback.
 - [ ] **5.7** Fetch, force-add records, run `aggregate.py --determinism-ok`, write `RESULTS.md` with provenance, commit, push, handoff, `secretary log`.

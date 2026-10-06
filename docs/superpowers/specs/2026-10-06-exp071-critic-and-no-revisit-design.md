@@ -62,11 +62,29 @@ own first move). Pre-flight facts measured before this spec, depth 7, all 2400 h
 | chance: mean fraction of improving children | **0.2203** (min 1/6, max 1.0) |
 | maximum attainable hit rate | 1.0 |
 
-**Gate R (critic can rank).** Per seed, `critic_hit - chance` where both are means over that seed's
-200 states (chance computed per state as improving children / n). The critic arms (C1, C3, C1+V,
-C3+V) may be read only if mean(critic_hit - chance) > 0 by the exact one-sided sign-flip test at
-p < 0.05. Otherwise Claim 1 is **VOID**, the roadmap goes to stage 3, and the C cells are reported
-as data only. The policy head's hit rate is reported beside it as a reference, not gated.
+**Each critic arm is gated at the scale it runs at** (the gate-calibration rule: a k = 1 hit rate
+says little about an argmax over 216 noisy leaves). Per state, step 0 therefore also encodes the
+`n**3` leaves of the depth-3 tree in one batched call and records whether the critic's top-rated
+leaf is CLOSER than the root, and whether it is at exactly `d - 3`.
+
+| check | chance at depth 7, measured before this spec (2400 states) | governs |
+|---|---|---|
+| R1: top child improves | **0.2203** | C1, C1V (secondary) |
+| R3: top leaf closer than root | **0.1344** | C3, C3V, and therefore Claim 1 |
+| top leaf at `d - 3` | 0.0082 | reported only |
+
+Leaf distances at depth 7, k = 3, are only ever 4, 6, 8 or 10. Maximum attainable hit rate is 1.0
+for each check.
+
+**Gate R1 / Gate R3.** Per seed, `hit - chance` with both averaged over that seed's 200 states
+(chance computed per state). A gate PASSES iff mean(hit - chance) > 0 by the exact one-sided
+sign-flip test at p < 0.05. If R3 fails, Claim 1 is **VOID** and the roadmap goes to stage 3; if
+R1 fails, the C1 secondaries are reported as data only. The policy head's child-level hit rate is
+reported beside R1 as a reference, not gated.
+
+> **AMENDMENT 2026-10-06, before any number exists:** the single child-level Gate R of the first
+> draft was replaced by R1 and R3 above, after review noted that it was calibrated in C1's regime
+> while guarding a C3 claim.
 
 ## 5. Arms
 
@@ -95,7 +113,7 @@ records in every outcome field (`solved`, `n`, `success_rate`, `mean_steps`, `op
 EXP-070's Gate 0, this is re-evaluation against re-evaluation, where exactness is the expected
 regime. Any mismatch means the C or V code changed the shared path, and no claim may be read.
 
-**Gate R** (section 4).
+**Gates R1 and R3** (section 4).
 
 **Gate V (the rule engaged).** mean `eval_revisit_rate` of G0V must be at most **0.5x** that of
 G0 (EXP-070 measured G0 at 0.3997, so the bar is about 0.20). A ratio, per the gate-calibration
@@ -113,7 +131,7 @@ so that running both together holds the family-wise error at 0.05.
 
 **Claim 1 (primary, critic track): the critic is a better judge than reflex plus endgame.**
 mean(C3 - E3) > 0. Verdicts: CONFIRMED, REFUTED (mean <= 0), NOT SIGNIFICANT, UNRESOLVED (Gate 1),
-VOID (Gate R failed).
+VOID (Gate R3 failed).
 
 **Claim 2 (primary, no-revisit track): refusing to revisit helps the reflex.**
 mean(G0V - G0) > 0. Same verdict ladder, VOID if Gate V fails.
@@ -128,9 +146,11 @@ power at a true effect of about **0.02**. A NOT SIGNIFICANT verdict means "below
 
 ## 8. Cost and order
 
-Step 0 is cheap (one batched call per state) and runs first, on the laptop. Then one calibration
-cell each of C3 and C3V at seed 0 for wall-clock (C3 encodes 216 leaves per real move); the
-measured cost is written into this spec, dated, before the full launch. Records bank per cell and
+Step 0 (two batched calls per state) runs first, on the laptop, then the base arms and the
+determinism re-run. **Those decide every gate, and the gate results are committed in a dated
+amendment BEFORE any C cell runs.** Only then does one calibration cell each of C3 and C3V at
+seed 0 run, for wall-clock (C3 encodes 216 leaves per real move); its cost is appended, dated,
+before the full launch. Records bank per cell and
 are committed (force-added), as EXP-070's are.
 
 ## 9. Not in scope
