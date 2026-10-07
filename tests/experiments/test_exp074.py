@@ -112,3 +112,39 @@ def test_gate_l_restricts_to_distances_lo_to_hi(small):
                                   N_ACTIONS, lo=3, hi=6)
     assert got["n"] == sum(1 for _, d in probe if 3 <= d <= 6)
     assert set(got["by_distance"]) == {str(d) for _, d in probe if 3 <= d <= 6}
+
+
+train = _load("exp074_train", "train.py")
+
+
+def test_driver_refuses_seed_misuse():
+    """Catches a pilot run on an evaluation seed, or an evaluation run on a pilot seed."""
+    with pytest.raises(SystemExit):
+        train.check_seeds([0], pilot=True)
+    with pytest.raises(SystemExit):
+        train.check_seeds([12], pilot=False)
+    train.check_seeds([12, 13], pilot=True)
+    train.check_seeds(list(range(12)), pilot=False)
+
+
+def test_driver_defaults_are_the_spec_settings():
+    """Catches a driver whose defaults drift from spec section 4 (the launcher passes them, but a
+    hand-run must not silently differ)."""
+    ap = train.build_parser()
+    a = ap.parse_args(["--n-updates", "1"])
+    assert (a.batch, a.sync_every, a.probe_every, a.draws) == (1000, 100, 250, 1)
+    assert a.arms == ["W", "A", "B"]
+
+
+@pytest.mark.slow
+def test_run_writes_gate_l_drift_and_readout(tmp_path):
+    """Catches a record missing the Gate L block or the encoder drift Gate E reads. Slow: builds
+    the full BFS table (about 65 s) as the real driver does."""
+    rec = train.run("W", 12, 2, 8, 1, 1, 1, tmp_path)
+    on_disk = json.loads((tmp_path / cells.record_name("W", 12)).read_text())
+    assert on_disk["readout"] == "wide"
+    assert on_disk["gate_l"]["n"] == 250
+    assert 0.0 <= on_disk["gate_l"]["chance"] <= 1.0
+    assert on_disk["encoder_drift"] > 0.0
+    assert (tmp_path / "judge_W_s12" / "judge.pt").exists()
+    assert rec["gate_l"] == on_disk["gate_l"]
