@@ -39,8 +39,10 @@ Per update:
 3. **Loss:** mean squared error between `J(s)` and `y(s)`. Adam: head lr 1e-3; encoder lr 1e-4 in
    arm A (EXP-047's rate), 0 in arm B.
 
-**No answers anywhere in training.** The BFS distance table is never a target, never filters a
-batch, and is read only by the instrument below and by evaluation scoring. The simulator
+**No answers anywhere in training.** The BFS distance table is never a target and is never read
+during training. The one filter on a batch is membership in a FIXED LIST of evaluation states
+(built once, before training, from the BFS shells); no distance is consulted to apply it. The table
+is otherwise read only by the instrument below and by evaluation scoring. The simulator
 (`apply_move`, `is_solved`) is the only source of structure.
 
 **Instrument (read, never trained on):** every `probe_every` updates, J is evaluated on a fixed
@@ -49,8 +51,11 @@ held-out set. Recorded: Spearman rank correlation between J and true distance, a
 distance. Checkpoints (J, Jt, optimiser state, generator state, update count) are banked at every
 probe so a lost run resumes rather than restarts.
 
+**Jt is a frozen copy of the WHOLE judge**, encoder and head both. Copying only the head while
+reading arm A's live encoder would make the targets move every update.
+
 **Defaults the pilot may revise** (section 4): `N = 1000`, `sync_every = 500`,
-`probe_every = 500`.
+`probe_every = 500`, and `jt_draws = 1` (Poisson draws averaged per child when computing `Jt`).
 
 ## 4. Pilot (seeds 12 and 13 only; they never enter an evaluation)
 
@@ -58,6 +63,12 @@ Both arms, both seeds, a few hours each on the laptop. It measures: updates per 
 chosen `N`; the probe Spearman and mean-J-per-distance curves over training; whether `sync_every`
 lets J's values climb past depth 9 (DAVI propagates one step of distance per sync, so a sync
 interval that is too long or too short shows up as a stalled curve).
+
+**A named risk the pilot must check:** each target takes a MIN over `n` Poisson-noisy `Jt` values,
+which is biased low, and the bias compounds every sync. Its symptom is mean J per distance
+compressing (flattening) past about distance 8. **The pre-named mitigation** the amendment may
+adopt is raising `jt_draws` (averaging several Poisson draws per child inside `Jt`); choosing it in
+the amendment is pre-registered, inventing a different fix afterwards is not.
 
 **Then a dated amendment, before any seed 0-11 trains,** fixes: `N`, `sync_every`, the number of
 updates per run (sized so 24 runs fit in about a day on the laptop), and the **training gate**
@@ -91,10 +102,20 @@ directory: identical except `wall_s` and `git_commit`.
 **Gate 0(b) continuity.** P3V at seed 0, depths 8 and 9, re-run under this harness, must equal
 EXP-072's records in all 8 outcome fields.
 
-**Gate T (training worked), per arm.** End-of-training probe Spearman of J against true distance,
-mean over the 12 seeds, must reach the threshold the pilot amendment fixes. The threshold's FORM
-is fixed now: **half of that arm's mean pilot end-of-training Spearman, and never below 0.30.**
+**Gate T (training worked where the claims live), per arm.** Computed on probe distances **7 to 11
+only**, because a correlation pooled from distance 1 is dominated by the easy shallow end and
+passes a judge that is flat past distance 6, which is exactly DAVI's failure with too few syncs.
+Both must hold, on the mean over the 12 seeds:
+(a) Spearman of J against true distance over probe distances 7 to 11 reaches the threshold, whose
+FORM is fixed now: **half of that arm's mean pilot end-of-training value of the same quantity, and
+never below 0.30**; (b) mean J per distance is **strictly increasing from 7 through 11**.
 If an arm fails Gate T, its claims are VOID.
+
+**Gate E (arm A's encoder actually trained; arm B's did not).** EXP-047's first implementation
+trained nothing and produced an ordinary-looking run. So: arm A's encoder parameter drift (L2 norm
+of the change from its E1 starting point) must be **greater than zero on every seed**, and arm B's
+encoder must be **bit-identical** to E1 on every seed. If arm A fails, Claim 2 is VOID; if arm B
+fails, it is not a frozen control and Claim 2 is VOID.
 
 **Gate R (J ranks at the scale it searches at).** Per depth, J's top-rated leaf of the 3-move
 tree is closer than the root more often than chance (exact one-sided sign-flip over 12 seeds,
@@ -109,6 +130,11 @@ p < 0.05). Chance, measured before this spec on 1200 held-out states per depth (
 
 At depth 11 more than half of all 3-move leaves are closer than the root, so this check is weak
 there; depth 11 carries no claim. A failed Gate R voids that arm's claims at that depth.
+
+**Reference, recorded before any J cell is evaluated:** the same leaf-level hit rate for the
+POLICY's own sequence ranking (P3's summed log-probability, top leaf closer than root) at depth 9.
+EXP-071 showed that clearing chance is not the same as steering well; the policy's rate is the
+useful bar, and it goes on record first.
 
 **Gate 1 (resolution).** A contrast is UNRESOLVED if both arms are below 0.02 or above 0.98.
 
@@ -139,7 +165,8 @@ records, about **0.010 to 0.02**, and says so as an estimate.
 2. Pilot (laptop, seeds 12 and 13, both arms).
 3. Dated amendment: training settings, run length, Gate T threshold. Committed before step 4.
 4. Train seeds 0 to 11, both arms (laptop; banked checkpoints).
-5. Gate T computed and committed before any J evaluation cell runs.
+5. Gates T and E computed, and the policy's leaf-level reference measured, then committed before
+   any J evaluation cell runs.
 6. Evaluation: Gate 0(b) continuity cells, then all J cells, R3V at depth 11, P3V at depth 11,
    then the determinism re-run.
 7. Aggregate, RESULTS.md, records and trained judges committed.
