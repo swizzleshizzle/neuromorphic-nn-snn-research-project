@@ -227,3 +227,26 @@ legitimate pre-data amendment if dated): (i) run anyway and let Gate T void, a m
 a day's cost; (ii) explicitly amend the floor, with this report attached; (iii) revise the judge
 design under a new spec (the 64-unit concept from a 192-neuron sensory region may be what limits the
 deep end).
+
+## 11. Pilot 2 report, 2026-10-07: the pre-named mitigation does not rescue Gate T
+
+`jt_draws = 4`, everything else as pilot 1. Records:
+`experiments/073_learned_judge/outputs_pilot2/exp073_train_{A,B}_s1{2,3}.json` (tracked).
+Throughput 5.46 / 5.35 s/update at 4 workers, 3.2x pilot 1. Gate E again clean (A drift 9.175,
+9.357; B 0.0).
+
+| arm | jt_draws | spearman_7_11 (s12, s13) | mean | seed-mean J at 7, 8, 9, 10, 11 | (b) |
+|---|---|---|---|---|---|
+| A | 1 | 0.313, 0.264 | 0.289 | 6.36, 6.59, 6.65, 7.07, 7.01 | fails |
+| A | 4 | 0.328, 0.266 | 0.297 | 6.43, 6.71, 6.76, 7.19, 7.14 | fails |
+| B | 1 | 0.267, 0.247 | 0.257 | 5.91, 6.07, 6.19, 6.58, 6.50 | fails |
+| B | 4 | 0.248, 0.258 | 0.253 | 6.21, 6.39, 6.55, 6.88, 6.86 | fails |
+
+Averaging four draws lifts every value by 0.1 to 0.35 moves (the min-bias shrinks, as expected) but
+leaves the ORDERING of distances 7 to 11 where it was: both arms stay under the 0.30 floor and both
+seed-mean curves still fall from 10 to 11. This matches the section 10 diagnostic: the binding error
+is the judge's approximation error between states, not Poisson noise.
+
+**Status: no seed 0-11 has trained; `GATE_T_THRESHOLD` and `$TrainUpdates` remain unset**, so the
+launcher refuses every claim-bearing phase. The section 10 choices (run and let Gate T void; amend
+the floor; revise the judge design under a new spec) are now Michael's decision.
