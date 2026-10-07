@@ -117,3 +117,69 @@ def test_judge_cell_without_a_checkpoint_exits_naming_it(tmp_path, monkeypatch):
     monkeypatch.setattr(evaluate.cells, "ckpt_dir", lambda arm, seed: tmp_path / "nope" / f"{arm}{seed}")
     with pytest.raises(SystemExit, match="judge.pt"):
         evaluate.run_cell("J3V-A", 8, 0, tmp_path, limit_states=1)
+
+
+agg = _load("exp073_aggregate", "aggregate.py")
+
+
+def _gates(**over):
+    g = {"gate0": True, "t": {"A": True, "B": True}, "e": True,
+         "r": {("J-A", 9): True, ("J-B", 9): True}}
+    g.update(over)
+    return g
+
+
+def test_gate_t_requires_monotone_means_not_just_correlation():
+    """Catches a judge flat past distance 9 passing on correlation alone."""
+    good = {"spearman_7_11": 0.6,
+            "mean_j_by_distance": {"7": 6.0, "8": 7.0, "9": 8.0, "10": 9.0, "11": 9.5}}
+    flat = {"spearman_7_11": 0.6,
+            "mean_j_by_distance": {"7": 6.0, "8": 7.0, "9": 8.0, "10": 8.0, "11": 8.0}}
+    assert agg.gate_t_verdict([good] * 12, 0.3) is True
+    assert agg.gate_t_verdict([flat] * 12, 0.3) is False
+    assert agg.gate_t_verdict([good] * 12, 0.7) is False
+
+
+def test_gate_e_catches_a_frozen_arm_a_and_a_leaky_arm_b():
+    """THE EXP-047 TRAP as a gate."""
+    assert agg.gate_e_verdict([0.5] * 12, [0.0] * 12) is True
+    assert agg.gate_e_verdict([0.5] * 11 + [0.0], [0.0] * 12) is False
+    assert agg.gate_e_verdict([0.5] * 12, [0.0] * 11 + [1e-9]) is False
+
+
+def test_claims_compare_the_registered_arms_at_depth_9():
+    """Catches Claim 1 against J3V-B or Claim 2 against P3V, or the wrong depth."""
+    r = lambda v: {s: v for s in range(12)}
+    rates = {("J3V-A", 9): r(0.10), ("P3V", 9): r(0.06), ("J3V-B", 9): r(0.03)}
+    out = agg.primary_verdicts(rates, _gates())
+    assert out["claim1"][4] == pytest.approx(0.06)
+    assert out["claim2"][4] == pytest.approx(0.03)
+
+
+def test_claim_is_void_when_a_gate_in_its_contrast_fails():
+    """Catches a verdict printed for an arm whose Gate T, E or R failed."""
+    r = lambda v: {s: v + 0.001 * s for s in range(12)}
+    rates = {("J3V-A", 9): r(0.20), ("P3V", 9): r(0.06), ("J3V-B", 9): r(0.03)}
+    assert agg.primary_verdicts(rates, _gates())["claim1"][0] == "CONFIRMED"
+    assert agg.primary_verdicts(rates, _gates())["claim2"][0] == "CONFIRMED"
+    bad_b = agg.primary_verdicts(rates, _gates(t={"A": True, "B": False}))
+    assert bad_b["claim1"][0] == "CONFIRMED" and bad_b["claim2"][0] == "VOID"
+    bad_e = agg.primary_verdicts(rates, _gates(e=False))
+    assert bad_e["claim1"][0] == "CONFIRMED" and bad_e["claim2"][0] == "VOID"
+    bad_a = agg.primary_verdicts(rates, _gates(t={"A": False, "B": True}))
+    assert bad_a["claim1"][0] == "VOID" and bad_a["claim2"][0] == "VOID"
+    bad_r = agg.primary_verdicts(rates, _gates(r={("J-A", 9): False, ("J-B", 9): True}))
+    assert bad_r["claim1"][0] == "VOID" and bad_r["claim2"][0] == "VOID"
+
+
+def test_gate_r_needs_both_significance_and_a_positive_margin():
+    """Catches a Gate R that passes on a hit rate at or below chance."""
+    above = [{"hit": 0.4, "chance": 0.15 + 0.001 * i} for i in range(12)]
+    below = [{"hit": 0.05, "chance": 0.15} for _ in range(12)]
+    assert agg.gate_r_verdict(above) is True
+    assert agg.gate_r_verdict(below) is False
+
+
+def test_gate_t_threshold_is_unset_until_the_controller_amends():
+    """Catches code (rather than a dated amendment) choosing the Gate T threshold."""
+    assert agg.GATE_T_THRESHOLD is None
