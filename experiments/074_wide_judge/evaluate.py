@@ -83,6 +83,20 @@ def _critic(arm, seed, judge_dir):
     return None if train_arm is None else JudgeCritic(load_judge(train_arm, seed, judge_dir))
 
 
+def load_cell(depth: int, seed: int):
+    """(agent, head, held-out states, train seed). Depths 7-9: EXP-070's published cell exactly.
+    Depth 11 (exploratory, spec section 7 amendment 2026-10-07): the seed's depth-9 policy agent,
+    head and train seed, over `cells.heldout_states(11, seed, ...)`, the very states judge training
+    excluded."""
+    if depth in (7, 8, 9):
+        return cells.c70.load_cell(depth, seed)
+    if depth == 11:
+        agent, head, _states, train_seed = cells.c70.load_cell(9, seed)
+        states = cells.heldout_states(11, seed, ExactBFSDistance(max_depth=11))
+        return agent, head, states, train_seed
+    raise SystemExit(f"no evaluation cell at depth {depth}; valid depths are 7, 8, 9, 11")
+
+
 def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> dict:
     torch.set_num_threads(1)
     if arm not in _ARMS:
@@ -90,7 +104,7 @@ def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> di
     mode, k, _ = _ARMS[arm]
     t0 = time.time()
     critic = _critic(arm, seed, judge_dir)
-    agent, head, states, train_seed = cells.c70.load_cell(depth, seed)
+    agent, head, states, train_seed = load_cell(depth, seed)
     if limit_states is not None:
         states = states[:limit_states]
     res = evaluate_lookahead(agent, head, states, depth=depth, mode=mode, k=k,
@@ -116,7 +130,7 @@ def rank_cell(kind, depth, seed, out_dir, judge_dir=None) -> dict:
     k = 3
     arm = _RANK_ARM[kind]
     critic = _critic(arm, seed, judge_dir)
-    agent, head, states, train_seed = cells.c70.load_cell(depth, seed)
+    agent, head, states, train_seed = load_cell(depth, seed)
     provider = ExactBFSDistance(max_depth=depth + 3)
     n_actions = head.head.out_features
     hits, chances = [], []

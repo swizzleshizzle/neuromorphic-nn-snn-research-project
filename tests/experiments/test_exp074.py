@@ -144,7 +144,7 @@ def test_run_writes_gate_l_drift_and_readout(tmp_path):
     on_disk = json.loads((tmp_path / cells.record_name("W", 12)).read_text())
     assert on_disk["readout"] == "wide"
     assert on_disk["gate_l"]["n"] == 250
-    assert 0.0 <= on_disk["gate_l"]["chance"] <= 1.0
+    assert 0.05 < on_disk["gate_l"]["chance"] < 0.6
     assert on_disk["encoder_drift"] > 0.0
     assert (tmp_path / "judge_W_s12" / "judge.pt").exists()
     assert rec["gate_l"] == on_disk["gate_l"]
@@ -288,3 +288,33 @@ def test_gate0c_compares_the_full_probe_history():
 
 def test_gate_l_threshold_is_unset_until_the_controller_amends():
     assert agg.GATE_L_THRESHOLD is None
+
+
+def test_unknown_depth_is_refused():
+    """Catches a depth with no published cell silently falling through to EXP-070's loader."""
+    with pytest.raises(SystemExit, match="no evaluation cell"):
+        evaluate.load_cell(10, 0)
+
+
+def test_depth_11_cell_uses_the_states_judge_training_excluded():
+    """Catches depth 11 evaluating on states other than the ones judge training excluded (a
+    judge scored on states it trained on), or on an empty set."""
+    states = evaluate.load_cell(11, 0)[2]
+    expected = cells.heldout_states(11, 0, ExactBFSDistance(max_depth=11))
+    assert states == expected and len(states) > 0
+    excl = cells.exclusion_set(0, ExactBFSDistance(max_depth=11))
+    assert all(s in excl for s in states)
+
+
+def test_depth_11_p3v_and_wide_cells_run(tmp_path):
+    """Catches depth 11 crashing in EXP-070's loader (it knows depths 7 to 9 only)."""
+    rec = evaluate.run_cell("P3V", 11, 0, tmp_path, limit_states=1)
+    assert rec["n"] == 1 and rec["depth"] == 11
+    assert (tmp_path / "exp074_P3V_d11_s0.json").exists()
+    jdir = tmp_path / "judges"
+    path = cells.ckpt_dir("W", 0, jdir)
+    path.mkdir(parents=True)
+    torch.save(cells.make_judge(0, "W").state_dict(), path / "judge.pt")
+    rec = evaluate.run_cell("J3V-W", 11, 0, tmp_path / "out", limit_states=1, judge_dir=jdir)
+    assert rec["n"] == 1 and rec["depth"] == 11
+    assert (tmp_path / "out" / "exp074_J3V-W_d11_s0.json").exists()

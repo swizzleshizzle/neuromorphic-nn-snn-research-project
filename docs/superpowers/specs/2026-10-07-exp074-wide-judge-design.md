@@ -141,6 +141,12 @@ unchanged.
 
 12 seeds, paired across every arm.
 
+**Amendment 2026-10-07 (final review, before any data): depth 11 has no published policy cell.**
+EXP-070 published agents and heads for depths 7 to 9 only. At depth 11 every arm uses the seed's
+DEPTH-9 policy agent, head and train seed (they drive only the real-state stream for J arms, and
+the move scores for P3V), the held-out states are exactly `heldout_states(11, seed)` (the set judge
+training excluded), and the budget is depth 11's, `2d + 3 = 25` moves. Depth 11 stays exploratory.
+
 ## 8. Pre-registered claims (depth 9; alpha 0.025 each; one-sided exact sign-flip, 4096 flips)
 
 **Claim 1 (primary): the wide learned judge beats the best recipe so far.** mean(J3V-W - P3V) > 0.
