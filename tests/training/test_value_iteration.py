@@ -172,7 +172,7 @@ def _tiny(tmp_path, n_updates, seed=0):
     # jt.pt" mutation: confirmed empirically that test_resume_equals_an_uninterrupted_run PASSED
     # even with that mutation applied, with sync_every=2. sync_every=3 does not divide the resume
     # point evenly, so the wrongly-resynced jt survives into the first resumed train_step and the
-    # mutation is now observed (see the task report for the before/after run).
+    # mutation is now observed (see commit c3ae237's body for the before/after run).
     return vi.train_judge(judge, "A", n_updates=n_updates, batch=8, max_len=3,
                           n_actions=N_ACTIONS, exclude=set(), probe=probe, seed=seed,
                           sync_every=3, probe_every=2, draws=1, ckpt_dir=tmp_path,

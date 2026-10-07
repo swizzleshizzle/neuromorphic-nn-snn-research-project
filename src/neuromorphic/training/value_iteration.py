@@ -129,7 +129,9 @@ def spearman(x, y):
     dy = [a - mean_ry for a in ry]
     num = sum(a * b for a, b in zip(dx, dy))
     den = (sum(a * a for a in dx) * sum(b * b for b in dy)) ** 0.5
-    return num / den if den > 0 else 0.0
+    # Zero variance in x or y (e.g. every entry tied at one rank) makes the correlation
+    # undefined, not zero: NaN, so a degenerate probe cannot silently read as "uncorrelated".
+    return num / den if den > 0 else float("nan")
 
 
 def probe_judge(judge, probe, generator):
