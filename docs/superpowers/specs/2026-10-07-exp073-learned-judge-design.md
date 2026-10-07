@@ -174,3 +174,56 @@ records, about **0.010 to 0.02**, and says so as an estimate.
 ## 9. Not in scope
 
 3x3. A learned or spiking no-revisit rule. Deeper search. Using J to train the policy.
+
+## 10. Pilot 1 report, 2026-10-07 (NOT yet the amendment; training settings PENDING pilot 2)
+
+Seeds 12 and 13, both arms, `N = 1000`, `sync_every = 100` (40 Jt refreshes), `probe_every = 250`,
+`jt_draws = 1`, 4000 updates, 4 workers on the laptop, commit `9a92aff`. Records:
+`experiments/073_learned_judge/outputs/exp073_train_{A,B}_s1{2,3}.json` (tracked).
+
+**Throughput:** 1.70 s/update (arm A), 1.59 s/update (arm B), at 4 workers. A 20-worker figure is
+not measured; eval cells ran about 3x slower per cell at 20 workers than at 3, so sizing must name
+the factor it assumes or measure it.
+
+**Gate E passes cleanly:** arm A encoder drift 8.885 and 9.110; arm B exactly 0.0 on both seeds.
+
+**The named risk happened: mean J compresses past about distance 7.** Seed-mean final values:
+
+| true distance | 5 | 6 | 7 | 8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|---|
+| arm A mean J | 5.51 | 5.95 | 6.36 | 6.59 | 6.65 | 7.07 | 7.01 |
+| arm B mean J | 5.26 | 5.63 | 5.91 | 6.07 | 6.19 | 6.58 | 6.50 |
+
+The curves plateau by about update 2000 of 4000, so this is a fixed point, not slow propagation.
+Pooled Spearman (distances 1 to 11) reaches 0.83 / 0.80 (A) and 0.78 / 0.74 (B); the deep end is
+where it fails.
+
+**Gate T, applied to the pilot with the form fixed in section 6:**
+
+| arm | final spearman_7_11 (s12, s13) | mean | threshold max(0.30, mean/2) | (a) | (b) seed-mean J strictly increasing 7..11 |
+|---|---|---|---|---|---|
+| A | 0.313, 0.264 | 0.289 | **0.30** (floor binds) | below | **fails** (10: 7.07 > 11: 7.01) |
+| B | 0.267, 0.247 | 0.257 | **0.30** (floor binds) | below | **fails** (10: 6.58 > 11: 6.50) |
+
+**Under pilot 1's settings, the 12-seed run is predicted to fail Gate T on both halves for both
+arms**, which would void both claims. That is the gate-calibration trap, caught at pilot cost. The
+0.30 floor is part of the pre-registered form and is NOT changed here.
+
+**Where the compression comes from (diagnostic on the pilot judges, seeds 12 and 13 only):** per
+state, the Poisson spread of J across 32 encoding draws is about 0.19 to 0.25 moves at distances 7
+to 11; the spread of J BETWEEN states at the same true distance, after averaging 32 draws, is about
+0.68 to 0.83. Averaging 32 draws at inference leaves spearman_7_11 unchanged (A s12 0.344 to 0.314,
+B s12 0.256 to 0.256). So Poisson noise is the smaller part of the error the min in each target is
+biased by; most of it is the judge's approximation error. This does NOT settle what a judge TRAINED
+on `jt_draws = 4` targets would learn, since training-time averaging shrinks the min-bias that
+compounds every sync. Only a run can tell.
+
+**Pilot 2 (running from 2026-10-07 ~07:45 UTC):** the pre-named mitigation, `jt_draws = 4`, all else
+identical to pilot 1, seeds 12 and 13, records in `outputs_pilot2/`. About 3.6x the encodings per
+update, so roughly 6 h at 4 workers.
+
+**If pilot 2 also misses 0.30, the choices are Michael's** (no evaluation number exists, so each is a
+legitimate pre-data amendment if dated): (i) run anyway and let Gate T void, a mechanism finding at
+a day's cost; (ii) explicitly amend the floor, with this report attached; (iii) revise the judge
+design under a new spec (the 64-unit concept from a 192-neuron sensory region may be what limits the
+deep end).
