@@ -8,7 +8,7 @@
 #   ... -File C:\Users\mlgbr\launch074.ps1 -Phase eval  -Workers 20 -SkipExisting
 #   ... -File C:\Users\mlgbr\launch074.ps1 -Phase det   -Workers 2
 #
-# Order (spec section 8): pilot (arms W, A, B, seeds 12 and 13 only) -> dated amendment -> train
+# Order (spec section 9): pilot (arms W, A, B, seeds 12 and 13 only) -> dated amendment -> train
 # (seeds 0 to 11, banked checkpoints) -> Gates L and E and the policy reference, committed -> rank
 # -> cont -> eval -> det. cont re-runs P3V at seed 0, depths 8 and 9, for Gate 0(b); stop if they
 # do not equal EXP-072's records. det re-runs J3V-W and J3V-A at seed 0, depth 9, into a SEPARATE
@@ -107,7 +107,7 @@ $outDir = Join-Path $repo "$exp\outputs"
 $jobs = New-Object System.Collections.ArrayList
 switch ($Phase) {
     "rank" {
-        foreach ($d in 7, 8, 9) { foreach ($k in "J-W", "J-A", "J-B", "P") { foreach ($s in $seeds) {
+        foreach ($d in 7, 8, 9) { foreach ($k in "P", "J-W", "J-A", "J-B") { foreach ($s in $seeds) {
             [void]$jobs.Add(@("rank $k d$d s$s", "exp074_rank_${k}_d${d}_s${s}.json", "--rank", $k, "--depth", $d, "--seed", $s)) } } }
     }
     "cont" {
