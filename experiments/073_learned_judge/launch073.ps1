@@ -32,7 +32,13 @@ param(
 
 # Set by the controller's dated amendments, never guessed here. The pilot count is a first
 # estimate the controller may revise; the train count stays unset until the amendment fixes it.
-$PilotUpdates = 2000
+# 2026-10-07: 4000 updates with a sync every 100 (40 Jt refreshes). The spec default of a sync
+# every 500 over 2000 updates gives only 4 refreshes, and value iteration propagates about one move
+# of distance per refresh, so it could not show anything past distance 4: the pilot would have
+# mistaken its own schedule for the method failing. The spec lets the pilot revise these defaults.
+$PilotUpdates = 4000
+$PilotSyncEvery = 100
+$PilotProbeEvery = 250
 $TrainUpdates = 0
 
 $repo = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project"
@@ -86,7 +92,7 @@ $log = Join-Path $repo ("$exp\phase_" + $Phase + ".log")
 # Training phases: one train.py call, it manages its own worker pool.
 if ($Phase -eq "pilot" -or $Phase -eq "train") {
     if ($Phase -eq "pilot") {
-        $cliArgs = @("--pilot", "--arms", "A", "B", "--seeds", "12", "13", "--n-updates", $PilotUpdates, "--workers", $Workers)
+        $cliArgs = @("--pilot", "--arms", "A", "B", "--seeds", "12", "13", "--n-updates", $PilotUpdates, "--sync-every", $PilotSyncEvery, "--probe-every", $PilotProbeEvery, "--workers", $Workers)
     } else {
         if ($TrainUpdates -le 0) { Write-Error "TrainUpdates is unset: the dated amendment fixes it."; exit 1 }
         $cliArgs = @("--arms", "A", "B", "--seeds", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "--n-updates", $TrainUpdates, "--workers", $Workers)
