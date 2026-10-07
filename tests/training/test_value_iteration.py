@@ -165,9 +165,17 @@ def test_probe_restricts_the_gate_quantity_to_distances_7_to_11():
 def _tiny(tmp_path, n_updates, seed=0):
     judge = _judge(seed)
     probe = [(apply_move(SOLVED, a), 1) for a in range(3)]
+    # sync_every=3, not the plan's literal 2: with sync_every=2 the resume split at update 2
+    # lands exactly on a sync boundary (2 % 2 == 0), so the loop's own resync at the first
+    # resumed update immediately overwrites whatever jt resume-loading produced, before any
+    # train_step ever sees it. That masked the "resume re-syncs Jt from judge instead of loading
+    # jt.pt" mutation: confirmed empirically that test_resume_equals_an_uninterrupted_run PASSED
+    # even with that mutation applied, with sync_every=2. sync_every=3 does not divide the resume
+    # point evenly, so the wrongly-resynced jt survives into the first resumed train_step and the
+    # mutation is now observed (see the task report for the before/after run).
     return vi.train_judge(judge, "A", n_updates=n_updates, batch=8, max_len=3,
                           n_actions=N_ACTIONS, exclude=set(), probe=probe, seed=seed,
-                          sync_every=2, probe_every=2, draws=1, ckpt_dir=tmp_path,
+                          sync_every=3, probe_every=2, draws=1, ckpt_dir=tmp_path,
                           log=lambda *_: None), judge
 
 
