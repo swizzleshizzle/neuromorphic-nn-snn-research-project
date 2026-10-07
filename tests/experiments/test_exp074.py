@@ -148,3 +148,9 @@ def test_run_writes_gate_l_drift_and_readout(tmp_path):
     assert on_disk["encoder_drift"] > 0.0
     assert (tmp_path / "judge_W_s12" / "judge.pt").exists()
     assert rec["gate_l"] == on_disk["gate_l"]
+
+
+def test_relaunch_skips_runs_whose_record_exists(tmp_path):
+    """Catches a relaunch that resubmits finished cells and overwrites their records."""
+    (tmp_path / cells.record_name("A", 12)).write_text("{}")
+    assert train.pending_jobs(["W", "A"], [12, 13], tmp_path) == [("W", 12), ("W", 13), ("A", 13)]

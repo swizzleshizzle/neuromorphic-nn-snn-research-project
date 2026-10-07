@@ -94,6 +94,16 @@ def run(arm, seed, n_updates, batch, sync_every, probe_every, draws, out_dir) ->
     return rec
 
 
+def pending_jobs(arms, seeds, out_dir) -> list[tuple[str, int]]:
+    """(arm, seed) pairs, arms then seeds, whose record file does not exist yet.
+
+    A relaunch after an interrupted phase must not rerun a finished cell: it would resume at
+    update == n_updates, train nothing, and overwrite the good record with loss_last None.
+    """
+    return [(arm, seed) for arm in arms for seed in seeds
+            if not (Path(out_dir) / cells.record_name(arm, seed)).exists()]
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", nargs="+", default=list(cells.ARMS_TRAIN))
@@ -115,7 +125,11 @@ def main() -> None:
     if bad_arms:
         raise SystemExit(f"arms {bad_arms} outside {cells.ARMS_TRAIN}")
     check_seeds(args.seeds, args.pilot)
-    jobs = [(arm, seed) for arm in args.arms for seed in args.seeds]
+    jobs = pending_jobs(args.arms, args.seeds, args.out_dir)
+    for arm in args.arms:
+        for seed in args.seeds:
+            if (arm, seed) not in jobs:
+                print(f"skip arm {arm} seed {seed}: record exists", flush=True)
     print(f"EXP-074: {len(jobs)} training runs, {args.workers} workers, "
           f"pilot={args.pilot}, n_updates={args.n_updates}", flush=True)
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
@@ -125,7 +139,7 @@ def main() -> None:
         for i, f in enumerate(as_completed(futs), 1):
             r = f.result()
             print(f"  {i}/{len(jobs)}  arm {r['arm']} seed {r['seed']}  updates {r['updates']}  "
-                  f"loss_last {r['loss_last']:.6f}  wall_s {r['wall_s']:.1f}  "
+                  f"loss_last {r['loss_last'] if r['loss_last'] is None else format(r['loss_last'], '.6f')}  wall_s {r['wall_s']:.1f}  "
                   f"encoder_drift {r['encoder_drift']:.6f}  "
                   f"gate_l margin {r['gate_l']['margin']:.4f}", flush=True)
     print("done.")
