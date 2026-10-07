@@ -39,6 +39,11 @@ param(
 $PilotUpdates = 4000
 $PilotSyncEvery = 100
 $PilotProbeEvery = 250
+# 2026-10-07, pilot 2: the spec's pre-named mitigation for min-bias compression, jt_draws = 4,
+# everything else as pilot 1, into its own folder so pilot 1's records and resumable checkpoints
+# are untouched (train_judge resumes from state.json, so a shared folder would skip the run).
+$PilotDraws = 4
+$PilotOutDir = "experiments\073_learned_judge\outputs_pilot2"
 $TrainUpdates = 0
 
 $repo = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project"
@@ -92,7 +97,8 @@ $log = Join-Path $repo ("$exp\phase_" + $Phase + ".log")
 # Training phases: one train.py call, it manages its own worker pool.
 if ($Phase -eq "pilot" -or $Phase -eq "train") {
     if ($Phase -eq "pilot") {
-        $cliArgs = @("--pilot", "--arms", "A", "B", "--seeds", "12", "13", "--n-updates", $PilotUpdates, "--sync-every", $PilotSyncEvery, "--probe-every", $PilotProbeEvery, "--workers", $Workers)
+        $cliArgs = @("--pilot", "--arms", "A", "B", "--seeds", "12", "13", "--n-updates", $PilotUpdates, "--sync-every", $PilotSyncEvery, "--probe-every", $PilotProbeEvery, "--draws", $PilotDraws, "--out-dir", (Join-Path $repo $PilotOutDir), "--workers", $Workers)
+        $log = Join-Path $repo ("$exp\phase_pilot_draws" + $PilotDraws + ".log")
     } else {
         if ($TrainUpdates -le 0) { Write-Error "TrainUpdates is unset: the dated amendment fixes it."; exit 1 }
         $cliArgs = @("--arms", "A", "B", "--seeds", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "--n-updates", $TrainUpdates, "--workers", $Workers)
