@@ -137,3 +137,53 @@ def test_sync_target_survives_a_judge_that_already_ran_a_live_graph_forward():
     jt2 = vi.sync_target(judge)
     assert all(not p.requires_grad for p in jt2.parameters())
     assert all(torch.equal(p, q) for p, q in zip(judge.parameters(), jt2.parameters()))
+
+
+def test_spearman_known_values():
+    """Catches Pearson-on-values instead of ranks, and wrong tie handling."""
+    assert vi.spearman([1, 2, 3, 4], [10, 20, 30, 40]) == pytest.approx(1.0)
+    assert vi.spearman([1, 2, 3, 4], [40, 30, 20, 10]) == pytest.approx(-1.0)
+    assert vi.spearman([1, 2, 3, 4], [1, 4, 9, 1000]) == pytest.approx(1.0)
+    assert vi.spearman([1, 1, 2, 2], [1, 2, 3, 4]) == pytest.approx(0.8944, abs=1e-4)
+
+
+def test_probe_restricts_the_gate_quantity_to_distances_7_to_11():
+    """Catches Gate T computed over all distances (dominated by the easy shallow end)."""
+
+    class Fake(nn.Module):
+        def forward(self, states, generator):
+            # perfect below 7, inverted from 7 to 11
+            return torch.tensor([float(s[0]) for s in states])
+
+    probe = [((d if d < 7 else 18 - d,), d) for d in range(1, 12) for _ in range(3)]
+    out = vi.probe_judge(Fake(), probe, torch.Generator())
+    assert out["spearman_all"] > 0.5
+    assert out["spearman_7_11"] < -0.9
+    assert out["monotone_7_11"] is False
+
+
+def _tiny(tmp_path, n_updates, seed=0):
+    judge = _judge(seed)
+    probe = [(apply_move(SOLVED, a), 1) for a in range(3)]
+    return vi.train_judge(judge, "A", n_updates=n_updates, batch=8, max_len=3,
+                          n_actions=N_ACTIONS, exclude=set(), probe=probe, seed=seed,
+                          sync_every=2, probe_every=2, draws=1, ckpt_dir=tmp_path,
+                          log=lambda *_: None), judge
+
+
+def test_training_is_deterministic(tmp_path):
+    """Catches unseeded randomness (global torch RNG, Python's random module)."""
+    r1, j1 = _tiny(tmp_path / "a", 4)
+    r2, j2 = _tiny(tmp_path / "b", 4)
+    assert r1["loss_last"] == r2["loss_last"]
+    assert all(torch.equal(p, q) for p, q in zip(j1.parameters(), j2.parameters()))
+
+
+def test_resume_equals_an_uninterrupted_run(tmp_path):
+    """Catches a resume that restarts the RNGs or the target net (a Windows Update restart
+    would then silently change the run)."""
+    full, jf = _tiny(tmp_path / "full", 4)
+    _tiny(tmp_path / "split", 2)
+    resumed, jr = _tiny(tmp_path / "split", 4)
+    assert resumed["loss_last"] == full["loss_last"]
+    assert all(torch.equal(p, q) for p, q in zip(jf.parameters(), jr.parameters()))
