@@ -1,7 +1,7 @@
 # Session Handoff - 2026-10-07 - WEEK 27. EXP-070, 071, 072 done; look-ahead plus no-revisit moves the frontier.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
-> **906 tests, 884 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> **934 tests, 912 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
 > `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
 >
 > **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
@@ -47,6 +47,17 @@ both primaries CONFIRMED, every gate passed. The recipe holds at depths 7, 8 and
 2. **Make the no-revisit function learned or spiking** (e.g. in the hippocampal region).
 3. **Deeper or wider search with the same networks** (k = 4, or beam search), the cheapest way to
    push P3V further, though it scales as 6^k per move.
+
+## 2b. EXP-073 (stage 3, a learned judge) is BLOCKED on Michael, issue #14
+
+Michael chose stage 3. Built and merged (`9a92aff`); two pilots ran on seeds 12/13 (spec
+`docs/superpowers/specs/2026-10-07-exp073-learned-judge-design.md` sections 10 and 11). The judge
+orders positions well to about distance 6 and flattens beyond: Gate T is predicted to fail for both
+arms (spearman_7_11 about 0.29 / 0.25 against the 0.30 floor; mean J falls from 10 to 11). The
+pre-named fix, `jt_draws = 4`, did not change that. **No seed 0-11 has trained;
+`GATE_T_THRESHOLD` and `$TrainUpdates` are unset on purpose**, so the launcher refuses every
+claim-bearing phase. Options put to Michael: run and let Gate T void; amend the floor; or
+(recommended) a new spec with a bigger judge readout. Do not train until he answers.
 
 ## 3. Things learned this session that will bite again
 
