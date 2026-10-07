@@ -79,3 +79,41 @@ def test_make_judge_starts_from_the_seeds_e1_encoder():
     e1 = torch.load(cells.c70.published_config(7, 3).encoder_state_path, map_location="cpu")
     for k, v in j.sensory.state_dict().items():
         assert torch.equal(v, e1[k]), k
+
+
+evaluate = _load("exp073_evaluate", "evaluate.py")
+
+
+def test_negj_makes_the_critic_scorer_pick_the_lowest_j():
+    """Catches J used with the wrong sign (the search would head AWAY from solved)."""
+    head = torch.nn.Sequential(torch.nn.Linear(2, 1))
+    with torch.no_grad():
+        head[0].weight.copy_(torch.tensor([[1.0, 0.0]]))
+        head[0].bias.zero_()
+    neg = evaluate.NegJ(head)
+    concepts = torch.tensor([[5.0, 0.0], [0.1, 0.0], [3.0, 0.0]])
+    assert int(neg(concepts).squeeze(-1).argmax()) == 1
+
+
+def test_eval_arms_are_exactly_the_spec_list():
+    assert [a for a in evaluate.ARMS_EVAL] == ["J1V-A", "J1V-B", "J3V-A", "J3V-B", "P3V", "R3V"]
+
+
+def test_p3v_cell_reproduces_exp072_on_a_slice(tmp_path):
+    """THE GATE 0(b) CODE PATH: P3V through this harness on 3 states must equal a direct
+    evaluate_lookahead of EXP-072's configuration on the same states."""
+    from neuromorphic.training.lookahead import evaluate_lookahead
+    rec = evaluate.run_cell("P3V", 8, 0, tmp_path, limit_states=3)
+    agent, head, states, ts = cells.c70.load_cell(8, 0)
+    ref = evaluate_lookahead(agent, head, states[:3], depth=8, mode="P", k=3,
+                             generator=torch.Generator().manual_seed(ts), rng_seed=ts,
+                             imag_seed=ts, no_revisit=True)
+    for f in ("solved", "success_rate", "mean_steps", "eval_revisit_rate"):
+        assert rec[f] == ref[f], f
+
+
+def test_judge_cell_without_a_checkpoint_exits_naming_it(tmp_path, monkeypatch):
+    """Catches a J cell silently evaluating an untrained judge when its checkpoint is missing."""
+    monkeypatch.setattr(evaluate.cells, "ckpt_dir", lambda arm, seed: tmp_path / "nope" / f"{arm}{seed}")
+    with pytest.raises(SystemExit, match="judge.pt"):
+        evaluate.run_cell("J3V-A", 8, 0, tmp_path, limit_states=1)
