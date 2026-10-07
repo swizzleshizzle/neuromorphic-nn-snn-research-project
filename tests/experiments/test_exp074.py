@@ -154,3 +154,59 @@ def test_relaunch_skips_runs_whose_record_exists(tmp_path):
     """Catches a relaunch that resubmits finished cells and overwrites their records."""
     (tmp_path / cells.record_name("A", 12)).write_text("{}")
     assert train.pending_jobs(["W", "A"], [12, 13], tmp_path) == [("W", 12), ("W", 13), ("A", 13)]
+
+
+evaluate = _load("exp074_evaluate", "evaluate.py")
+
+
+class _FixedJ(torch.nn.Module):
+    def __init__(self, values):
+        super().__init__()
+        self.values = values
+
+    def forward(self, states, generator):
+        return torch.tensor(self.values[: len(states)])
+
+
+def test_judge_critic_reads_states_and_prefers_the_lowest_j():
+    """Catches J used with the wrong sign, or a critic the search would read via the concept."""
+    c = evaluate.JudgeCritic(_FixedJ([5.0, 0.1, 3.0]))
+    assert c.reads_states is True
+    assert int(c(["a", "b", "c"], generator=None).argmax()) == 1
+
+
+def test_eval_arms_and_rank_kinds_are_exactly_the_spec_lists():
+    assert list(evaluate.ARMS_EVAL) == ["J3V-W", "J3V-A", "J3V-B", "P3V", "R3V"]
+    assert list(evaluate.RANK_KINDS) == ["J-W", "J-A", "J-B", "P"]
+
+
+def test_p3v_cell_reproduces_exp072_on_a_slice(tmp_path):
+    """THE GATE 0(b) CODE PATH: P3V through this harness on 3 states must equal a direct
+    evaluate_lookahead of EXP-072's configuration on the same states."""
+    from neuromorphic.training.lookahead import evaluate_lookahead
+    rec = evaluate.run_cell("P3V", 8, 0, tmp_path, limit_states=3)
+    agent, head, states, ts = cells.c70.load_cell(8, 0)
+    ref = evaluate_lookahead(agent, head, states[:3], depth=8, mode="P", k=3,
+                             generator=torch.Generator().manual_seed(ts), rng_seed=ts,
+                             imag_seed=ts, no_revisit=True)
+    for f in ("solved", "success_rate", "mean_steps", "eval_revisit_rate"):
+        assert rec[f] == ref[f], f
+
+
+def test_judge_cell_without_a_checkpoint_exits_naming_it(tmp_path):
+    """Catches a J cell silently evaluating an untrained judge."""
+    with pytest.raises(SystemExit, match="judge.pt"):
+        evaluate.run_cell("J3V-A", 8, 0, tmp_path, limit_states=1, judge_dir=tmp_path / "nope")
+
+
+def test_a_wide_judge_drives_a_real_j3v_cell(tmp_path):
+    """Catches a W judge evaluated through the 64-unit concept (the EXP-073 NegJ path): the
+    192-input head cannot read a 64-wide concept, so this cell would crash or need a wrong
+    'fix'. Uses an untrained W checkpoint saved where the evaluator looks."""
+    jdir = tmp_path / "judges"
+    path = cells.ckpt_dir("W", 0, jdir)
+    path.mkdir(parents=True)
+    torch.save(cells.make_judge(0, "W").state_dict(), path / "judge.pt")
+    rec = evaluate.run_cell("J3V-W", 7, 0, tmp_path / "out", limit_states=1, judge_dir=jdir)
+    assert rec["arm"] == "J3V-W" and rec["n"] == 1 and rec["mode"] == "C"
+    assert (tmp_path / "out" / "exp074_J3V-W_d7_s0.json").exists()
