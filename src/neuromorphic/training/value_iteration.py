@@ -23,25 +23,57 @@ import torch.nn.functional as F
 from neuromorphic.envs.cube import SOLVED, apply_move, is_solved
 
 
+READOUTS = ("concept", "wide")
+
+
 class Judge(nn.Module):
-    def __init__(self, encoder_fn, sensory: nn.Module, T: int, content: int, hidden: int = 128):
+    def __init__(self, encoder_fn, sensory: nn.Module, T: int, content: int, hidden: int = 128,
+                 readout: str = "concept"):
         super().__init__()
+        if readout not in READOUTS:
+            raise ValueError(f"unknown readout {readout!r}; expected one of {READOUTS}")
         self.encoder_fn = encoder_fn
         self.sensory = sensory
         self.T = T
-        self.head = nn.Sequential(nn.Linear(content, hidden), nn.ReLU(), nn.Linear(hidden, 1))
+        self.readout = readout
+        n_in = content if readout == "concept" else content + sensory.fc1.out_features
+        self.head = nn.Sequential(nn.Linear(n_in, hidden), nn.ReLU(), nn.Linear(hidden, 1))
 
     def concept(self, states, generator):
         obs = torch.as_tensor(np.array(states), dtype=torch.long)
         spikes = self.encoder_fn(obs, T=self.T, generator=generator)
         return self.sensory(spikes).mean(dim=0)
 
+    def _wide(self, states, generator):
+        """Concept mean rate then hidden mean rate, from ONE encoding and ONE pass. Mirrors
+        SensoryCortex.forward step for step (reset, then fc1 -> lif1 -> fc2 -> lif2 per t)."""
+        obs = torch.as_tensor(np.array(states), dtype=torch.long)
+        spikes = self.encoder_fn(obs, T=self.T, generator=generator)
+        s = self.sensory
+        s.reset()
+        mem1, mem2 = s.mem1, s.mem2
+        hidden, concept = [], []
+        for t in range(spikes.shape[0]):
+            spk1, mem1 = s.lif1(s.fc1(spikes[t]), mem1)
+            spk2, mem2 = s.lif2(s.fc2(spk1), mem2)
+            hidden.append(spk1)
+            concept.append(spk2)
+        s.mem1, s.mem2 = mem1, mem2
+        return torch.cat([torch.stack(concept).mean(dim=0), torch.stack(hidden).mean(dim=0)],
+                         dim=1)
+
+    def features(self, states, generator):
+        if self.readout == "concept":
+            return self.concept(states, generator)
+        return self._wide(states, generator)
+
     def forward(self, states, generator):
-        return F.softplus(self.head(self.concept(states, generator))).squeeze(-1)
+        return F.softplus(self.head(self.features(states, generator))).squeeze(-1)
 
 
-def judge_from_brain(brain, hidden: int = 128) -> Judge:
-    return Judge(brain._encoder, copy.deepcopy(brain.sensory), brain.T, brain.content, hidden)
+def judge_from_brain(brain, hidden: int = 128, readout: str = "concept") -> Judge:
+    return Judge(brain._encoder, copy.deepcopy(brain.sensory), brain.T, brain.content, hidden,
+                 readout)
 
 
 def random_walk_states(n, max_len, rng, n_actions, exclude, *, start=SOLVED,
@@ -82,7 +114,7 @@ def sync_target(judge):
 
 
 def make_optimizer(judge, arm):
-    if arm == "A":
+    if arm in ("A", "W"):
         return torch.optim.Adam([{"params": judge.head.parameters(), "lr": 1e-3},
                                  {"params": judge.sensory.parameters(), "lr": 1e-4}])
     if arm == "B":
