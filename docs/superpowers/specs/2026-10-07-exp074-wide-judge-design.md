@@ -82,6 +82,11 @@ same settings on seeds 12 and 13. The pilot measures W's Gate L margin (section 
 and checks Gate E on W. **A dated amendment then sets W's Gate L threshold** (the form is fixed
 below) before any seed 0-11 trains.
 
+**Amendment 2026-10-07 (plan writing, before any pilot or seed 0-11 run):** the pilot also re-runs
+A and B on seeds 12 and 13 (6 runs, about 2 h at 6 workers). That gives Gate 0(c) on both control
+arms and lets every arm's Gate L threshold come from the PRODUCTION instrument rather than the
+diagnostic script; the section 6 calibration table is superseded wherever the two differ.
+
 ## 6. Gates
 
 **Gate L (training worked, in the quantity search uses), replaces EXP-073's Gate T. Per arm.**
