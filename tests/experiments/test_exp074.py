@@ -210,3 +210,81 @@ def test_a_wide_judge_drives_a_real_j3v_cell(tmp_path):
     rec = evaluate.run_cell("J3V-W", 7, 0, tmp_path / "out", limit_states=1, judge_dir=jdir)
     assert rec["arm"] == "J3V-W" and rec["n"] == 1 and rec["mode"] == "C"
     assert (tmp_path / "out" / "exp074_J3V-W_d7_s0.json").exists()
+
+
+agg = _load("exp074_aggregate", "aggregate.py")
+
+
+def _gates(**over):
+    g = {"gate0": True, "l": {"W": True, "A": True, "B": True},
+         "e": {"W": True, "A": True, "B": True},
+         "r": {("J-W", 9): True, ("J-A", 9): True, ("J-B", 9): True}}
+    g.update(over)
+    return g
+
+
+def _rates(w=0.2, a=0.1, p=0.05, seeds=range(12)):
+    return {("J3V-W", 9): {s: w + 0.001 * s for s in seeds},
+            ("J3V-A", 9): {s: a for s in seeds},
+            ("P3V", 9): {s: p for s in seeds}}
+
+
+def test_gate_l_needs_significance_and_the_threshold():
+    """Catches a gate that passes on a positive mean alone, or on significance alone."""
+    assert agg.gate_l_verdict([0.10] * 12, 0.073) is True
+    assert agg.gate_l_verdict([0.05] * 12, 0.073) is False           # significant, below bar
+    assert agg.gate_l_verdict([0.5, -0.4] * 6, 0.01) is False        # above bar, not significant
+
+
+def test_gate_e_per_arm():
+    """Catches a frozen W or A, and a leaky B."""
+    ok = agg.gate_e_verdicts({"W": [1.0] * 12, "A": [1.0] * 12, "B": [0.0] * 12})
+    assert ok == {"W": True, "A": True, "B": True}
+    bad = agg.gate_e_verdicts({"W": [1.0] * 11 + [0.0], "A": [1.0] * 12, "B": [0.0] * 11 + [1e-9]})
+    assert bad == {"W": False, "A": True, "B": False}
+
+
+def test_claims_compare_the_registered_arms_at_depth_9():
+    out = agg.primary_verdicts(_rates(), _gates(), range(12))
+    assert out["claim1"][0] == "CONFIRMED" and out["claim1"][3] > out["claim1"][4]
+    assert out["claim2"][0] == "CONFIRMED"
+    assert out["claim1"][4] == pytest.approx(0.05)    # P3V mean
+    assert out["claim2"][4] == pytest.approx(0.1)     # J3V-A mean
+
+
+@pytest.mark.parametrize("over,c1,c2", [
+    ({"gate0": False}, "VOID", "VOID"),
+    ({"l": {"W": False, "A": True, "B": True}}, "VOID", "VOID"),
+    ({"l": {"W": True, "A": False, "B": True}}, "CONFIRMED", "VOID"),
+    ({"e": {"W": False, "A": True, "B": True}}, "VOID", "VOID"),
+    ({"e": {"W": True, "A": False, "B": True}}, "CONFIRMED", "VOID"),
+    ({"r": {("J-W", 9): False, ("J-A", 9): True, ("J-B", 9): True}}, "VOID", "VOID"),
+    ({"r": {("J-W", 9): True, ("J-A", 9): False, ("J-B", 9): True}}, "CONFIRMED", "VOID"),
+])
+def test_claim_is_void_when_a_gate_in_its_contrast_fails(over, c1, c2):
+    out = agg.primary_verdicts(_rates(), _gates(**over), range(12))
+    assert (out["claim1"][0], out["claim2"][0]) == (c1, c2)
+
+
+def test_sensitivity_drops_exactly_seeds_0_and_3_and_uses_exact_flips():
+    """Catches the sensitivity line dropping the wrong seeds, or reusing a 12-seed null."""
+    r = agg.sensitivity_rates(_rates())
+    assert sorted(r[("P3V", 9)]) == [1, 2, 4, 5, 6, 7, 8, 9, 10, 11]
+    out = agg.primary_verdicts(r, _gates(), sorted(r[("P3V", 9)]))
+    assert out["claim1"][1] == pytest.approx(1 / 1024)
+
+
+def test_gate0c_compares_the_full_probe_history():
+    """Catches Gate 0(c) passing on the final probe alone when an earlier probe differs."""
+    rec = {"probes": [{"spearman_7_11": 0.1}, {"spearman_7_11": 0.2}],
+           "encoder_drift": 1.0}
+    same = json.loads(json.dumps(rec))
+    diff = json.loads(json.dumps(rec))
+    diff["probes"][0]["spearman_7_11"] = 0.1000001
+    assert agg.gate0c_verdict({("A", 12): same}, {("A", 12): rec}) == "PASS"
+    assert agg.gate0c_verdict({("A", 12): diff}, {("A", 12): rec}) == "FAIL"
+    assert agg.gate0c_verdict({}, {("A", 12): rec}) == "FAIL"
+
+
+def test_gate_l_threshold_is_unset_until_the_controller_amends():
+    assert agg.GATE_L_THRESHOLD is None
