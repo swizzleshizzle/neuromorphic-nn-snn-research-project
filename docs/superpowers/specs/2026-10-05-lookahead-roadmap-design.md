@@ -17,8 +17,8 @@ report (`docs/writeup/report.md`) continues as documentation, on a parallel trac
 
 | depth | success | source |
 |---|---|---|
-| 4 | ~0.84 | EXP-047 |
-| 5 | ~0.69 | EXP-047 |
+| 4 | 0.5351 | EXP-042 (capped arm) |
+| 5 | 0.3412 | EXP-043 |
 | 6 | ~0.32 | EXP-046 |
 | 7 | 0.2004 | EXP-053 arm B |
 | 8 | 0.0783 | EXP-062 |
@@ -26,7 +26,18 @@ report (`docs/writeup/report.md`) continues as documentation, on a parallel trac
 
 Only **159,120 of 3,674,160 states (4.3%)** lie within 8 moves of solved. The modal distance of a
 random 2x2 is 11 and the maximum is 14 (6-move quarter-turn set). Weighting the table above by the
-shell sizes, the current solver handles a uniformly random cube **well under 1% of the time**.
+shell sizes, the current solver handles a uniformly random cube **under 1% of the time, about
+0.7%**, even counting every state within 3 moves of solved as solved and every state beyond depth
+9 as unsolved.
+
+> **CORRECTION 2026-10-07.** This table first gave depth 4 as ~0.84 and depth 5 as ~0.69, citing
+> EXP-047. Those were EXP-047's **probe accuracies** after fine-tuning (0.8396 and 0.6850, its
+> probe-depth table), not policy success; EXP-047 measured success at depth 6 only. The rows now
+> cite the committed success rates. The random-cube figure was re-weighted with them: 0.70%,
+> against 0.72% from the old rows, so its conclusion stands but "well under" overstated it. Shell
+> sizes: depths 0 to 6 from `road-to-a-solved-cube`, depths 8 and 9 from the EXP-062 spec, depth 7
+> as the remainder of the 159,120 states within 8 moves. Nothing in EXP-070 or EXP-071 used these
+> two rows.
 
 **Why more of the same will not get there.** The budget law (EXP-044/045/046, held out of sample
 by EXP-062) prices success at about 0.22 per decade of training spend. Depth 11 costs about 33 days
