@@ -1,7 +1,7 @@
-# Session Handoff - 2026-10-06 - WEEK 27. EXP-070 and EXP-071 done; no-revisit plus look-ahead is the best arm.
+# Session Handoff - 2026-10-07 - WEEK 27. EXP-070, 071, 072 done; look-ahead plus no-revisit moves the frontier.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
-> **893 tests, 871 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> **906 tests, 884 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
 > `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
 >
 > **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
@@ -36,12 +36,17 @@ networks with 1-3 move look-ahead, 324 cells, nothing trained.
 - **Best arm: P3V at 0.3217** (policy look-ahead plus no-revisit), +0.0762 over P3 as a
   SECONDARY, 12/12 seeds. Search scaffolding around the frozen network, not network learning.
 
+**EXP-072 then ran (2026-10-07), Michael's option 1:** `experiments/072_p3v_frontier/RESULTS.md`.
+P3V at depth 8 is **0.1496** (P3 0.0854, reflex 0.0688) and at depth 9 **0.0629** (reflex 0.0171);
+both primaries CONFIRMED, every gate passed. The recipe holds at depths 7, 8 and 9.
+
 **Decision waiting on Michael**, each a short spec with R3V as its matched floor:
 
-1. **P3V at depths 8 and 9** (re-evaluation only, no critic needed): does the frontier move?
-2. **Stage 3:** train a judge from its own look-ahead (DeepCubeA-style), the route to a learned
-   "how close am I".
-3. **Make the no-revisit function learned or spiking** (e.g. in the hippocampal region).
+1. **Stage 3:** train a judge from its own look-ahead (DeepCubeA-style), the route to a learned
+   "how close am I" and to scrambles beyond depth 9.
+2. **Make the no-revisit function learned or spiking** (e.g. in the hippocampal region).
+3. **Deeper or wider search with the same networks** (k = 4, or beam search), the cheapest way to
+   push P3V further, though it scales as 6^k per move.
 
 ## 3. Things learned this session that will bite again
 

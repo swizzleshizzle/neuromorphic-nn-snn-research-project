@@ -305,6 +305,10 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   CONFIRMED (G0V +0.0279, p 0.0115), and the best measured arm is P3V at **0.3217** (secondary,
 >   +0.0762 over P3). The memory row below has therefore been tested in its simplest, non-spiking
 >   form and works.
+> - **2026-10-07, EXP-072 (depths 8 and 9):** P3V holds where the reflex fails. Both primaries
+>   CONFIRMED: depth 8 P3V 0.1496 vs P3 0.0854 (+0.0642, p 0.0005); depth 9 P3V 0.0629 vs G0
+>   0.0171 (+0.0458, p 0.0002, off the floor). Still search scaffolding on frozen networks; a
+>   random 2x2 (usually 11 moves out) remains out of reach.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
