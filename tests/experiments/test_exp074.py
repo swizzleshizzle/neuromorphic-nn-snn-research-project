@@ -318,3 +318,19 @@ def test_depth_11_p3v_and_wide_cells_run(tmp_path):
     rec = evaluate.run_cell("J3V-W", 11, 0, tmp_path / "out", limit_states=1, judge_dir=jdir)
     assert rec["n"] == 1 and rec["depth"] == 11
     assert (tmp_path / "out" / "exp074_J3V-W_d11_s0.json").exists()
+
+
+def _train_rec(arm="W", **over):
+    rec = {"arm": arm, "seed": 3, "readout": agg.READOUT[arm], **agg.TRAIN_SETTINGS}
+    rec.update(over)
+    return rec
+
+
+def test_train_records_at_the_wrong_settings_are_refused():
+    """Catches a record trained at a smoke batch or with the wrong readout entering a verdict."""
+    for arm in ("W", "A", "B"):
+        agg.check_train_record(_train_rec(arm))
+    with pytest.raises(SystemExit, match="batch"):
+        agg.check_train_record(_train_rec(batch=8))
+    with pytest.raises(SystemExit, match="readout"):
+        agg.check_train_record(_train_rec("W", readout="concept"))

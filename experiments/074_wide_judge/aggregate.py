@@ -49,6 +49,29 @@ _KIND = {"J3V-W": "J-W", "J3V-A": "J-A", "J3V-B": "J-B"}
 _TRAIN_ARM = {"J3V-W": "W", "J3V-A": "A", "J3V-B": "B"}
 
 
+TRAIN_SETTINGS = {"n_updates": 4000, "batch": 1000, "sync_every": 100, "probe_every": 250,
+                  "draws": 1}
+READOUT = {"W": "wide", "A": "concept", "B": "concept"}
+
+
+def check_train_record(rec) -> None:
+    """A training record made at other than the spec's settings (section 4) or with the wrong
+    readout may not enter a verdict."""
+    who = f"arm {rec.get('arm')} seed {rec.get('seed')}"
+    for k, v in TRAIN_SETTINGS.items():
+        if rec.get(k) != v:
+            raise SystemExit(f"training record for {who}: {k} is {rec.get(k)!r}, spec says {v!r}")
+    if rec.get("readout") != READOUT[rec["arm"]]:
+        raise SystemExit(f"training record for {who}: readout is {rec.get('readout')!r}, "
+                         f"spec says {READOUT[rec['arm']]!r}")
+
+
+def _read_train(path: Path) -> dict:
+    r = _read(path)
+    check_train_record(r)
+    return r
+
+
 def gate_l_verdict(margins: list[float], threshold: float) -> bool:
     """Per-seed margin > 0 by exact one-sided sign-flip (p < 0.05) AND mean margin >= threshold."""
     return bool(one_sided_p(margins) < GATE_L_ALPHA and st.mean(margins) > 0
@@ -130,7 +153,7 @@ def main() -> None:
         raise SystemExit("GATE_L_THRESHOLD is unset. The controller sets it in the dated "
                          "post-pilot amendment; no verdict may be read before then.")
 
-    train = {(a, s): _read(args.out_dir / cells.record_name(a, s))
+    train = {(a, s): _read_train(args.out_dir / cells.record_name(a, s))
              for a in cells.ARMS_TRAIN for s in SEEDS}
     rank = {(k, d): [_read(args.out_dir / f"exp074_rank_{k}_d{d}_s{s}.json") for s in SEEDS]
             for k in ("J-W", "J-A", "J-B", "P") for d in RANK_DEPTHS}
@@ -142,7 +165,7 @@ def main() -> None:
                               for a in cells.ARMS_TRAIN})
     gate_r = {(k, d): bool(a71.gate_r_verdict(rank[(k, d)], "hit", "chance")[0])
               for k in ("J-W", "J-A", "J-B") for d in RANK_DEPTHS}
-    mine0c = {(a, s): _read(args.pilot_dir / cells.record_name(a, s))
+    mine0c = {(a, s): _read_train(args.pilot_dir / cells.record_name(a, s))
               for a in ("A", "B") for s in cells.PILOT_SEEDS}
     ref0c = {(a, s): _read(EXP073_OUT / f"exp073_train_{a}_s{s}.json")
              for a in ("A", "B") for s in cells.PILOT_SEEDS}
@@ -192,14 +215,16 @@ def main() -> None:
         if sv != v:
             print("    SENSITIVITY DISAGREES WITH THE VERDICT: RESULTS.md must lead with this.")
 
-    print("\nSecondary (a pattern, never confirmations; labels for reference only):")
+    print("\nSecondary (a pattern, never confirmations):")
     for d in RANK_DEPTHS:
         pairs = [("J3V-A", "P3V"), ("J3V-A", "J3V-B")] if d == 9 else \
                 [("J3V-W", "P3V"), ("J3V-W", "J3V-A")]
         for a, b in pairs:
             ok = gate0_ok and _arm_ok(gates, a, d) and (b not in _TRAIN_ARM or _arm_ok(gates, b, d))
             v, p, diff, am, bm = contrast(rates, (a, d), (b, d), ok)
-            print(f"  d{d} {a} - {b}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f} ({v})")
+            tag = "VOID (gate)" if v == "VOID" else (
+                "positive pattern" if diff > 0 else "non-positive pattern")
+            print(f"  d{d} {a} - {b}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f} ({tag})")
 
     print("\nExploratory, depth 11 (no claims):")
     print("  " + "  ".join(f"{a} {st.mean(rates[(a, 11)].values()):.4f}"
