@@ -237,3 +237,23 @@ that wave, cause not checked; these are not per-arm costs).
 
 Not a claim: W's margin exceeds A's on 12 of 12 seeds (mean +0.059). The claims are about solved
 cubes at depth 9 (section 8), which no cell has yet measured.
+
+## 13. Record 2026-10-08: Gate R and the policy's leaf reference (before any J evaluation cell)
+
+Rank phase, laptop, checkout `48b3f4c`, 144 cells (P, J-W, J-A, J-B x depths 7-9 x seeds 0-11),
+200 held-out states each. Records `experiments/074_wide_judge/outputs/exp074_rank_*.json`.
+Mean hit / mean chance over 12 seeds; every J cell passes Gate R (exact sign-flip p 0.00024):
+
+| depth | P (reference) | J-W | J-A | J-B |
+|---|---|---|---|---|
+| 7 | 0.4458 / 0.1344 | 0.7063 | 0.5458 | 0.3450 |
+| 8 | 0.3446 / 0.1486 | 0.3658 | 0.3150 | 0.3021 |
+| 9 | 0.2792 / 0.1751 | 0.3092 | 0.3088 | 0.2554 |
+
+**Launcher defect found here.** The phase printed "144 cells exited non-zero" while writing 144
+complete records. `Start-Process -PassThru` reports `ExitCode` as `$null` unless the process handle
+is read, so the launcher counted every cell as failed whatever it did (reproduced on the laptop:
+exit 0 and exit 3 both read `$null` without the handle, 0 and 3 with it). The records were checked
+directly instead: all 144 parse, match their filenames, hold 200 states, and are written as each
+cell's last step. Fixed in `5ca5ead` before any evaluation phase. EXP-073's launcher has the same
+pattern; it never ran an evaluation phase.
