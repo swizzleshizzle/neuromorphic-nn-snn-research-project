@@ -82,8 +82,14 @@ def imagined_logp(agent, head, states, *, generator):
 
 
 def imagined_values(agent, critic, states, *, generator):
-    """The critic's value for many states, in ONE batched brain call, recall off."""
+    """The critic's value for many states, in ONE batched call, recall off.
+
+    A critic with `reads_states = True` (EXP-074's judge) is called on the states themselves; it
+    owns its own encoder and readout. Any other critic reads `agent.step`'s concept as before.
+    """
     with torch.no_grad():
+        if getattr(critic, "reads_states", False):
+            return critic(states, generator=generator)
         out = agent.step(np.array(states), recall=False, generator=generator)
         return critic(out["concept"].mean(dim=0)).squeeze(-1)
 
