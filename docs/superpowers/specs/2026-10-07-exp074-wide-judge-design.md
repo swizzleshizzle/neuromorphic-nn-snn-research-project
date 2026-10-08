@@ -226,7 +226,8 @@ updates and the guard relaunches after the nightly restart.
 36 runs (W, A, B x seeds 0-11), laptop, checkout `cf2a3d7`, 12 workers, three waves, about 14 h,
 no relaunches. Records: `experiments/074_wide_judge/outputs/exp074_train_*.json`; every one passes
 `check_train_record`. Mean wall time per run: W 16,901 s, A 14,766 s, B 20,900 s (wave order W, A, B;
-the B wave shared the machine with other load, so these are not per-arm costs).
+B is the cheapest arm per update in the pilot, so its longer wave reflects machine conditions during
+that wave, cause not checked; these are not per-arm costs).
 
 | arm | mean Gate L margin (12 seeds) | threshold | sign-flip p | Gate L | Gate E |
 |---|---|---|---|---|---|
