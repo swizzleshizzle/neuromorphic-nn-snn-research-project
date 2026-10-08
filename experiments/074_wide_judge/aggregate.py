@@ -40,7 +40,10 @@ EXP073_OUT = REPO / "experiments" / "073_learned_judge" / "outputs"
 # Set ONLY by the controller's dated amendment, after the pilot and before any seed 0-11 trains:
 # {"W": float, "A": float, "B": float}, each half that arm's mean pilot Gate L margin (spec
 # section 6). None blocks every verdict. Code never chooses it.
-GATE_L_THRESHOLD: dict | None = None
+# Amendment 2026-10-08 (spec section 11): half the mean of the seed 12 and 13 margins in
+# outputs_pilot, measured by the production instrument.
+GATE_L_THRESHOLD: dict | None = {"W": 0.10183333333333333, "A": 0.07283333333333333,
+                                 "B": 0.03683333333333332}
 GATE_L_ALPHA = 0.05
 
 J_ARMS = ("J3V-W", "J3V-A", "J3V-B")

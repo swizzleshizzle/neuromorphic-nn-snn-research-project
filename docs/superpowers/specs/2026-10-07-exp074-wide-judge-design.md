@@ -185,3 +185,38 @@ detectable effect after evaluation from the measured paired sd.
 A wider or retrained sensory region (option 3, after this answers whether readout width matters).
 3x3. A learned no-revisit rule. Using J to train the policy. A judge fitted on true distances is a
 diagnostic only and never an arm.
+
+## 11. Amendment 2026-10-08: pilot results and Gate L thresholds (before any seed 0-11 trains)
+
+The pilot (section 5 as amended: W, A and B on seeds 12 and 13, section 4's settings, 6 workers,
+laptop, checkout `29fab9f`) finished 2026-10-08. Records: `experiments/074_wide_judge/outputs_pilot/`.
+Every record passes `check_train_record` (section 4 settings, right readout).
+
+**Gate 0(c): PASS.** A and B on seeds 12 and 13 reproduce EXP-073 pilot 1's records'
+probe histories exactly (all 17 probes, all four runs, `gate0c_verdict`). The concept path is
+byte-identical to EXP-073, so arms A and B here are EXP-073's arms.
+
+**Gate E on the pilot:** encoder drift W 7.27 and 8.54, A 8.89 and 9.11, B exactly 0.0 and 0.0.
+
+**Gate L from the production instrument** (`gate_l.leaf_rank_margin`, 250 probe states):
+
+| arm | margin s12 | margin s13 | mean | threshold (b) = half the mean |
+|---|---|---|---|---|
+| W | 0.2639 | 0.1434 | 0.2037 | **0.10183** |
+| A | 0.1479 | 0.1434 | 0.1457 | **0.07283** |
+| B | 0.1039 | 0.0434 | 0.0737 | **0.03683** |
+
+A and B match section 6's diagnostic calibration to the third decimal; these values supersede it.
+`aggregate.GATE_L_THRESHOLD` holds the exact halves and a test pins them to the committed records.
+W's and A's seed 13 margins are equal (99 of 250 hits each) by coincidence: they differ at every
+distance. Maximum attainable margin is still about 0.75, so (b) can pass for every arm.
+
+Not a verdict, recorded for context: final spearman_7_11 W 0.305 and 0.248, A 0.314 and 0.264,
+B 0.267 and 0.247. On two seeds W's leaf ranking is better than A's on one and equal on the other.
+
+**Throughput and memory.** Wall time per run at 6 workers: W 8,160 s (2.04 s/update), A 7,800 s
+(1.95), B 7,180 s (1.79). Per-worker working set 0.69 to 0.94 GB, about 4.5x the 195 MB CLAUDE.md
+records for cube evaluation workers. **Training uses 12 workers** (about 11 GB), not 20: three
+waves of 12. Per-update time at 12 workers is unmeasured; at 1.5x the pilot's it is about
+3 x 4000 x 3 s = **10 h**, at the pilot's own rate about 7 h. Runs bank a checkpoint every 250
+updates and the guard relaunches after the nightly restart.

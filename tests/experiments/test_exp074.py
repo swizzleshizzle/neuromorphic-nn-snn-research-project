@@ -286,8 +286,15 @@ def test_gate0c_compares_the_full_probe_history():
     assert agg.gate0c_verdict({}, {("A", 12): rec}) == "FAIL"
 
 
-def test_gate_l_threshold_is_unset_until_the_controller_amends():
-    assert agg.GATE_L_THRESHOLD is None
+def test_gate_l_threshold_is_half_the_mean_pilot_margin():
+    """Catches a threshold typed in by hand that drifts from the committed pilot records it is
+    defined by (spec section 11), or an arm left out."""
+    pilot = EXP / "outputs_pilot"
+    assert set(agg.GATE_L_THRESHOLD) == {"W", "A", "B"}
+    for arm, thr in agg.GATE_L_THRESHOLD.items():
+        m = [json.loads((pilot / f"exp074_train_{arm}_s{s}.json").read_text())["gate_l"]["margin"]
+             for s in (12, 13)]
+        assert abs(thr - (m[0] + m[1]) / 4) < 1e-12
 
 
 def test_unknown_depth_is_refused():
