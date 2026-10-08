@@ -140,7 +140,12 @@ foreach ($j in $jobs) {
     $running = @($running | Where-Object { -not $_.HasExited })
     & $stamp "start $($j[0])" | Out-Null
     $argList = @("-u", "$exp\evaluate.py") + @($j[2..($j.Count - 1)] | ForEach-Object { "$_" })
-    $running += Start-Process -FilePath $py -ArgumentList $argList -PassThru -NoNewWindow -WorkingDirectory $repo
+    # Read .Handle at once: without it Windows PowerShell 5.1 reports ExitCode as $null after the
+    # process exits, $null -ne 0 is true, and every cell counts as failed whatever it did
+    # (measured 2026-10-08: the rank phase reported 144 of 144 failed with 144 good records).
+    $proc = Start-Process -FilePath $py -ArgumentList $argList -PassThru -NoNewWindow -WorkingDirectory $repo
+    $null = $proc.Handle
+    $running += $proc
 }
 while (@($running | Where-Object { -not $_.HasExited }).Count -gt 0) { Start-Sleep -Seconds 5 }
 foreach ($p in $running) { if ($p.ExitCode -ne 0) { $failed++ } }
