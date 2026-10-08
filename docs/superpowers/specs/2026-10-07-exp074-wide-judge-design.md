@@ -220,3 +220,19 @@ records for cube evaluation workers. **Training uses 12 workers** (about 11 GB),
 waves of 12. Per-update time at 12 workers is unmeasured; at 1.5x the pilot's it is about
 3 x 4000 x 3 s = **10 h**, at the pilot's own rate about 7 h. Runs bank a checkpoint every 250
 updates and the guard relaunches after the nightly restart.
+
+## 12. Record 2026-10-08: training finished, Gates L and E (before any rank or J evaluation cell)
+
+36 runs (W, A, B x seeds 0-11), laptop, checkout `cf2a3d7`, 12 workers, three waves, about 14 h,
+no relaunches. Records: `experiments/074_wide_judge/outputs/exp074_train_*.json`; every one passes
+`check_train_record`. Mean wall time per run: W 16,901 s, A 14,766 s, B 20,900 s (wave order W, A, B;
+the B wave shared the machine with other load, so these are not per-arm costs).
+
+| arm | mean Gate L margin (12 seeds) | threshold | sign-flip p | Gate L | Gate E |
+|---|---|---|---|---|---|
+| W | 0.2243 (0.197 to 0.260) | 0.1018 | 0.00024 | PASS | PASS |
+| A | 0.1653 (0.104 to 0.211) | 0.0728 | 0.00024 | PASS | PASS |
+| B | 0.1159 (0.099 to 0.144) | 0.0368 | 0.00024 | PASS | PASS (drift exactly 0) |
+
+Not a claim: W's margin exceeds A's on 12 of 12 seeds (mean +0.059). The claims are about solved
+cubes at depth 9 (section 8), which no cell has yet measured.
