@@ -2,8 +2,9 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 3 (Rubik's Cube capstone), Week 24. 63 numbered experiments.
-**Capstone target:** *I Attempted to Build a Brain in 12 Months*
+**Status:** Phase 4. 73 numbered experiments, 56 with a committed results file.
+**Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
+**The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
 ---
 
@@ -36,7 +37,28 @@ depth from 3 down the table is scored on held-out states the policy never traine
 | 3 | **50.0%** | held-out | 1.4% | EXP-035, up from 2.2% with no architectural change |
 | 6 | **35.3%** | held-out | 0.1% | EXP-049 |
 | 7 | **20.0%** | held-out | **0.0000** | EXP-053, replicated by EXP-060 |
-| 8 | **7.8%** | held-out | **0.0000** | EXP-062, the current frontier |
+| 8 | **7.8%** | held-out | **0.0000** | EXP-062, the frontier for a trained policy alone |
+
+### Look-ahead around the trained networks (Phase 4)
+
+The table above is the trained policy acting on reflex, one forward pass per move. Phase 4 asks
+whether a search wrapped around the same frozen networks goes further
+(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`). The best configuration so far
+looks three moves ahead, scores the candidates with the policy head, and refuses to re-enter a
+state it has already visited:
+
+| scramble depth | reflex policy | look-ahead with no-revisit | verdict | source |
+|---|---|---|---|---|
+| 7 | 0.2067 | 0.3217 | secondary, read as a pattern | EXP-071 |
+| 8 | 0.0688 | **0.1496** | the primary compared it with look-ahead without the rule (0.0854): **confirmed**, p 0.0005 | EXP-072 |
+| 9 | 0.0171 | **0.0629** | **confirmed**, p 0.0002, 12 of 12 seeds | EXP-072 |
+
+The reflex column is re-evaluated on the same evaluation stream as the look-ahead arms, which is
+why it differs slightly from the published numbers above (`docs/reproducibility-audit.md`).
+**This is search scaffolding, not learning:** a simulator to imagine moves, a three-move tree and a
+hand-coded table of visited states. Nothing was trained, and the one learned judge tried so far
+(the critic) made things worse (EXP-071). A random 2x2 is usually 11 moves from solved, so the goal
+is still out of reach.
 
 ### What moved the needle
 
@@ -59,14 +81,15 @@ depth from 3 down the table is scored on held-out states the policy never traine
   (EXP-063). That last arm was built as a ceiling so the negative would be decisive.
 - **The neuromorphic claim for the credit-assignment stage is refuted.** The `neuromod`
   neuromodulatory bus was made load-bearing and bought nothing measurable (EXP-053).
-- **The stated capstone deliverable is priced out on evidence.** Depth-11 random scrambles would
+- **More training of the reflex policy will not reach the goal.** Depth-11 random scrambles would
   cost about **33 days of compute per seed** (EXP-062). Nothing about it requires new science; the
-  arithmetic is what stops it.
+  arithmetic is what stops it, which is why Phase 4 turned to look-ahead.
 - **Five measurement instruments were retired**, including the probe that carried most mechanism
   claims through weeks 17 to 20. Each worked as a threshold and failed as a gradient. See
   `docs/retired-instruments.md`.
 
-**Full audit, graded criterion by criterion: `docs/phase3-honest-assessment.md`.** The short
+**Full account: [`docs/writeup/report.md`](docs/writeup/report.md).** The Phase 3 audit, graded
+criterion by criterion, is `docs/phase3-honest-assessment.md`. The short
 version is that almost every architectural idea lost to a training idea, and the project's main
 achievement is that it kept finding that out instead of not finding it out.
 
@@ -199,8 +222,8 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 0: Foundations | Apr–May 2026 | NN concepts, PyTorch, snnTorch tutorials, RL basics | Complete |
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
-| 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | **In progress.** 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Documentation, write-up, public release | Not started |
+| 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, EXP-073 (a learned judge) in preparation |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
