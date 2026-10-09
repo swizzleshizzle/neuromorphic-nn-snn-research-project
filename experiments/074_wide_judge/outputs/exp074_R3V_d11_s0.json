@@ -1,0 +1,20 @@
+{
+ "arm": "R3V",
+ "depth": 11,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "git_commit": "163e87a96ae523ae105afecd1580825804faae20",
+ "goal_fired_frac": 0.0,
+ "greedy_modal_action_frac": 0.273,
+ "k": 3,
+ "limit_states": null,
+ "mean_steps": 0.0,
+ "mode": "R",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.0,
+ "seed": 0,
+ "solved": 0,
+ "success_rate": 0.0,
+ "wall_s": 882.2
+}

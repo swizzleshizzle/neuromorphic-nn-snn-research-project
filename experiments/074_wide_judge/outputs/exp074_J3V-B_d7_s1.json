@@ -1,0 +1,20 @@
+{
+ "arm": "J3V-B",
+ "depth": 7,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "git_commit": "163e87a96ae523ae105afecd1580825804faae20",
+ "goal_fired_frac": 0.06843971631205674,
+ "greedy_modal_action_frac": 0.3322955802367567,
+ "k": 3,
+ "limit_states": null,
+ "mean_steps": 7.9375,
+ "mode": "C",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.8818897637795275,
+ "seed": 1,
+ "solved": 64,
+ "success_rate": 0.32,
+ "wall_s": 1000.1
+}

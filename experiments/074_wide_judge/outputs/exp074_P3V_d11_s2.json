@@ -1,0 +1,20 @@
+{
+ "arm": "P3V",
+ "depth": 11,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "git_commit": "163e87a96ae523ae105afecd1580825804faae20",
+ "goal_fired_frac": 0.004232164449818622,
+ "greedy_modal_action_frac": 0.6285392983738118,
+ "k": 3,
+ "limit_states": null,
+ "mean_steps": 19.571428571428573,
+ "mode": "P",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.5620437956204379,
+ "seed": 2,
+ "solved": 7,
+ "success_rate": 0.035,
+ "wall_s": 2705.4
+}
