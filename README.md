@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 4. 73 numbered experiments, 56 with a committed results file.
+**Status:** Phase 4. 74 numbered experiments, 58 with a committed results file.
 **Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
 **The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
@@ -42,23 +42,31 @@ depth from 3 down the table is scored on held-out states the policy never traine
 ### Look-ahead around the trained networks (Phase 4)
 
 The table above is the trained policy acting on reflex, one forward pass per move. Phase 4 asks
-whether a search wrapped around the same frozen networks goes further
-(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`). The best configuration so far
-looks three moves ahead, scores the candidates with the policy head, and refuses to re-enter a
-state it has already visited:
+whether a search wrapped around the same networks goes further
+(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`). Every search below looks three
+moves ahead and refuses to re-enter a state it has already visited; what differs is the judge that
+scores the candidates:
 
-| scramble depth | reflex policy | look-ahead with no-revisit | verdict | source |
+| scramble depth | reflex policy | judged by the policy head | judged by a learned judge | source |
 |---|---|---|---|---|
-| 7 | 0.2067 | 0.3217 | secondary, read as a pattern | EXP-071 |
-| 8 | 0.0688 | **0.1496** | the primary compared it with look-ahead without the rule (0.0854): **confirmed**, p 0.0005 | EXP-072 |
-| 9 | 0.0171 | **0.0629** | **confirmed**, p 0.0002, 12 of 12 seeds | EXP-072 |
+| 7 | 0.2067 | 0.3217 | **0.7908** | EXP-071, EXP-074 |
+| 8 | 0.0688 | 0.1496 | **0.3792** | EXP-072, EXP-074 |
+| 9 | 0.0171 | 0.0629 | **0.1933** | EXP-072, EXP-074 |
+| 11 (exploratory) | not run | 0.0308 | **0.1013** | EXP-074 |
 
-The reflex column is re-evaluated on the same evaluation stream as the look-ahead arms, which is
-why it differs slightly from the published numbers above (`docs/reproducibility-audit.md`).
-**This is search scaffolding, not learning:** a simulator to imagine moves, a three-move tree and a
-hand-coded table of visited states. Nothing was trained, and the one learned judge tried so far
-(the critic) made things worse (EXP-071). A random 2x2 is usually 11 moves from solved, so the goal
-is still out of reach.
+Pre-registered and **confirmed**: the policy-judged search beats the same search without the
+no-revisit rule at depth 8 (p 0.0005) and the reflex at depth 9 (p 0.0002, 12 of 12 seeds) (EXP-072);
+the learned judge beats the policy-judged search at depth 9 (+0.1304, p 0.0002, 12 of 12 seeds) and
+beats the same judge reading only the 64-unit concept (+0.0642, p 0.0010) (EXP-074). Depths 7 and 8
+of the learned-judge column are secondaries, and depth 11 is exploratory. Two of EXP-074's
+evaluation seeds were looked at before its spec was written; both claims hold with them dropped.
+
+The learned judge reads all 192 sensory neurons and was trained by value iteration from its own
+look-ahead, never from the true distances, with the spiking encoder trained beneath it. The search
+around it is still hand-coded: a simulator, a three-move tree and a visited-state table. The reflex
+column is re-evaluated on the same evaluation stream as the search arms, which is why it differs
+slightly from the published numbers above (`docs/reproducibility-audit.md`). A random 2x2 is
+usually 11 moves from solved, and about one in ten of those is solved so far.
 
 ### What moved the needle
 
@@ -223,7 +231,7 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
 | 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, EXP-073 (a learned judge) in preparation |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, and a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9 |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
