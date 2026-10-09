@@ -218,3 +218,74 @@ def test_run_writes_gate_l_drift_width_and_readout(tmp_path):
     assert on_disk["encoder_drift"] > 0.0
     assert (tmp_path / "judge_X_s12" / "judge.pt").exists()
     assert rec["gate_l"] == on_disk["gate_l"]
+
+
+evaluate = _load("exp075_evaluate", "evaluate.py")
+
+
+def _fake_judge_ckpt(jdir, arm, seed):
+    path = cells.ckpt_dir(arm, seed, jdir)
+    path.mkdir(parents=True)
+    judge = cells.build_judge(seed, arm, cells.fresh_sensory(arm, seed))
+    torch.save(judge.state_dict(), path / "judge.pt")
+    return judge
+
+
+def test_eval_arms_and_rank_kinds_are_the_spec_lists():
+    assert list(evaluate.ARMS_EVAL) == ["J3V-X", "J3V-Y", "J3V-W"]
+    assert list(evaluate.RANK_KINDS) == ["J-X", "J-Y"]
+
+
+def test_judge_loads_its_checkpoint_not_its_pretrained_encoder(tmp_path):
+    """Catches an evaluator that rebuilds the judge from the pretrained file and evaluates an
+    untrained head, or needs the encoder file to exist at evaluation time."""
+    saved = _fake_judge_ckpt(tmp_path, "X", 0).state_dict()
+    loaded = evaluate.load_judge("X", 0, tmp_path).state_dict()
+    for k, v in saved.items():
+        assert torch.equal(loaded[k], v), k
+
+
+def test_j3v_w_is_exp074s_committed_judge():
+    """THE GATE 0(b) PRECONDITION. Catches W rebuilt or retrained instead of reused."""
+    ref = torch.load(cells.E74_OUT / "judge_W_s0" / "judge.pt", map_location="cpu")
+    mine = evaluate.load_judge("W", 0).state_dict()
+    assert mine.keys() == ref.keys()
+    for k in ref:
+        assert torch.equal(mine[k], ref[k]), k
+
+
+def test_missing_checkpoint_exits_naming_it(tmp_path):
+    """Catches a J cell silently evaluating an untrained judge."""
+    with pytest.raises(SystemExit, match="judge.pt"):
+        evaluate.run_cell("J3V-Y", 8, 0, tmp_path, limit_states=1, judge_dir=tmp_path / "no")
+
+
+def test_an_x_judge_drives_a_real_j3v_cell(tmp_path):
+    """Catches X evaluated through the 64-unit concept: a 576-input head cannot read it."""
+    jdir = tmp_path / "judges"
+    _fake_judge_ckpt(jdir, "X", 0)
+    rec = evaluate.run_cell("J3V-X", 7, 0, tmp_path / "out", limit_states=1, judge_dir=jdir)
+    assert rec["arm"] == "J3V-X" and rec["n"] == 1 and rec["mode"] == "C"
+    assert rec["limit_states"] == 1
+    assert (tmp_path / "out" / "exp075_J3V-X_d7_s0.json").exists()
+
+
+def test_j3v_w_cell_equals_exp074s_harness_on_a_slice(tmp_path):
+    """THE GATE 0(b) CODE PATH: J3V-W through this harness equals EXP-074's own run_cell on
+    the same states, in every outcome field."""
+    mine = evaluate.run_cell("J3V-W", 9, 0, tmp_path / "a", limit_states=2)
+    ref = evaluate.e74.run_cell("J3V-W", 9, 0, tmp_path / "b", limit_states=2,
+                                judge_dir=cells.E74_OUT)
+    for f in ("solved", "n", "success_rate", "mean_steps", "eval_revisit_rate"):
+        assert mine[f] == ref[f], f
+
+
+def test_rank_cell_records_hit_chance_and_its_limit(tmp_path):
+    """Catches a rank record without `limit_states` (so a smoke row could enter Gate R), and a
+    chance that is not the fraction of closer leaves."""
+    jdir = tmp_path / "judges"
+    _fake_judge_ckpt(jdir, "Y", 0)
+    rec = evaluate.rank_cell("J-Y", 7, 0, tmp_path / "out", judge_dir=jdir, limit_states=2)
+    assert rec["n"] == 2 and rec["limit_states"] == 2
+    assert 0.0 < rec["chance"] < 0.5 and rec["hit"] in (0.0, 0.5, 1.0)
+    assert (tmp_path / "out" / "exp075_rank_J-Y_d7_s0.json").exists()
