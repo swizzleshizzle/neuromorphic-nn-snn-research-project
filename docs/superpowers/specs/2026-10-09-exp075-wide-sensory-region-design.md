@@ -20,8 +20,8 @@ margin on seed 0's probe set, and the J3V search on depth 9, seed 0. Script:
 | readout (frozen, head fitted on true distance) | width | Gate L margin | J3V d9 s0 |
 |---|---|---|---|
 | raw one-hot facelets (not spiking; the ceiling) | 144 | 0.414 | **88/200** |
-| E1 region, concept + hidden, 1 Poisson draw | 192 | 0.206 | 33/200 |
-| E1 region, concept + hidden, 8 draws averaged | 192 | 0.150 | 34/200 |
+| frozen E1 region, concept + hidden, 1 Poisson draw | 192 | 0.206 | 33/200 |
+| frozen E1 region, concept + hidden, 8 draws averaged | 192 | 0.150 | 34/200 |
 | random-init region, hidden 128 | 192 | 0.150 | 30/200 |
 | random-init region, hidden 512 | 576 | 0.194 | **44/200** |
 | *for reference: EXP-074's VI-trained W judge, seed 0* | 192 | 0.206 | 36/200 |
@@ -29,9 +29,12 @@ margin on seed 0's probe set, and the J3V search on depth 9, seed 0. Script:
 Read as follows. One seed and one cell, so these are directions, not effects (binomial se about
 3 solves per cell):
 
-1. **Value iteration is not the bottleneck at 192.** The truth-fitted head on the same 192
-   features scores 33/200 and margin 0.206; the VI-trained W judge scores 36/200 and margin 0.206.
-   VI already reaches what its readout allows.
+1. **The headroom is in the readout, not the training signal.** A head fitted on TRUE distance
+   over the FROZEN E1 192 features scores 33/200 and margin 0.206. The VI-trained W judge, whose
+   encoder also trained, scores 36/200 and margin 0.206. A supervised fit with a trainable encoder
+   was not measured. So this shows that the frozen 192 readout caps even a supervised head at
+   about where value iteration already is. It does not show that no training signal could do
+   better.
 2. **Poisson noise is not the bottleneck.** Averaging 8 draws gives 34/200, not more.
 3. **Width helps, even without pretraining.** A random region at hidden 512 beats one at 128:
    44/200 vs 30/200, margin 0.194 vs 0.150.
@@ -129,6 +132,11 @@ most one probe interval per run.
 
 The width is NOT a pilot decision. It stays at 512.
 
+**Y must be a working control (CLAUDE.md, EXP-064).** The amendment compares Y's mean pilot Gate L
+margin with W's mean pilot margin, 0.2037 (EXP-074 section 11). If Y's is below W's Gate L
+threshold, 0.1018, laptop pretraining is not producing a region of E1's grade. Then stop and
+report rather than amend, because Claim 2 would otherwise be tested against a weak control.
+
 ## 7. Gates
 
 **Gate P (pretraining worked, X and Y).** Every seed's final pretraining move accuracy must be at
@@ -158,9 +166,10 @@ held-out states, above chance at p < 0.05.
 **Gate 0.**
 - (a) Determinism: J3V-X at depth 9, seed 0, re-run into a separate directory. The result must be
   identical except `wall_s` and `git_commit`.
-- (b) Continuity: J3V-W at depth 9, seed 0, re-evaluated on the laptop from its committed judge,
-  must equal EXP-074's record in every outcome field (36/200). This is what licenses reusing W's
-  records.
+- (b) Continuity: J3V-W at seed 0, depths 9 and 11, re-evaluated on the laptop from its committed
+  judge, must equal EXP-074's records in every outcome field (36/200 at depth 9). Depth 11 is
+  checked separately because it takes a different path: the depth-9 agent and a 25-move budget.
+  This is what licenses reusing W's records for Claims 1 and 3.
 
 **Gate 1 (resolution).** A contrast is UNRESOLVED if both arms are below 0.02 or above 0.98. The
 verdict function returns UNRESOLVED as a verdict, using EXP-070's `gate1_verdict`.
