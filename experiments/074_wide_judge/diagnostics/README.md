@@ -11,3 +11,4 @@ provenance of spec sections 1, 2 and 6; none of these is part of the method.
 | `oracle_search.py` | raw judge fitted on true distance, eval states excluded, through J3V | d9 s0 88/200 vs P3V 5/200 |
 | `pilot_search.py` | EXP-073 pilot judges through J3V on evaluation cells (DISCLOSED, spec section 2) | see spec |
 | `gate_l.py` | Gate L margin on pilot judges, pilot seeds only | A 0.148/0.143, B 0.104/0.043 |
+| `oracle_wide.py` | heads fitted on TRUE distance over frozen readouts, through J3V at d9 s0 (already disclosed), 2026-10-09, EXP-075 motivation | raw 88/200; E1 192 33; E1 192 x8 draws 34; random 128 30; random 512 44 (spec EXP-075 section 1) |
