@@ -243,3 +243,62 @@ about 0.03 is detectable. Section 1's random-init width effect was +0.07 on one 
 - Training the policy from J.
 - A learned world model.
 - 3x3.
+
+## 12. Amendment 2026-10-09: pilot results, Gate P and L thresholds, worker count (before any seed 0-11 pretrains)
+
+The pilot (section 6: X and Y on seeds 12 and 13, sections 4 and 5's settings, 4 workers, laptop,
+checkout `b20b2cf`) finished 2026-10-09. Records: `experiments/075_wide_region/outputs_pilot/`.
+Every record passes `check_pretrain_record` and `check_train_record`. Numbers below are from
+`aggregate.py --pilot-report`.
+
+**The pilot did not fail, and Y is a working control.** Both arms' mean pretraining accuracy is
+above 0.30, and Y's mean pilot margin (0.2097) is above W's Gate L threshold, 0.1018 (section 6).
+Y's pretraining accuracy (0.4548, 0.4555) sits inside EXP-039's 0.449 to 0.457.
+
+**Gate P** (0.9 x the arm's mean pilot move accuracy):
+
+| arm | accuracy s12 | accuracy s13 | mean | threshold |
+|---|---|---|---|---|
+| X | 0.5569 | 0.5595 | 0.5582 | **0.50236** |
+| Y | 0.4548 | 0.4555 | 0.4552 | **0.40966** |
+
+**Gate L** (b) (half the arm's mean pilot margin, 250 probe states):
+
+| arm | margin s12 | margin s13 | mean | threshold |
+|---|---|---|---|---|
+| X | 0.2719 | 0.2474 | 0.2597 | **0.12983** |
+| Y | 0.2119 | 0.2074 | 0.2097 | **0.10483** |
+
+`aggregate.GATE_P_THRESHOLD` and `GATE_L_THRESHOLD` hold the exact values, and a test pins them to
+the committed records. Both gates can pass: accuracy is bounded by 1 and the margin by about 0.75.
+
+**Gate E on the pilot:** encoder drift X 11.61 and 12.33, Y 7.87 and 8.21.
+
+Not a verdict, recorded for context: X's margin exceeds Y's on both seeds, and X's pilot mean
+(0.2597) is above W's (0.2037, section 11 of EXP-074's spec, a different pilot on the same seeds).
+Final spearman_7_11 X 0.384 and 0.271, Y 0.279 and 0.314. Two seeds decide nothing; the claims are
+about solved cubes (section 9).
+
+**Throughput and memory** (4 workers, two X and two Y running together until Y finished):
+
+| arm | pretrain wall_s | train s per update | train wall_s | peak working set per worker |
+|---|---|---|---|---|
+| X | 3,124 and 3,129 | 4.16 | 16,656 and 16,647 | 2.82 GB |
+| Y | 1,575 and 1,573 | 1.81 | 7,236 and 7,239 | 2.05 GB |
+
+X costs 2.3x Y per update, as the VPS measurement predicted (2.4x), but X's working set on the
+laptop is 2.82 GB, not 2.1 GB.
+
+**Worker count: 8, for pretraining and training.** At 8 x 2.82 GB = 22.6 GB the worst case (every
+worker holding an X run) stays under 24 GB. More workers would not buy much: EXP-074's aggregate
+throughput was the same at 6 and 12 workers (2.94 and 2.84 updates/s at hidden 128), so the laptop
+saturates around 6. Pretraining's working set was not measured separately; the 2.82 GB bound is
+taken from training, and the first pretraining wave is checked against it before it is left to run.
+
+**Schedule.**
+1. Pretrain the 24 seed 0-11 encoders, 8 workers: about 3 h. Commit Gate P (`--stage pretrain`).
+2. Train the 24 VI runs, 8 workers, seed-major order: about 16 h at saturated throughput
+   (12 Y runs plus 12 X runs at 2.3x is 158,000 hidden-128-equivalent updates at about
+   2.9 per second). One 03:31 restart is expected; the phase is relaunched and resumes from the
+   last 250-update checkpoint. Commit Gates L and E (`--stage train`).
+3. Gate 0(b) (`cont`), then rank, eval, Gate 0(a) (`det`), and aggregation, as in section 10.

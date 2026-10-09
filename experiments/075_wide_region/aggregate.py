@@ -41,11 +41,11 @@ SEEDS = range(12)
 
 ALPHA = 0.05 / 3
 
-# Set ONLY by the controller's dated amendment, after the pilot and before any seed 0-11
-# pretrains: {"X": float, "Y": float}. Gate P: 0.9 x that arm's mean pilot move accuracy.
+# Set by the dated amendment (spec section 12, 2026-10-09) from the committed pilot records,
+# before any seed 0-11 pretrains. Gate P: 0.9 x that arm's mean pilot move accuracy.
 # Gate L: half that arm's mean pilot margin (spec section 7). None blocks every verdict.
-GATE_P_THRESHOLD: dict | None = None
-GATE_L_THRESHOLD: dict | None = None
+GATE_P_THRESHOLD: dict | None = {"X": 0.5023642954536297, "Y": 0.40965700094402796}
+GATE_L_THRESHOLD: dict | None = {"X": 0.12983333333333333, "Y": 0.10483333333333333}
 PILOT_FAIL_ACCURACY = 0.30
 # Spec section 6: Y must clear W's own Gate L threshold to count as a working control.
 W_GATE_L_THRESHOLD = a74.GATE_L_THRESHOLD["W"]

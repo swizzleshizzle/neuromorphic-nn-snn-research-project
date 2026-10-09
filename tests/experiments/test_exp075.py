@@ -621,3 +621,17 @@ def test_stages_need_thresholds(tmp_path, monkeypatch):
     for f in (agg.stage_pretrain, agg.stage_train, agg.stage_cont):
         with pytest.raises(SystemExit, match="GATE_P_THRESHOLD"):
             f(tmp_path)
+
+
+def test_thresholds_are_the_spec_forms_of_the_committed_pilot_records():
+    """Catches a threshold typed in by hand that drifts from the committed pilot records it is
+    defined by (spec section 12), or an arm left out."""
+    pilot = EXP / "outputs_pilot"
+    assert set(agg.GATE_P_THRESHOLD) == set(agg.GATE_L_THRESHOLD) == {"X", "Y"}
+    for arm in ("X", "Y"):
+        acc = [json.loads((pilot / f"exp075_pretrain_{arm}_s{s}.json").read_text())
+               ["final_move_accuracy"] for s in (12, 13)]
+        mar = [json.loads((pilot / f"exp075_train_{arm}_s{s}.json").read_text())
+               ["gate_l"]["margin"] for s in (12, 13)]
+        assert abs(agg.GATE_P_THRESHOLD[arm] - 0.9 * (acc[0] + acc[1]) / 2) < 1e-12
+        assert abs(agg.GATE_L_THRESHOLD[arm] - (mar[0] + mar[1]) / 4) < 1e-12
