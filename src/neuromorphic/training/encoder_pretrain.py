@@ -46,18 +46,23 @@ CUBE_N_OBS = 144        # 24 facelets x 6 colours
 CUBE_OBS_WIDTH = 24
 DEFAULT_CONTENT = 64
 DEFAULT_T = 32
+DEFAULT_HIDDEN = 128   # the shipped region; every existing pretrained encoder is this wide
 
 
-def make_sensory(seed: int, *, content: int = DEFAULT_CONTENT, num_steps: int = DEFAULT_T
-                 ) -> SensoryCortex:
+def make_sensory(seed: int, *, content: int = DEFAULT_CONTENT, num_steps: int = DEFAULT_T,
+                 hidden: int = DEFAULT_HIDDEN) -> SensoryCortex:
     """A sensory cortex identical to the one `Brain` builds for the cube.
 
     `Brain` calls `SensoryCortex(n_obs=self.n_obs, concept=content, num_steps=num_steps,
     seed=seed)`, leaving hidden=128, weight_gain=5.0, beta=0.9, threshold=1.0 at their
     defaults. Reproduced here rather than constructed through `Brain` so pretraining does not
     have to build four unused regions per seed.
+
+    `hidden` (EXP-075) widens the first layer; its default is the shipped 128, so every
+    existing caller is unchanged.
     """
-    return SensoryCortex(n_obs=CUBE_N_OBS, concept=content, num_steps=num_steps, seed=seed)
+    return SensoryCortex(n_obs=CUBE_N_OBS, hidden=hidden, concept=content, num_steps=num_steps,
+                         seed=seed)
 
 
 def states_to_obs(states) -> torch.Tensor:
@@ -165,7 +170,7 @@ def save_encoder(sensory: SensoryCortex, path) -> None:
 
 
 def load_encoder(path, *, seed: int = 0, content: int = DEFAULT_CONTENT,
-                 num_steps: int = DEFAULT_T) -> SensoryCortex:
+                 num_steps: int = DEFAULT_T, hidden: int = DEFAULT_HIDDEN) -> SensoryCortex:
     """Rebuild a `SensoryCortex` and load saved weights into it.
 
     `seed` only shapes the throwaway random init that is immediately overwritten; it does not
@@ -173,7 +178,7 @@ def load_encoder(path, *, seed: int = 0, content: int = DEFAULT_CONTENT,
     leave half a random encoder in place and every downstream number would describe something
     nobody chose.
     """
-    sensory = make_sensory(seed, content=content, num_steps=num_steps)
+    sensory = make_sensory(seed, content=content, num_steps=num_steps, hidden=hidden)
     sensory.load_state_dict(torch.load(str(path), map_location="cpu"), strict=True)
     return sensory
 
@@ -183,6 +188,7 @@ class PretrainConfig:
     seed: int = 0
     content: int = DEFAULT_CONTENT
     num_steps: int = DEFAULT_T
+    hidden: int = DEFAULT_HIDDEN
     epochs: int = 30
     batch_size: int = 256
     lr: float = 1e-3
@@ -215,7 +221,8 @@ def train_inverse_model(pairs, cfg: PretrainConfig, *, sensory: SensoryCortex | 
     """
     torch.manual_seed(cfg.seed)
     sensory = sensory if sensory is not None else make_sensory(cfg.seed, content=cfg.content,
-                                                              num_steps=cfg.num_steps)
+                                                              num_steps=cfg.num_steps,
+                                                              hidden=cfg.hidden)
     model = InverseModel(sensory, content=cfg.content)
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     loss_fn = nn.CrossEntropyLoss()
