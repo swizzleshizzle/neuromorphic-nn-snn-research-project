@@ -114,6 +114,8 @@ switch ($Phase) {
     "rank" {
         foreach ($d in 7, 8, 9, 11) { foreach ($k in "J-X", "J-Y") { foreach ($s in $seeds) {
             [void]$jobs.Add(@("rank $k d$d s$s", "exp075_rank_${k}_d${d}_s${s}.json", "--rank", $k, "--depth", $d, "--seed", $s)) } } }
+        foreach ($d in 9, 11) { foreach ($s in $seeds) {
+            [void]$jobs.Add(@("rank J-W d$d s$s", "exp075_rank_J-W_d${d}_s${s}.json", "--rank", "J-W", "--depth", $d, "--seed", $s)) } }
     }
     "eval" {
         foreach ($d in 7, 8, 9, 11) { foreach ($a in "J3V-X", "J3V-Y") { foreach ($s in $seeds) {

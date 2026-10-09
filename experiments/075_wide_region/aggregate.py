@@ -52,6 +52,8 @@ W_GATE_L_THRESHOLD = a74.GATE_L_THRESHOLD["W"]
 
 J_ARMS = ("J3V-X", "J3V-Y")
 DEPTHS = (7, 8, 9, 11)
+# W's Gate R is measured here, at the two depths its claims use (EXP-074 ranked W at 7 to 9 only).
+W_RANK_DEPTHS = (9, 11)
 _KIND = {"J3V-X": "J-X", "J3V-Y": "J-Y"}
 _TRAIN_ARM = {"J3V-X": "X", "J3V-Y": "Y"}
 TRAIN_SETTINGS = {"n_updates": 4000, "batch": 1000, "sync_every": 100, "probe_every": 250,
@@ -127,10 +129,17 @@ def _read(path: Path) -> dict:
 def pilot_amendment(pilot_dir) -> dict:
     """The numbers the dated amendment states (spec sections 6 and 7), from the pilot records."""
     pilot_dir = Path(pilot_dir)
-    acc = {a: [_read(pilot_dir / cells.pretrain_record_name(a, s))["final_move_accuracy"]
-               for s in cells.PILOT_SEEDS] for a in cells.ARMS_TRAIN}
-    mar = {a: [_read(pilot_dir / cells.record_name(a, s))["gate_l"]["margin"]
-               for s in cells.PILOT_SEEDS] for a in cells.ARMS_TRAIN}
+    pre, trn = {}, {}
+    for a in cells.ARMS_TRAIN:
+        for s in cells.PILOT_SEEDS:
+            pre[(a, s)] = _read(pilot_dir / cells.pretrain_record_name(a, s))
+            check_pretrain_record(pre[(a, s)])
+            trn[(a, s)] = _read(pilot_dir / cells.record_name(a, s))
+            check_train_record(trn[(a, s)])
+    acc = {a: [pre[(a, s)]["final_move_accuracy"] for s in cells.PILOT_SEEDS]
+           for a in cells.ARMS_TRAIN}
+    mar = {a: [trn[(a, s)]["gate_l"]["margin"] for s in cells.PILOT_SEEDS]
+           for a in cells.ARMS_TRAIN}
     return {
         "mean_accuracy": {a: st.mean(v) for a, v in acc.items()},
         "mean_margin": {a: st.mean(v) for a, v in mar.items()},
@@ -148,11 +157,12 @@ def _arm_ok(gates, j_arm, depth) -> bool:
 
 def primary_verdicts(rates: dict, gates: dict, seeds) -> dict:
     """Claim 1: d9 J3V-X vs J3V-W. Claim 2: d9 J3V-X vs J3V-Y. Claim 3: d11 J3V-X vs J3V-W.
-    W is EXP-074's reused reference, whose gates passed there; X and Y are gated here."""
+    W's Gates P, L and E were EXP-074's; its Gate R at depths 9 and 11 is measured here
+    (gates["r"][("J-W", d)]). X and Y are gated here. Claim 2 does not involve W."""
     r = {k: {s: v[s] for s in seeds} for k, v in rates.items()}
-    c1_ok = gates["gate0"] and _arm_ok(gates, "J3V-X", 9)
-    c2_ok = c1_ok and _arm_ok(gates, "J3V-Y", 9)
-    c3_ok = gates["gate0"] and _arm_ok(gates, "J3V-X", 11)
+    c1_ok = gates["gate0"] and _arm_ok(gates, "J3V-X", 9) and gates["r"][("J-W", 9)]
+    c2_ok = gates["gate0"] and _arm_ok(gates, "J3V-X", 9) and _arm_ok(gates, "J3V-Y", 9)
+    c3_ok = gates["gate0"] and _arm_ok(gates, "J3V-X", 11) and gates["r"][("J-W", 11)]
     return {"claim1": contrast(r, ("J3V-X", 9), ("J3V-W", 9), c1_ok),
             "claim2": contrast(r, ("J3V-X", 9), ("J3V-Y", 9), c2_ok),
             "claim3": contrast(r, ("J3V-X", 11), ("J3V-W", 11), c3_ok)}
@@ -204,8 +214,10 @@ def main() -> None:
     train = {(a, s): _read(out / cells.record_name(a, s)) for a in cells.ARMS_TRAIN for s in SEEDS}
     for r in train.values():
         check_train_record(r)
+    rank_keys = [(k, d) for k in ("J-X", "J-Y") for d in DEPTHS] \
+        + [("J-W", d) for d in W_RANK_DEPTHS]
     rank = {(k, d): [_read(out / f"exp075_rank_{k}_d{d}_s{s}.json") for s in SEEDS]
-            for k in ("J-X", "J-Y") for d in DEPTHS}
+            for k, d in rank_keys}
     rates = load_rates(out)
 
     gate_p = {a: gate_p_verdict([pre[(a, s)]["final_move_accuracy"] for s in SEEDS],
@@ -215,7 +227,7 @@ def main() -> None:
     gate_e = {a: gate_e_verdict([train[(a, s)]["encoder_drift"] for s in SEEDS])
               for a in cells.ARMS_TRAIN}
     gate_r = {(k, d): bool(a71.gate_r_verdict(rank[(k, d)], "hit", "chance")[0])
-              for k in ("J-X", "J-Y") for d in DEPTHS}
+              for k, d in rank_keys}
     g0b = a71.gate0b_verdict(
         {("J3V-W", d): _read(out / f"exp075_J3V-W_d{d}_s0.json") for d in (9, 11)},
         {("J3V-W", d): _read(cells.E74_OUT / f"exp074_J3V-W_d{d}_s0.json") for d in (9, 11)})
@@ -237,6 +249,9 @@ def main() -> None:
             f"{k} {st.mean(r['hit'] for r in rank[(k, d)]):.4f}/"
             f"{st.mean(r['chance'] for r in rank[(k, d)]):.4f} -> {gate_r[(k, d)]}"
             for k in ("J-X", "J-Y")))
+    for d in W_RANK_DEPTHS:
+        print(f"  d{d}: J-W {st.mean(r['hit'] for r in rank[('J-W', d)]):.4f}/"
+              f"{st.mean(r['chance'] for r in rank[('J-W', d)]):.4f} -> {gate_r[('J-W', d)]}")
     print(f"GATE 0(a) determinism: {'PASS' if args.determinism_ok else 'NOT CHECKED'}")
     print(f"GATE 0(b) J3V-W continuity with EXP-074 (d9, d11, seed 0): {g0b}")
 
@@ -267,7 +282,11 @@ def main() -> None:
     sec = [(d, "J3V-X", "J3V-W") for d in (7, 8)] + [(d, "J3V-X", "J3V-Y") for d in (7, 8, 11)] \
         + [(9, "J3V-Y", "J3V-W")]
     for d, a, b in sec:
+        # W has a Gate R cell only at depths 9 and 11, so the d7/d8 X - W secondaries keep the
+        # arm gates of X alone; d9 Y - W also needs ("J-W", 9).
         ok = gate0_ok and _arm_ok(gates, a, d) and (b not in _TRAIN_ARM or _arm_ok(gates, b, d))
+        if b == "J3V-W" and d in W_RANK_DEPTHS:
+            ok = ok and gates["r"][("J-W", d)]
         v, p, diff, am, bm = contrast(rates, (a, d), (b, d), ok)
         tag = "VOID (gate)" if v == "VOID" else (
             "positive pattern" if diff > 0 else "non-positive pattern")

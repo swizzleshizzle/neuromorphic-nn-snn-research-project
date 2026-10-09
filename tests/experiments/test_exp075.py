@@ -233,7 +233,7 @@ def _fake_judge_ckpt(jdir, arm, seed):
 
 def test_eval_arms_and_rank_kinds_are_the_spec_lists():
     assert list(evaluate.ARMS_EVAL) == ["J3V-X", "J3V-Y", "J3V-W"]
-    assert list(evaluate.RANK_KINDS) == ["J-X", "J-Y"]
+    assert list(evaluate.RANK_KINDS) == ["J-X", "J-Y", "J-W"]
 
 
 def test_judge_loads_its_checkpoint_not_its_pretrained_encoder(tmp_path):
@@ -305,7 +305,8 @@ def _rates(x9, w9, y9, x11, w11, seeds=range(12)):
 def _gates(ok=True, **over):
     g = {"gate0": ok, "p": {"X": True, "Y": True}, "l": {"X": True, "Y": True},
          "e": {"X": True, "Y": True},
-         "r": {(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)}}
+         "r": {**{(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)},
+               ("J-W", 9): True, ("J-W", 11): True}}
     g.update(over)
     return g
 
@@ -341,7 +342,11 @@ def test_claims_compare_the_registered_arms_and_depths():
     ({"l": {"X": True, "Y": False}}, {"claim2"}),
     ({"e": {"X": True, "Y": False}}, {"claim2"}),
     ({"r": {**{(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)},
-            ("J-X", 11): False}}, {"claim3"}),
+            ("J-W", 9): True, ("J-W", 11): True, ("J-X", 11): False}}, {"claim3"}),
+    ({"r": {**{(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)},
+            ("J-W", 9): False, ("J-W", 11): True}}, {"claim1"}),
+    ({"r": {**{(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)},
+            ("J-W", 9): True, ("J-W", 11): False}}, {"claim3"}),
 ])
 def test_a_failed_gate_voids_exactly_the_claims_it_guards(over, void):
     """Catches a gate that voids too little (a claim read on a broken arm) or too much."""
@@ -384,13 +389,24 @@ def test_thresholds_unset_block_every_verdict(monkeypatch):
         agg.require_thresholds()
 
 
-def _write_pilot(d, acc, margin):
+def _write_pilot(d, acc, margin, **train_over):
     for arm in ("X", "Y"):
         for i, s in enumerate((12, 13)):
+            hidden = cells.HIDDEN[arm]
             (d / cells.pretrain_record_name(arm, s)).write_text(json.dumps(
-                {"arm": arm, "seed": s, "final_move_accuracy": acc[arm][i]}))
+                {"arm": arm, "seed": s, "hidden": hidden, "epochs": 40, "batch_size": 256,
+                 "lr": 3e-3, "final_move_accuracy": acc[arm][i]}))
             (d / cells.record_name(arm, s)).write_text(json.dumps(
-                {"arm": arm, "seed": s, "gate_l": {"margin": margin[arm][i]}}))
+                {**_SETTINGS, "arm": arm, "seed": s, "hidden": hidden, "readout": "wide",
+                 "gate_l": {"margin": margin[arm][i]}, **train_over}))
+
+
+def test_pilot_records_at_other_settings_are_refused(tmp_path):
+    """Catches a pilot run at other settings (e.g. n_updates 500) silently setting thresholds."""
+    _write_pilot(tmp_path, {"X": [0.5, 0.5], "Y": [0.5, 0.5]},
+                 {"X": [0.3, 0.3], "Y": [0.2, 0.2]}, n_updates=500)
+    with pytest.raises(SystemExit):
+        agg.pilot_amendment(tmp_path)
 
 
 def test_pilot_amendment_numbers_follow_the_spec_forms(tmp_path):
@@ -433,3 +449,4 @@ def test_launcher_carries_the_exit_code_fix_and_the_registered_cells():
     assert "$null = $proc.Handle" in text
     assert '"J3V-X", "J3V-Y"' in text and "7, 8, 9, 11" in text
     assert "exp075-det" in text and "GATE_P_THRESHOLD" in text
+    assert "J-W" in text

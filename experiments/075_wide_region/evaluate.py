@@ -47,8 +47,8 @@ torch.set_num_threads(1)
 # arm -> trained-judge arm
 _ARMS = {"J3V-X": "X", "J3V-Y": "Y", "J3V-W": "W"}
 ARMS_EVAL = tuple(_ARMS)
-RANK_KINDS = ("J-X", "J-Y")
-_RANK_ARM = {"J-X": "J3V-X", "J-Y": "J3V-Y"}
+RANK_KINDS = ("J-X", "J-Y", "J-W")
+_RANK_ARM = {"J-X": "J3V-X", "J-Y": "J3V-Y", "J-W": "J3V-W"}
 JudgeCritic = e74.JudgeCritic
 load_cell = e74.load_cell
 
