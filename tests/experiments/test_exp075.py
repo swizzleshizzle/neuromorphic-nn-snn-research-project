@@ -289,3 +289,147 @@ def test_rank_cell_records_hit_chance_and_its_limit(tmp_path):
     assert rec["n"] == 2 and rec["limit_states"] == 2
     assert 0.0 < rec["chance"] < 0.5 and rec["hit"] in (0.0, 0.5, 1.0)
     assert (tmp_path / "out" / "exp075_rank_J-Y_d7_s0.json").exists()
+
+
+agg = _load("exp075_aggregate", "aggregate.py")
+
+_SETTINGS = {"n_updates": 4000, "batch": 1000, "sync_every": 100, "probe_every": 250, "draws": 1}
+
+
+def _rates(x9, w9, y9, x11, w11, seeds=range(12)):
+    return {("J3V-X", 9): {s: x9 for s in seeds}, ("J3V-W", 9): {s: w9 for s in seeds},
+            ("J3V-Y", 9): {s: y9 for s in seeds}, ("J3V-X", 11): {s: x11 for s in seeds},
+            ("J3V-W", 11): {s: w11 for s in seeds}}
+
+
+def _gates(ok=True, **over):
+    g = {"gate0": ok, "p": {"X": True, "Y": True}, "l": {"X": True, "Y": True},
+         "e": {"X": True, "Y": True},
+         "r": {(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)}}
+    g.update(over)
+    return g
+
+
+def _noisy(base, seeds=range(12)):
+    return {s: base + 0.01 * ((s % 3) - 1) for s in seeds}
+
+
+def test_alpha_is_a_third_of_005_and_the_verdict_uses_it(monkeypatch):
+    """Catches the claims read at EXP-071's 0.025 instead of this spec's 0.05 / 3."""
+    assert agg.ALPHA == pytest.approx(0.05 / 3)
+    diffs = [0.05] * 12
+    assert agg.claim_verdict(diffs, 0.3, 0.25, True)[0] == "CONFIRMED"
+    monkeypatch.setattr(agg, "ALPHA", 0.0)
+    assert agg.claim_verdict(diffs, 0.3, 0.25, True)[0] == "NOT SIGNIFICANT"
+
+
+def test_claims_compare_the_registered_arms_and_depths():
+    """Catches a claim wired to the wrong arm or depth: each claim's two means are distinct."""
+    r = _rates(0.30, 0.20, 0.25, 0.15, 0.10)
+    r[("J3V-X", 9)] = _noisy(0.30)
+    r[("J3V-X", 11)] = _noisy(0.15)
+    v = agg.primary_verdicts(r, _gates(), range(12))
+    assert v["claim1"][3:] == pytest.approx((0.30, 0.20))
+    assert v["claim2"][3:] == pytest.approx((0.30, 0.25))
+    assert v["claim3"][3:] == pytest.approx((0.15, 0.10))
+    assert all(v[c][0] == "CONFIRMED" for c in ("claim1", "claim2", "claim3"))
+
+
+@pytest.mark.parametrize("over,void", [
+    ({"gate0": False}, {"claim1", "claim2", "claim3"}),
+    ({"p": {"X": False, "Y": True}}, {"claim1", "claim2", "claim3"}),
+    ({"l": {"X": True, "Y": False}}, {"claim2"}),
+    ({"e": {"X": True, "Y": False}}, {"claim2"}),
+    ({"r": {**{(k, d): True for k in ("J-X", "J-Y") for d in (7, 8, 9, 11)},
+            ("J-X", 11): False}}, {"claim3"}),
+])
+def test_a_failed_gate_voids_exactly_the_claims_it_guards(over, void):
+    """Catches a gate that voids too little (a claim read on a broken arm) or too much."""
+    r = _rates(0.30, 0.20, 0.25, 0.15, 0.10)
+    v = agg.primary_verdicts(r, _gates(**over), range(12))
+    assert {c for c in ("claim1", "claim2", "claim3") if v[c][0] == "VOID"} == void
+
+
+def test_a_contrast_on_the_floor_is_unresolved():
+    """Catches the Gate 1 band living only in prose (CLAUDE.md, EXP-068)."""
+    r = _rates(0.012, 0.010, 0.011, 0.012, 0.010)
+    assert agg.primary_verdicts(r, _gates(), range(12))["claim1"][0] == "UNRESOLVED"
+
+
+def test_sensitivity_drops_exactly_seeds_0_and_3():
+    r = agg.sensitivity_rates(_rates(0.3, 0.2, 0.25, 0.15, 0.1))
+    assert sorted(r[("J3V-X", 9)]) == [1, 2, 4, 5, 6, 7, 8, 9, 10, 11]
+
+
+def test_gate_p_requires_every_seed():
+    """Catches Gate P read as a mean (one failed pretraining hidden by eleven good ones)."""
+    assert agg.gate_p_verdict([0.45] * 12, 0.40) is True
+    assert agg.gate_p_verdict([0.45] * 11 + [0.39], 0.40) is False
+
+
+def test_gate_e_requires_every_drift_positive():
+    assert agg.gate_e_verdict([0.1] * 12) is True
+    assert agg.gate_e_verdict([0.1] * 11 + [0.0]) is False
+
+
+def test_thresholds_unset_block_every_verdict(monkeypatch):
+    """REVIEW FOCUS 5. Catches a verdict read before the dated amendment."""
+    monkeypatch.setattr(agg, "GATE_P_THRESHOLD", None)
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", {"X": 0.1, "Y": 0.1})
+    with pytest.raises(SystemExit, match="GATE_P_THRESHOLD"):
+        agg.require_thresholds()
+    monkeypatch.setattr(agg, "GATE_P_THRESHOLD", {"X": 0.4, "Y": 0.4})
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", None)
+    with pytest.raises(SystemExit, match="GATE_L_THRESHOLD"):
+        agg.require_thresholds()
+
+
+def _write_pilot(d, acc, margin):
+    for arm in ("X", "Y"):
+        for i, s in enumerate((12, 13)):
+            (d / cells.pretrain_record_name(arm, s)).write_text(json.dumps(
+                {"arm": arm, "seed": s, "final_move_accuracy": acc[arm][i]}))
+            (d / cells.record_name(arm, s)).write_text(json.dumps(
+                {"arm": arm, "seed": s, "gate_l": {"margin": margin[arm][i]}}))
+
+
+def test_pilot_amendment_numbers_follow_the_spec_forms(tmp_path):
+    """Catches a threshold form other than spec section 7's (0.9 x mean pilot accuracy, half
+    the mean pilot margin), and a missing Y working-control check (spec section 6)."""
+    _write_pilot(tmp_path, {"X": [0.50, 0.52], "Y": [0.45, 0.46]},
+                 {"X": [0.30, 0.26], "Y": [0.20, 0.18]})
+    a = agg.pilot_amendment(tmp_path)
+    assert a["gate_p"]["X"] == pytest.approx(0.9 * 0.51)
+    assert a["gate_l"]["Y"] == pytest.approx(0.19 / 2)
+    assert a["pilot_failed"] is False and a["y_working_control"] is True
+    _write_pilot(tmp_path, {"X": [0.25, 0.28], "Y": [0.45, 0.46]},
+                 {"X": [0.30, 0.26], "Y": [0.05, 0.06]})
+    a = agg.pilot_amendment(tmp_path)
+    assert a["pilot_failed"] is True and a["y_working_control"] is False
+
+
+def test_records_at_other_settings_or_smoke_records_are_refused(tmp_path):
+    """REVIEW FOCUS 4. Catches a smoke cell, a record at other settings, or the wrong width
+    entering a verdict."""
+    good = {**_SETTINGS, "arm": "X", "seed": 0, "readout": "wide", "hidden": 512}
+    agg.check_train_record(good)
+    for bad in ({"hidden": 128}, {"readout": "concept"}, {"n_updates": 2}):
+        with pytest.raises(SystemExit):
+            agg.check_train_record({**good, **bad})
+    pre = {"arm": "Y", "seed": 0, "epochs": 40, "batch_size": 256, "lr": 3e-3, "hidden": 128}
+    agg.check_pretrain_record(pre)
+    with pytest.raises(SystemExit):
+        agg.check_pretrain_record({**pre, "epochs": 1})
+    p = tmp_path / "exp075_J3V-X_d9_s0.json"
+    p.write_text(json.dumps({"success_rate": 0.2, "limit_states": 1}))
+    with pytest.raises(SystemExit, match="smoke"):
+        agg._read(p)
+
+
+def test_launcher_carries_the_exit_code_fix_and_the_registered_cells():
+    """Catches a launcher copied without EXP-074's .Handle fix (every cell counted as failed)
+    or with an eval list missing an arm or depth."""
+    text = (EXP / "launch075.ps1").read_text()
+    assert "$null = $proc.Handle" in text
+    assert '"J3V-X", "J3V-Y"' in text and "7, 8, 9, 11" in text
+    assert "exp075-det" in text and "GATE_P_THRESHOLD" in text
