@@ -9,6 +9,7 @@ mean something other than what the spec says.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from neuromorphic.envs.cube import MOVES, apply_move
@@ -220,3 +221,38 @@ def test_inverse_model_forward_shape_and_action_width():
         logits = model(obs, obs, generator=g)
     assert logits.shape == (3, len(MOVES))
     assert model.head.in_features == 2 * 64
+
+
+def test_make_sensory_hidden_defaults_to_the_shipped_128_and_widens_on_request():
+    """Catches a default that drifted from 128 (every existing pretrained encoder and the
+    shipped brain are 128 wide) and a `hidden` argument that is accepted but ignored."""
+    from neuromorphic.training.encoder_pretrain import DEFAULT_HIDDEN, make_sensory
+    assert DEFAULT_HIDDEN == 128
+    a, b = make_sensory(4), make_sensory(4, hidden=128)
+    for k, v in a.state_dict().items():
+        assert torch.equal(v, b.state_dict()[k]), k
+    w = make_sensory(4, hidden=512)
+    assert (w.fc1.out_features, w.fc2.in_features, w.fc2.out_features) == (512, 512, 64)
+
+
+def test_load_encoder_refuses_a_file_of_another_width(tmp_path):
+    """Catches a width mismatch loaded silently: strict loading must raise."""
+    from neuromorphic.training.encoder_pretrain import load_encoder, make_sensory, save_encoder
+    path = tmp_path / "enc.pt"
+    save_encoder(make_sensory(1, hidden=128), path)
+    with pytest.raises(RuntimeError):
+        load_encoder(path, hidden=512)
+    save_encoder(make_sensory(1, hidden=512), path)
+    assert load_encoder(path, hidden=512).fc1.out_features == 512
+
+
+def test_train_inverse_model_builds_its_region_at_cfg_hidden():
+    """Catches `train_inverse_model` ignoring `cfg.hidden` (X would pretrain a 128 region)."""
+    from neuromorphic.envs.cube import SOLVED
+    from neuromorphic.training.encoder_pretrain import (PretrainConfig, build_pairs,
+                                                        train_inverse_model)
+    pairs = build_pairs([SOLVED])
+    r512 = train_inverse_model(pairs, PretrainConfig(seed=0, epochs=1, batch_size=6, hidden=512))
+    r128 = train_inverse_model(pairs, PretrainConfig(seed=0, epochs=1, batch_size=6))
+    assert r512.sensory.fc1.out_features == 512
+    assert r128.sensory.fc1.out_features == 128
