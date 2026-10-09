@@ -1,7 +1,7 @@
-# Session Handoff - 2026-10-07 - WEEK 27. EXP-070, 071, 072 done; look-ahead plus no-revisit moves the frontier.
+# Session Handoff - 2026-10-09 - WEEK 27. EXP-070 to 074 done; a learned judge solves deeper cubes.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
-> **934 tests, 912 not slow, 22 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> **976 tests, 953 not slow, 23 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
 > `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
 >
 > **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
@@ -48,16 +48,23 @@ both primaries CONFIRMED, every gate passed. The recipe holds at depths 7, 8 and
 3. **Deeper or wider search with the same networks** (k = 4, or beam search), the cheapest way to
    push P3V further, though it scales as 6^k per move.
 
-## 2b. EXP-073 (stage 3, a learned judge) is BLOCKED on Michael, issue #14
+## 2b. EXP-074 (stage 3, a learned judge) CONFIRMED; EXP-073 superseded
 
-Michael chose stage 3. Built and merged (`9a92aff`); two pilots ran on seeds 12/13 (spec
-`docs/superpowers/specs/2026-10-07-exp073-learned-judge-design.md` sections 10 and 11). The judge
-orders positions well to about distance 6 and flattens beyond: Gate T is predicted to fail for both
-arms (spearman_7_11 about 0.29 / 0.25 against the 0.30 floor; mean J falls from 10 to 11). The
-pre-named fix, `jt_draws = 4`, did not change that. **No seed 0-11 has trained;
-`GATE_T_THRESHOLD` and `$TrainUpdates` are unset on purpose**, so the launcher refuses every
-claim-bearing phase. Options put to Michael: run and let Gate T void; amend the floor; or
-(recommended) a new spec with a bigger judge readout. Do not train until he answers.
+EXP-073's 64-unit judge was blocked on its own training gate (issue #14). Michael chose option 2:
+EXP-074, a judge reading all 192 sensory neurons (W), with EXP-073's arms kept as A (encoder
+trains) and B (frozen), and a training gate (Gate L) that measures 3-move leaf ranking, which is
+what search uses. Spec `docs/superpowers/specs/2026-10-07-exp074-wide-judge-design.md`, results
+`experiments/074_wide_judge/RESULTS.md`.
+
+**Both primaries CONFIRMED at depth 9 on 12 seeds and on the 10-seed sensitivity line:** J3V-W
+0.1933 vs P3V 0.0629 (+0.130, 12/12 seeds) and vs J3V-A 0.1292 (+0.064). Depth 7: 0.79.
+Exploratory depth 11 (typical random scramble): J3V-W 0.101 vs P3V 0.031. Every gate passed. The
+judge was trained only from its own look-ahead; the BFS table is a yardstick, never an input.
+
+**What is open for Michael to choose next** (roadmap `2026-10-05-lookahead-roadmap-design.md`):
+a wider or retrained sensory region (EXP-074 section 10's option 3, now motivated since width
+mattered); a deeper tree or a learned no-revisit rule; using J to train the policy; stage B
+(a learned world model in place of `apply_move`). Ask before building any of them.
 
 ## 3. Things learned this session that will bite again
 
@@ -72,6 +79,12 @@ claim-bearing phase. Options put to Michael: run and let Gate T void; amend the 
   depend on files only two machines held. Do the same for future experiments' small JSON records.
 - **Laptop throughput:** a cube eval cell is about 3x slower per cell at 20 workers than at 3.
   Total throughput still favours 20, but price runs from a same-worker-count measurement.
+- **Value-iteration training workers use 0.7 to 0.94 GB each**, not 195 MB. 12 workers ran three
+  waves of 36 runs in about 14 h; total throughput at 12 was about the same as at 6. The first
+  hour of a wave is slower than its average: price a run from a whole wave, not its first probe.
+- **`Start-Process -PassThru` reports `ExitCode` as `$null` unless `.Handle` is read**, so a
+  launcher pool counts every cell as failed. Fixed in `launch074.ps1` (`5ca5ead`); copy that
+  pattern into any new launcher. `launch073.ps1` still has the bug (never ran an eval phase).
 
 ## 4. What NOT to do
 
