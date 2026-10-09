@@ -158,3 +158,63 @@ def test_pretrain_run_writes_an_encoder_at_the_arm_width(tmp_path):
     untrained = cells.fresh_sensory("X", 12)
     assert not torch.equal(trained.fc1.weight, untrained.fc1.weight)
     assert rec["final_move_accuracy"] == on_disk["final_move_accuracy"]
+
+
+train = _load("exp075_train", "train.py")
+
+
+def test_train_parser_defaults_are_the_spec_settings():
+    """Catches driver defaults drifting from spec section 5."""
+    a = train.build_parser().parse_args(["--n-updates", "1"])
+    assert (a.batch, a.sync_every, a.probe_every, a.draws) == (1000, 100, 250, 1)
+    assert a.arms == ["X", "Y"] and train.MAX_LEN == 14
+
+
+def test_one_update_moves_the_region_for_both_arms(tmp_path):
+    """REVIEW FOCUS 1. Catches X or Y trained with a frozen region: the gradient must ARRIVE at
+    fc1 (CLAUDE.md: verify the parameter moved, not that a switch is set)."""
+    import random
+    from neuromorphic.training import value_iteration as vi
+    for arm in ("X", "Y"):
+        _fake_encoder(tmp_path, arm, 0)
+        judge = cells.make_judge(0, arm, tmp_path)
+        before = judge.sensory.fc1.weight.detach().clone()
+        opt = vi.make_optimizer(judge, train.VI_ARM)
+        jt = vi.sync_target(judge)
+        states = vi.random_walk_states(8, 14, random.Random(0), N_ACTIONS, set())
+        vi.train_step(judge, jt, opt, states, N_ACTIONS, torch.Generator().manual_seed(0))
+        assert not torch.equal(before, judge.sensory.fc1.weight.detach()), arm
+        lrs = sorted(g["lr"] for g in opt.param_groups)
+        assert lrs == [1e-4, 1e-3], arm
+
+
+def test_train_refuses_a_missing_encoder_before_building_anything(tmp_path):
+    """Catches training on a random region when pretraining was skipped, and catches the check
+    running only after the 65 s BFS build."""
+    import time
+    t0 = time.time()
+    with pytest.raises(SystemExit, match="enc_Y_s12.pt"):
+        train.run("Y", 12, 1, 8, 1, 1, 1, tmp_path)
+    assert time.time() - t0 < 20
+
+
+def test_train_relaunch_skips_runs_whose_record_exists(tmp_path):
+    """Catches a relaunch that resubmits finished runs (Review Focus 3)."""
+    (tmp_path / cells.record_name("X", 13)).write_text("{}")
+    assert train.pending_jobs(["X", "Y"], [12, 13], tmp_path) == [
+        ("X", 12), ("Y", 12), ("Y", 13)]
+
+
+@pytest.mark.slow
+def test_run_writes_gate_l_drift_width_and_readout(tmp_path):
+    """Catches a record missing Gate L, the drift Gate E reads, or the width. Slow: builds the
+    full BFS table, as the real driver does."""
+    _fake_encoder(tmp_path, "X", 12)
+    rec = train.run("X", 12, 2, 8, 1, 1, 1, tmp_path)
+    on_disk = json.loads((tmp_path / cells.record_name("X", 12)).read_text())
+    assert on_disk["readout"] == "wide" and on_disk["hidden"] == 512
+    assert on_disk["gate_l"]["n"] == 250
+    assert 0.05 < on_disk["gate_l"]["chance"] < 0.6
+    assert on_disk["encoder_drift"] > 0.0
+    assert (tmp_path / "judge_X_s12" / "judge.pt").exists()
+    assert rec["gate_l"] == on_disk["gate_l"]
