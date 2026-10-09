@@ -18,9 +18,12 @@ with reinforcement learning to solve a 2x2 Rubik's cube. It worked, in the sense
 the regionalized network solves 2x2 cubes from scrambles up to **depth 8** (0.0783 success against
 a measured chance floor of exactly 0.0000, EXP-062), far past the 1-move checkpoint the plan set
 and the 3-move stretch goal.
+Since then, a search wrapped around the trained networks, with a judge the network learned from
+its own look-ahead, has reached **0.1933** at depth 9 (EXP-074) and, in an exploratory run, about one
+typical random scramble in ten (section 9).
 
-**It mostly did not work for the reasons the architecture was built to test.** Across 72 numbered
-experiments, 56 of them with a committed results file (Appendix A), almost every architectural
+**It mostly did not work for the reasons the architecture was built to test.** Across 74 numbered
+experiments, 58 of them with a committed results file (Appendix A), almost every architectural
 idea lost to a training idea:
 
 | idea | kind | verdict |
@@ -1010,7 +1013,7 @@ and not as a confirmation: policy-scored 3-move look-ahead with the rule solved 
 configuration is **+0.1150**, a figure that is **exploratory** and was not pre-registered (EXP-071).
 **The gain is search scaffolding around the frozen network**: a simulator to imagine moves, a
 three-move tree, and a lookup table of visited states. The spiking network learned nothing new in
-either experiment, and the one learned judge tried failed.
+either experiment, and the one learned judge tried there, the critic, failed.
 
 **A third experiment carried that configuration to the frontier, and both primaries were confirmed.**
 EXP-072 ran policy-scored 3-move look-ahead with the no-revisit rule at depths 8 and 9, on the same
@@ -1036,8 +1039,44 @@ pre-registered (EXP-072).
 The framing of EXP-071 applies unchanged. This is search scaffolding around frozen networks, and
 nothing was trained. It does not reach the goal either: a random 2x2 is usually 11 moves from
 solved, and at depth 9 the configuration solves about 6% of held-out states. The roadmap's remaining
-routes are a learned judge (its third stage), a learned or spiking form of the no-revisit rule, and
-deeper search; which comes next is a decision for the project, not a result.
+routes were a learned judge (its third stage), a learned or spiking form of the no-revisit rule, and
+deeper search, and the project chose the learned judge.
+
+**The third stage has run: a judge the network learns from its own look-ahead, and both primaries
+were confirmed.** One disclosure comes first. While the project was diagnosing the experiment this
+one replaced, early judges were run on two of its evaluation cells (depth 9, seeds 0 and 3) before
+its spec was written, and those numbers shaped the design. The spec therefore prints every primary
+twice, on all 12 seeds and on the 10 seeds that were never looked at, and the two lines agree
+(EXP-074).
+
+EXP-073 had planned a judge reading the 64-unit concept. Its pilots predicted that its training
+gate would fail, diagnostics then showed that the gate measured the wrong quantity and that the
+64-unit readout was itself a bottleneck, and EXP-073 was superseded before any evaluation seed was
+trained, so **none of its claims was tested** (EXP-073). EXP-074 replaced it with a judge reading all
+192 sensory neurons, the 64-unit concept and the 128 hidden units, trained by value iteration from
+its own 3-move look-ahead and never from the true distances. The spiking encoder underneath was
+trained with it, by surrogate gradients as in EXP-047. The judge then scores the leaves of the same
+3-move search with the no-revisit rule, and was compared at depth 9 with the best configuration so
+far and with the same judge reading only the 64-unit concept. Every validity gate passed:
+
+| claim (depth 9) | arm | control | 12 seeds | 10 seeds (0 and 3 dropped) | verdict |
+|---|---|---|---|---|---|
+| 1: the 192-unit judge against policy-scored look-ahead | 0.1933 | 0.0629 | +0.1304, 12 of 12, p 0.0002 | +0.1340, p 0.0010 | **confirmed** |
+| 2: the 192-unit judge against the 64-unit judge | 0.1933 | 0.1292 | +0.0642, 10 of 12 better and two tied, p 0.0010 | +0.0605, p 0.0039 | **confirmed** |
+
+The test could detect a difference of about 0.025, and the observed ones are about 12 and 6
+standard errors. The secondaries, read as a pattern and not as confirmations, are all positive: the
+192-unit judge also leads at depth 7 (**0.7908** against 0.3217) and depth 8 (0.3792 against
+0.1496), and at depth 9 the 64-unit judge beats policy-scored look-ahead (+0.066) and training its
+encoder beats freezing it (+0.063), which answers EXP-073's two questions as patterns rather than
+claims. One exploratory run, with no claim attached, went to depth 11, the typical distance of a
+random scramble, using each seed's depth-9 agent: the 192-unit judge solved **0.1013** of held-out
+states against 0.0308 for policy-scored look-ahead (EXP-074).
+
+This is the first result in section 9 where the network learned something new. The judge's readout
+and the spiking encoder beneath it were trained, without any answers, from the network's own
+search. The search itself is still scaffolding: the simulator, the three-move tree and the visited
+table are hand-coded. About one random scramble in ten is solved, so the goal is closer but not met.
 
 None of this changes the learning rule. Training remains surrogate-gradient backpropagation, and
 the roadmap does not claim that search makes the network neuromorphic in how it learns, or that
@@ -1055,7 +1094,7 @@ on, in section 5; a verdict parsed out of free-form prose would be a guess, so t
 carry one.
 
 <!-- experiment-index:start (generated by scripts/experiment_index.py; do not edit) -->
-72 numbered folders, 56 with a committed results file.
+74 numbered folders, 58 with a committed results file.
 
 | id | folder | results file | title |
 |---|---|---|---|
@@ -1131,5 +1170,7 @@ carry one.
 | EXP-070 | `070_lookahead_existing` | `experiments/070_lookahead_existing/RESULTS.md` | look-ahead on the networks we already have |
 | EXP-071 | `071_critic_and_no_revisit` | `experiments/071_critic_and_no_revisit/RESULTS.md` | the critic as judge, and a no-revisit rule in the search |
 | EXP-072 | `072_p3v_frontier` | `experiments/072_p3v_frontier/RESULTS.md` | look-ahead plus no-revisit moves the depth 8-9 frontier |
+| EXP-073 | `073_learned_judge` | `experiments/073_learned_judge/RESULTS.md` | superseded by EXP-074, no evaluation |
+| EXP-074 | `074_wide_judge` | `experiments/074_wide_judge/RESULTS.md` | a learned judge that reads the whole sensory region |
 | unnumbered | `probe_reanalysis` | `experiments/probe_reanalysis/RESULTS.md` | Probe re-analysis - EXP-033, EXP-039 and EXP-047 with trajectory metrics beside them |
 <!-- experiment-index:end -->
