@@ -1,6 +1,7 @@
 # A five-region spiking brain learns a 2x2 cube, mostly for ordinary reasons
 
-**Research report, DRAFT 0.** Started 2026-09-25 (week 25), ahead of Phase 4 (Oct 5 to Dec 27).
+**Research report.** Started 2026-09-25 (week 25), written during Phase 4 (Oct 5 to Dec 27), and
+updated as Phase 4's experiments report.
 
 > **Status of this draft.** Every section is written, sections 1 to 9 and Appendix A.
 >
@@ -756,7 +757,7 @@ exists to prevent.
 | level | grade | why |
 |---|---|---|
 | minimum viable: regions specialise and cooperate on grid navigation | **partial** | the sensory region demonstrably specialises (EXP-027); the regions do not demonstrably cooperate, because only one of them reaches the action |
-| target: solve a 2x2 *"from any scramble"* through reinforcement | **not met** | the learning is genuinely by reinforcement, but the frontier is depth 8 (EXP-062), depth 9 is at the floor, and a uniformly random 2x2 is most often 11 moves from solved |
+| target: solve a 2x2 *"from any scramble"* through reinforcement | **not met** | the learning is genuinely by reinforcement, but the frontier is depth 8 (EXP-062), depth 9 is at the floor, and a uniformly random 2x2 is most often 11 moves from solved. Graded at the checkpoint; the search experiments since then are in section 9 |
 | stretch: continual learning without forgetting | **not attempted** | no experiment trained a second task |
 
 ### 6.3 The roadmap the project set itself
@@ -771,7 +772,9 @@ exists to prevent.
 The roadmap had judged Stage 4 *"genuinely achievable... nothing about it requires new science."*
 That was written before the budget law existed. It was right about the science and wrong about
 the arithmetic: with the policy as built, it is the exchange rate between compute and depth that
-stops it. Section 9 takes up what would change that exchange rate.
+stops it. Section 9 takes up what would change that exchange rate. The grade above is the one
+recorded for the reactive policy and is left as it was; a search with a learned judge has since
+solved about one typical random scramble in ten, in an exploratory run (EXP-074).
 
 ## 7. Reproducing the results
 
@@ -873,10 +876,12 @@ themselves are plain Python and most take `--workers`.
 
 ### 8.1 Limitations
 
-**What was solved.** A 2x2 cube, from held-out states up to 8 moves from solved, at 0.0783 at
-depth 8 (EXP-062). Depth 9 is at the floor and depth 11, the modal distance of a random cube, was
-priced out rather than attempted. The plan's target, a cube solved *"from any scramble"*, is not
-met (section 6.2).
+**What was solved.** The trained policy acting on its own solves held-out states up to 8 moves
+from solved, at 0.0783 at depth 8 (EXP-062); for that policy, depth 9 is at the floor and depth 11,
+the modal distance of a random cube, was priced out rather than attempted. A 3-move search around
+the same networks, scored by a judge trained from its own look-ahead, reaches **0.1933** at depth 9
+(EXP-074, confirmed) and about 0.10 at depth 11 (exploratory, no claim). The plan's target, a cube
+solved *"from any scramble"*, is still not met (section 6.2).
 
 **What the solver is.** With `recall=False`, the policy is the 192-neuron sensory region and a
 390-parameter linear head, plus a 65-parameter critic; 318 of the 510 neurons do not reach the
@@ -894,8 +899,10 @@ one attempt to let a neuromodulatory signal govern plasticity was refuted (EXP-0
 neuromorphic content is the spiking substrate, not the learning.
 
 **The policy is reactive.** It makes one forward pass and one move per step, with no look-ahead.
-Every depth result, and the budget law that prices them, describes that kind of policy (section
-5.1). The memory result is also about a reactive policy (section 5.4).
+Every depth result in section 5, and the budget law that prices them, describes that kind of policy
+(section 5.1). The memory result is also about a reactive policy (section 5.4). The search
+experiments of section 9 go beyond it, but their simulator, three-move tree and visited-state
+table are hand-coded rather than learned, so they are not evidence that the network itself plans.
 
 **2x2 only.** The 6-move action set is a 2x2 simplification that does not carry to a 3x3, which has
 fixed centres and needs 12 or 18 moves (section 3.3). The exact distance-to-solved table that every
