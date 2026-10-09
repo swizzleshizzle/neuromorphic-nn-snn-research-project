@@ -309,6 +309,13 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   CONFIRMED: depth 8 P3V 0.1496 vs P3 0.0854 (+0.0642, p 0.0005); depth 9 P3V 0.0629 vs G0
 >   0.0171 (+0.0458, p 0.0002, off the floor). Still search scaffolding on frozen networks; a
 >   random 2x2 (usually 11 moves out) remains out of reach.
+> - **2026-10-09, stage 3 (EXP-074, superseding EXP-073):** a judge trained by value iteration from
+>   its own look-ahead, never from answers, reading all 192 sensory neurons. Both primaries
+>   CONFIRMED at depth 9, on 12 seeds and on the 10-seed sensitivity line: J3V-W 0.1933 vs P3V
+>   0.0629 (+0.1304, p 0.0002, 12/12 seeds) and vs the 64-unit judge J3V-A 0.1292 (+0.0642,
+>   p 0.0010). Depth 7 J3V-W 0.7908. Exploratory depth 11, the typical random scramble: J3V-W
+>   0.1013 vs P3V 0.0308. Readout width was a measured bottleneck. States at distance 11, the
+>   typical random scramble, are solved about one time in ten (exploratory, no claim).
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
