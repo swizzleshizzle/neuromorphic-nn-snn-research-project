@@ -61,32 +61,53 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def load_judge(train_arm: str, seed: int, judge_dir=None):
+def judge_updates(train_arm: str, seed: int, judge_dir=None):
+    """Updates a saved judge has completed, from `state.json` (key `update`, written by
+    value_iteration._save_checkpoint as the NEXT update, i.e. the completed count). None for W:
+    EXP-074's committed outputs carry no state.json."""
+    if train_arm == "W":
+        return None
+    path = cells.ckpt_dir(train_arm, seed, judge_dir) / "state.json"
+    if not path.exists():
+        raise SystemExit(f"missing {path} for arm {train_arm} seed {seed}: cannot tell how far "
+                         f"the judge trained; train it with train.py first")
+    return int(json.loads(path.read_text())["update"])
+
+
+def load_judge(train_arm: str, seed: int, judge_dir=None, required_updates=cells.N_UPDATES):
     """X and Y: this experiment's checkpoint, loaded into an untrained region of the arm's width
     (the checkpoint holds the region's trained weights, so the pretrained file is not needed).
-    W: EXP-074's committed judge, always from EXP-074's outputs."""
+    The checkpoint is refused unless training reached `required_updates` (judge.pt is written at
+    update 0, so its existence proves nothing). W: EXP-074's committed judge, from EXP-074's
+    outputs."""
     if train_arm == "W":
         return e74.load_judge("W", seed, cells.E74_OUT)
     path = cells.ckpt_dir(train_arm, seed, judge_dir) / "judge.pt"
     if not path.exists():
         raise SystemExit(f"missing judge checkpoint {path} for arm {train_arm} seed {seed}; "
                          f"train it with train.py first")
+    done = judge_updates(train_arm, seed, judge_dir)
+    if done != required_updates:
+        raise SystemExit(f"{path.parent / 'state.json'}: judge for arm {train_arm} seed {seed} is "
+                         f"at update {done}, evaluation needs {required_updates}; finish "
+                         f"training (and delete any cells evaluated from it) first")
     judge = cells.build_judge(seed, train_arm, cells.fresh_sensory(train_arm, seed))
     judge.load_state_dict(torch.load(path, map_location="cpu"))
     judge.eval()
     return judge
 
 
-def _critic(arm, seed, judge_dir):
-    return JudgeCritic(load_judge(_ARMS[arm], seed, judge_dir))
+def _critic(arm, seed, judge_dir, required_updates=cells.N_UPDATES):
+    return JudgeCritic(load_judge(_ARMS[arm], seed, judge_dir, required_updates))
 
 
-def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> dict:
+def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None,
+             required_updates=cells.N_UPDATES) -> dict:
     torch.set_num_threads(1)
     if arm not in _ARMS:
         raise SystemExit(f"unknown arm {arm!r}; valid: {list(ARMS_EVAL)}")
     t0 = time.time()
-    critic = _critic(arm, seed, judge_dir)
+    critic = _critic(arm, seed, judge_dir, required_updates)
     agent, head, states, train_seed = load_cell(depth, seed)
     if limit_states is not None:
         states = states[:limit_states]
@@ -96,7 +117,8 @@ def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> di
                              critic=critic, no_revisit=True)
     rec = {**res, "depth": depth, "seed": seed, "arm": arm,
            "wall_s": round(time.time() - t0, 1), "git_commit": _git_commit(),
-           "limit_states": limit_states}
+           "limit_states": limit_states,
+           "judge_updates": judge_updates(_ARMS[arm], seed, judge_dir)}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / f"exp075_{arm}_d{depth}_s{seed}.json").write_text(
@@ -104,14 +126,15 @@ def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> di
     return rec
 
 
-def rank_cell(kind, depth, seed, out_dir, judge_dir=None, limit_states=None) -> dict:
+def rank_cell(kind, depth, seed, out_dir, judge_dir=None, limit_states=None,
+              required_updates=cells.N_UPDATES) -> dict:
     """Gate R: per-seed mean hit of 'the lowest-J leaf at k=3 is closer to solved than the root',
     on evaluation held-out states. BFS (max_depth = depth + 3) is the yardstick only."""
     torch.set_num_threads(1)
     if kind not in RANK_KINDS:
         raise SystemExit(f"unknown kind {kind!r}; valid: {list(RANK_KINDS)}")
     k = 3
-    critic = _critic(_RANK_ARM[kind], seed, judge_dir)
+    critic = _critic(_RANK_ARM[kind], seed, judge_dir, required_updates)
     agent, head, states, train_seed = load_cell(depth, seed)
     if limit_states is not None:
         states = states[:limit_states]
@@ -127,7 +150,8 @@ def rank_cell(kind, depth, seed, out_dir, judge_dir=None, limit_states=None) -> 
         hits.append(int(leaf_d[int(scores.argmax())] < d))
         chances.append(sum(x < d for x in leaf_d) / len(leaf_d))
     rec = {"kind": kind, "depth": depth, "seed": seed, "n": len(states),
-           "hit": st.mean(hits), "chance": st.mean(chances), "limit_states": limit_states}
+           "hit": st.mean(hits), "chance": st.mean(chances), "limit_states": limit_states,
+           "judge_updates": judge_updates(_ARMS[_RANK_ARM[kind]], seed, judge_dir)}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / f"exp075_rank_{kind}_d{depth}_s{seed}.json").write_text(

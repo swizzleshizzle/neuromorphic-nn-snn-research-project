@@ -83,6 +83,8 @@ def contrast(rates, a, b, gate_ok):
 
 def _check(rec, settings, kind) -> None:
     who = f"{kind} record for arm {rec.get('arm')} seed {rec.get('seed')}"
+    if "arm" not in rec:
+        raise SystemExit(f"{who}: the record has no 'arm' field")
     for k, v in settings.items():
         if rec.get(k) != v:
             raise SystemExit(f"{who}: {k} is {rec.get(k)!r}, spec says {v!r}")
@@ -126,6 +128,21 @@ def _read(path: Path) -> dict:
     return r
 
 
+def seconds_per_update(rec):
+    """wall_s covers only the session that wrote the record, so divide by the updates that session
+    trained: n_updates - resumed_from. None when it trained nothing, or the fields are absent."""
+    wall, n, res = rec.get("wall_s"), rec.get("n_updates"), rec.get("resumed_from")
+    if wall is None or n is None or res is None or n - res <= 0:
+        return None
+    return wall / (n - res)
+
+
+def _mean_or_none(values):
+    """Mean of the non-None values; None when there are none."""
+    vals = [v for v in values if v is not None]
+    return st.mean(vals) if vals else None
+
+
 def pilot_amendment(pilot_dir) -> dict:
     """The numbers the dated amendment states (spec sections 6 and 7), from the pilot records."""
     pilot_dir = Path(pilot_dir)
@@ -140,7 +157,14 @@ def pilot_amendment(pilot_dir) -> dict:
            for a in cells.ARMS_TRAIN}
     mar = {a: [trn[(a, s)]["gate_l"]["margin"] for s in cells.PILOT_SEEDS]
            for a in cells.ARMS_TRAIN}
+    drift = {a: [trn[(a, s)].get("encoder_drift") for s in cells.PILOT_SEEDS]
+             for a in cells.ARMS_TRAIN}
+    spu = {a: [seconds_per_update(trn[(a, s)]) for s in cells.PILOT_SEEDS]
+           for a in cells.ARMS_TRAIN}
     return {
+        "mean_encoder_drift": {a: _mean_or_none(v) for a, v in drift.items()},
+        "mean_seconds_per_update": {a: _mean_or_none(v) for a, v in spu.items()},
+        "seconds_per_update_by_seed": spu,
         "mean_accuracy": {a: st.mean(v) for a, v in acc.items()},
         "mean_margin": {a: st.mean(v) for a, v in mar.items()},
         "gate_p": {a: 0.9 * st.mean(v) for a, v in acc.items()},
@@ -148,6 +172,76 @@ def pilot_amendment(pilot_dir) -> dict:
         "pilot_failed": any(st.mean(v) < PILOT_FAIL_ACCURACY for v in acc.values()),
         "y_working_control": st.mean(mar["Y"]) >= W_GATE_L_THRESHOLD,
     }
+
+
+def check_judge_updates(rec, path) -> None:
+    """An X or Y eval or rank record must come from a judge trained to the full 4000 updates."""
+    if rec.get("judge_updates") != cells.N_UPDATES:
+        raise SystemExit(f"{path.name}: judge_updates is {rec.get('judge_updates')!r}, spec says "
+                         f"{cells.N_UPDATES}: it was evaluated from a partly trained judge")
+
+
+def _read_judged(path: Path) -> dict:
+    r = _read(path)
+    check_judge_updates(r, path)
+    return r
+
+
+def stage_pretrain(out) -> dict:
+    """Gate P from the 24 pretraining records alone. Readable right after pretraining."""
+    require_thresholds()
+    out = Path(out)
+    res = {}
+    for a in cells.ARMS_TRAIN:
+        v = []
+        for s in SEEDS:
+            r = _read(out / cells.pretrain_record_name(a, s))
+            check_pretrain_record(r)
+            v.append(r["final_move_accuracy"])
+        res[a] = {"min": min(v), "mean": st.mean(v), "threshold": GATE_P_THRESHOLD[a],
+                  "pass": gate_p_verdict(v, GATE_P_THRESHOLD[a])}
+    return res
+
+
+def stage_train(out) -> dict:
+    """Gates L and E from the 24 training records alone. Readable right after training."""
+    require_thresholds()
+    out = Path(out)
+    res = {"l": {}, "e": {}}
+    for a in cells.ARMS_TRAIN:
+        recs = []
+        for s in SEEDS:
+            r = _read(out / cells.record_name(a, s))
+            check_train_record(r)
+            recs.append(r)
+        m = [r["gate_l"]["margin"] for r in recs]
+        res["l"][a] = {"mean": st.mean(m), "threshold": GATE_L_THRESHOLD[a],
+                       "p": one_sided_p(m), "pass": a74.gate_l_verdict(m, GATE_L_THRESHOLD[a])}
+        res["e"][a] = gate_e_verdict([r["encoder_drift"] for r in recs])
+    return res
+
+
+def stage_cont(out) -> str:
+    """Gate 0(b): J3V-W at depths 9 and 11, seed 0, against EXP-074's committed records."""
+    require_thresholds()
+    return a71.gate0b_verdict(
+        {("J3V-W", d): _read(Path(out) / f"exp075_J3V-W_d{d}_s0.json") for d in (9, 11)},
+        {("J3V-W", d): _read(cells.E74_OUT / f"exp074_J3V-W_d{d}_s0.json") for d in (9, 11)})
+
+
+def print_stage_pretrain(res) -> None:
+    print("GATE P (pretraining move accuracy, every seed)")
+    for a, g in res.items():
+        print(f"  arm {a}: min {g['min']:.4f} mean {g['mean']:.4f} vs threshold "
+              f"{g['threshold']:.4f} -> {g['pass']}")
+
+
+def print_stage_train(res) -> None:
+    print("GATE L (3-move leaf ranking on probe distances 7-11, margin over chance)")
+    for a, g in res["l"].items():
+        print(f"  arm {a}: mean margin {g['mean']:.4f} vs threshold {g['threshold']:.4f}, "
+              f"p {g['p']:.4f} -> {g['pass']}")
+    print(f"GATE E: {res['e']}")
 
 
 def _arm_ok(gates, j_arm, depth) -> bool:
@@ -180,8 +274,9 @@ def load_rates(out_dir: Path) -> dict:
              if k[0] in ("J3V-W", "P3V", "R3V")}
     for d in DEPTHS:
         for arm in J_ARMS:
-            rates[(arm, d)] = {s: _read(out_dir / f"exp075_{arm}_d{d}_s{s}.json")["success_rate"]
-                               for s in SEEDS}
+            rates[(arm, d)] = {
+                s: _read_judged(out_dir / f"exp075_{arm}_d{d}_s{s}.json")["success_rate"]
+                for s in SEEDS}
     return rates
 
 
@@ -191,6 +286,8 @@ def main() -> None:
     ap.add_argument("--pilot-dir", type=Path, default=HERE / "outputs_pilot")
     ap.add_argument("--pilot-report", action="store_true",
                     help="print the amendment's numbers from the pilot records and stop")
+    ap.add_argument("--stage", choices=("pretrain", "train", "cont"),
+                    help="read only this stage's gate (spec section 10) and stop")
     ap.add_argument("--determinism-ok", action="store_true",
                     help="set only after the det re-run matches its full-run copy")
     args = ap.parse_args()
@@ -207,42 +304,30 @@ def main() -> None:
         return
     require_thresholds()
     out = args.out_dir
-    pre = {(a, s): _read(out / cells.pretrain_record_name(a, s))
-           for a in cells.ARMS_TRAIN for s in SEEDS}
-    for r in pre.values():
-        check_pretrain_record(r)
-    train = {(a, s): _read(out / cells.record_name(a, s)) for a in cells.ARMS_TRAIN for s in SEEDS}
-    for r in train.values():
-        check_train_record(r)
+    if args.stage == "pretrain":
+        print_stage_pretrain(stage_pretrain(out))
+        return
+    if args.stage == "train":
+        print_stage_train(stage_train(out))
+        return
+    if args.stage == "cont":
+        print(f"GATE 0(b) J3V-W continuity with EXP-074 (d9, d11, seed 0): {stage_cont(out)}")
+        return
+    p_res, t_res, g0b = stage_pretrain(out), stage_train(out), stage_cont(out)
     rank_keys = [(k, d) for k in ("J-X", "J-Y") for d in DEPTHS] \
         + [("J-W", d) for d in W_RANK_DEPTHS]
-    rank = {(k, d): [_read(out / f"exp075_rank_{k}_d{d}_s{s}.json") for s in SEEDS]
-            for k, d in rank_keys}
+    rank = {(k, d): [(_read if k == "J-W" else _read_judged)(
+        out / f"exp075_rank_{k}_d{d}_s{s}.json") for s in SEEDS] for k, d in rank_keys}
     rates = load_rates(out)
 
-    gate_p = {a: gate_p_verdict([pre[(a, s)]["final_move_accuracy"] for s in SEEDS],
-                                GATE_P_THRESHOLD[a]) for a in cells.ARMS_TRAIN}
-    gate_l = {a: a74.gate_l_verdict([train[(a, s)]["gate_l"]["margin"] for s in SEEDS],
-                                    GATE_L_THRESHOLD[a]) for a in cells.ARMS_TRAIN}
-    gate_e = {a: gate_e_verdict([train[(a, s)]["encoder_drift"] for s in SEEDS])
-              for a in cells.ARMS_TRAIN}
+    gate_p = {a: p_res[a]["pass"] for a in cells.ARMS_TRAIN}
+    gate_l = {a: t_res["l"][a]["pass"] for a in cells.ARMS_TRAIN}
+    gate_e = t_res["e"]
     gate_r = {(k, d): bool(a71.gate_r_verdict(rank[(k, d)], "hit", "chance")[0])
               for k, d in rank_keys}
-    g0b = a71.gate0b_verdict(
-        {("J3V-W", d): _read(out / f"exp075_J3V-W_d{d}_s0.json") for d in (9, 11)},
-        {("J3V-W", d): _read(cells.E74_OUT / f"exp074_J3V-W_d{d}_s0.json") for d in (9, 11)})
 
-    print("GATE P (pretraining move accuracy, every seed)")
-    for a in cells.ARMS_TRAIN:
-        v = [pre[(a, s)]["final_move_accuracy"] for s in SEEDS]
-        print(f"  arm {a}: min {min(v):.4f} mean {st.mean(v):.4f} vs threshold "
-              f"{GATE_P_THRESHOLD[a]:.4f} -> {gate_p[a]}")
-    print("GATE L (3-move leaf ranking on probe distances 7-11, margin over chance)")
-    for a in cells.ARMS_TRAIN:
-        m = [train[(a, s)]["gate_l"]["margin"] for s in SEEDS]
-        print(f"  arm {a}: mean margin {st.mean(m):.4f} vs threshold {GATE_L_THRESHOLD[a]:.4f}, "
-              f"p {one_sided_p(m):.4f} -> {gate_l[a]}")
-    print(f"GATE E: {gate_e}")
+    print_stage_pretrain(p_res)
+    print_stage_train(t_res)
     print("GATE R (lowest-J leaf closer than root on held-out states)")
     for d in DEPTHS:
         print(f"  d{d}: " + "  |  ".join(

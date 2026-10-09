@@ -223,11 +223,13 @@ def test_run_writes_gate_l_drift_width_and_readout(tmp_path):
 evaluate = _load("exp075_evaluate", "evaluate.py")
 
 
-def _fake_judge_ckpt(jdir, arm, seed):
+def _fake_judge_ckpt(jdir, arm, seed, update=None):
     path = cells.ckpt_dir(arm, seed, jdir)
     path.mkdir(parents=True)
     judge = cells.build_judge(seed, arm, cells.fresh_sensory(arm, seed))
     torch.save(judge.state_dict(), path / "judge.pt")
+    (path / "state.json").write_text(json.dumps(
+        {"update": cells.N_UPDATES if update is None else update}))
     return judge
 
 
@@ -450,3 +452,172 @@ def test_launcher_carries_the_exit_code_fix_and_the_registered_cells():
     assert '"J3V-X", "J3V-Y"' in text and "7, 8, 9, 11" in text
     assert "exp075-det" in text and "GATE_P_THRESHOLD" in text
     assert "J-W" in text
+
+
+# ---- final-review fixes (F1 to F5) ----
+
+
+def test_partly_trained_judge_is_refused_by_evaluation(tmp_path):
+    """F2. Catches evaluating a checkpoint written at update 10 (judge.pt exists from update 0)."""
+    _fake_judge_ckpt(tmp_path, "X", 0, update=10)
+    with pytest.raises(SystemExit, match=r"state\.json.*10|10.*state\.json"):
+        evaluate.load_judge("X", 0, tmp_path)
+    with pytest.raises(SystemExit, match="10"):
+        evaluate.run_cell("J3V-X", 7, 0, tmp_path / "out", limit_states=1, judge_dir=tmp_path)
+    assert evaluate.load_judge("X", 0, tmp_path, required_updates=10) is not None
+
+
+def test_eval_and_rank_records_state_the_judge_update_count(tmp_path):
+    """F2. Catches records that cannot show which judge produced them."""
+    jdir = tmp_path / "judges"
+    _fake_judge_ckpt(jdir, "Y", 0, update=6)
+    r = evaluate.run_cell("J3V-Y", 7, 0, tmp_path / "o", limit_states=1, judge_dir=jdir,
+                          required_updates=6)
+    k = evaluate.rank_cell("J-Y", 7, 0, tmp_path / "o", judge_dir=jdir, limit_states=1,
+                           required_updates=6)
+    assert r["judge_updates"] == 6 and k["judge_updates"] == 6
+    w = evaluate.run_cell("J3V-W", 9, 0, tmp_path / "w", limit_states=1)
+    assert w["judge_updates"] is None
+
+
+def test_aggregator_refuses_x_y_records_from_an_unfinished_judge(tmp_path):
+    """F2. Catches a stale partly-trained cell entering a verdict."""
+    p = tmp_path / "exp075_J3V-X_d9_s0.json"
+    for bad in ({"success_rate": 0.2, "limit_states": None},
+                {"success_rate": 0.2, "limit_states": None, "judge_updates": 10}):
+        p.write_text(json.dumps(bad))
+        with pytest.raises(SystemExit, match="judge_updates"):
+            agg._read_judged(p)
+    p.write_text(json.dumps({"success_rate": 0.2, "limit_states": None, "judge_updates": 4000}))
+    assert agg._read_judged(p)["success_rate"] == 0.2
+
+
+def test_resumed_from_reads_the_checkpoint_state(tmp_path):
+    """F3. Catches a record that cannot say where its session started."""
+    assert train._resumed_from(tmp_path / "none") == 0
+    (tmp_path / "state.json").write_text(json.dumps({"update": 1750}))
+    assert train._resumed_from(tmp_path) == 1750
+
+
+def test_pilot_report_has_drift_and_seconds_per_update(tmp_path):
+    """F4. Catches a pilot report missing the measurements spec section 6 lists, and a
+    seconds-per-update that ignores where the session resumed."""
+    _write_pilot(tmp_path, {"X": [0.5, 0.5], "Y": [0.5, 0.5]},
+                 {"X": [0.3, 0.3], "Y": [0.2, 0.2]})
+    for arm, wall in (("X", 400.0), ("Y", 100.0)):
+        for s, res, drift in ((12, 0, 1.0), (13, 3000, 3.0)):
+            p = tmp_path / cells.record_name(arm, s)
+            r = json.loads(p.read_text())
+            r.update({"wall_s": wall, "resumed_from": res, "encoder_drift": drift})
+            p.write_text(json.dumps(r))
+    a = agg.pilot_amendment(tmp_path)
+    assert a["mean_encoder_drift"] == {"X": pytest.approx(2.0), "Y": pytest.approx(2.0)}
+    # X: 400/4000 and 400/1000; Y: 100/4000 and 100/1000
+    assert a["seconds_per_update_by_seed"]["X"] == pytest.approx([0.1, 0.4])
+    assert a["mean_seconds_per_update"]["Y"] == pytest.approx((0.025 + 0.1) / 2)
+    p = tmp_path / cells.record_name("X", 13)
+    r = json.loads(p.read_text())
+    r["resumed_from"] = 4000
+    p.write_text(json.dumps(r))
+    a = agg.pilot_amendment(tmp_path)
+    assert a["seconds_per_update_by_seed"]["X"] == [pytest.approx(0.1), None]
+    assert a["mean_seconds_per_update"]["X"] == pytest.approx(0.1)
+
+
+def test_a_record_without_arm_is_a_clear_exit_not_a_keyerror():
+    """F5."""
+    with pytest.raises(SystemExit, match="arm"):
+        agg.check_train_record({**_SETTINGS, "seed": 0, "readout": "wide", "hidden": 512})
+    with pytest.raises(SystemExit, match="arm"):
+        agg.check_pretrain_record({"seed": 0, "epochs": 40, "batch_size": 256, "lr": 3e-3})
+
+
+def _write_stage(d, *, acc=0.5, margin=0.3, drift=0.1, bad=None):
+    """24 pretrain and 24 train records for seeds 0-11. `bad` = (arm, seed, field, value)."""
+    for arm in ("X", "Y"):
+        for s in range(12):
+            a_, m_, d_ = acc, margin + 0.01 * (s % 3), drift
+            if bad and bad[:2] == (arm, s):
+                a_, m_, d_ = {"acc": (bad[3], m_, d_), "margin": (a_, bad[3], d_),
+                              "drift": (a_, m_, bad[3])}[bad[2]]
+            hidden = cells.HIDDEN[arm]
+            (d / cells.pretrain_record_name(arm, s)).write_text(json.dumps(
+                {"arm": arm, "seed": s, "hidden": hidden, "epochs": 40, "batch_size": 256,
+                 "lr": 3e-3, "final_move_accuracy": a_}))
+            (d / cells.record_name(arm, s)).write_text(json.dumps(
+                {**_SETTINGS, "arm": arm, "seed": s, "hidden": hidden, "readout": "wide",
+                 "gate_l": {"margin": m_}, "encoder_drift": d_}))
+
+
+@pytest.fixture
+def thresholds(monkeypatch):
+    monkeypatch.setattr(agg, "GATE_P_THRESHOLD", {"X": 0.4, "Y": 0.4})
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", {"X": 0.1, "Y": 0.1})
+
+
+def test_stage_pretrain_reads_only_pretrain_records(tmp_path, thresholds):
+    """F1. Catches Gate P needing train, rank or eval files; a failing seed must flip it."""
+    for arm in ("X", "Y"):
+        for s in range(12):
+            (tmp_path / cells.pretrain_record_name(arm, s)).write_text(json.dumps(
+                {"arm": arm, "seed": s, "hidden": cells.HIDDEN[arm], "epochs": 40,
+                 "batch_size": 256, "lr": 3e-3, "final_move_accuracy": 0.5}))
+    res = agg.stage_pretrain(tmp_path)
+    assert res["X"]["pass"] is True and res["Y"]["pass"] is True
+    assert res["X"]["min"] == pytest.approx(0.5) and res["X"]["threshold"] == 0.4
+    p = tmp_path / cells.pretrain_record_name("Y", 7)
+    r = json.loads(p.read_text())
+    r["final_move_accuracy"] = 0.39
+    p.write_text(json.dumps(r))
+    res = agg.stage_pretrain(tmp_path)
+    assert res["Y"]["pass"] is False and res["X"]["pass"] is True
+
+
+def test_stage_train_reads_only_train_records(tmp_path, thresholds):
+    """F1. Catches Gates L and E needing pretrain, rank or eval files; failing seeds flip them."""
+    for arm in ("X", "Y"):
+        for s in range(12):
+            (tmp_path / cells.record_name(arm, s)).write_text(json.dumps(
+                {**_SETTINGS, "arm": arm, "seed": s, "hidden": cells.HIDDEN[arm],
+                 "readout": "wide", "gate_l": {"margin": 0.3 + 0.01 * (s % 3)},
+                 "encoder_drift": 0.1}))
+    res = agg.stage_train(tmp_path)
+    assert res["l"]["X"]["pass"] is True and res["e"] == {"X": True, "Y": True}
+    assert res["l"]["X"]["p"] < 0.05
+    p = tmp_path / cells.record_name("X", 4)
+    r = json.loads(p.read_text())
+    r["encoder_drift"] = 0.0
+    p.write_text(json.dumps(r))
+    assert agg.stage_train(tmp_path)["e"] == {"X": False, "Y": True}
+    for s in range(12):
+        p = tmp_path / cells.record_name("Y", s)
+        r = json.loads(p.read_text())
+        r["gate_l"]["margin"] = 0.01
+        p.write_text(json.dumps(r))
+    res = agg.stage_train(tmp_path)
+    assert res["l"]["Y"]["pass"] is False and res["l"]["X"]["pass"] is True
+
+
+def test_stage_cont_compares_against_exp074_records(tmp_path, monkeypatch, thresholds):
+    """F1. Catches Gate 0(b) needing anything but the two J3V-W seed-0 records."""
+    e74d = tmp_path / "e74"
+    out = tmp_path / "out"
+    e74d.mkdir()
+    out.mkdir()
+    monkeypatch.setattr(agg.cells, "E74_OUT", e74d)
+    rec = {f: 1 for f in agg.a71.OUTCOME_FIELDS}
+    for d in (9, 11):
+        (e74d / f"exp074_J3V-W_d{d}_s0.json").write_text(json.dumps(rec))
+        (out / f"exp075_J3V-W_d{d}_s0.json").write_text(json.dumps(rec))
+    assert agg.stage_cont(out) == "PASS"
+    first = agg.a71.OUTCOME_FIELDS[0]
+    (out / "exp075_J3V-W_d11_s0.json").write_text(json.dumps({**rec, first: 2}))
+    assert agg.stage_cont(out) == "FAIL"
+
+
+def test_stages_need_thresholds(tmp_path, monkeypatch):
+    """F1. Catches a stage gate read before the dated amendment."""
+    monkeypatch.setattr(agg, "GATE_P_THRESHOLD", None)
+    for f in (agg.stage_pretrain, agg.stage_train, agg.stage_cont):
+        with pytest.raises(SystemExit, match="GATE_P_THRESHOLD"):
+            f(tmp_path)

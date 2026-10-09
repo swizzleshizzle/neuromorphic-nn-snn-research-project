@@ -63,6 +63,13 @@ def _encoder_drift(judge, arm, seed, out_dir) -> float:
     return sum(float(((cur[k] - e0[k]) ** 2).sum()) for k in e0) ** 0.5
 
 
+def _resumed_from(ckpt_dir) -> int:
+    """Updates already done when this session starts (0 for a fresh run). train_judge's wall_s
+    covers only the session that wrote the record, so s/update needs this."""
+    path = Path(ckpt_dir) / "state.json"
+    return int(json.loads(path.read_text())["update"]) if path.exists() else 0
+
+
 def run(arm, seed, n_updates, batch, sync_every, probe_every, draws, out_dir) -> dict:
     torch.set_num_threads(1)
     out_dir = Path(out_dir)
@@ -70,6 +77,7 @@ def run(arm, seed, n_updates, batch, sync_every, probe_every, draws, out_dir) ->
     provider = ExactBFSDistance(max_depth=None)
     excl = cells.exclusion_set(seed, provider)
     probe = cells.probe_set(seed, provider)
+    resumed_from = _resumed_from(cells.ckpt_dir(arm, seed, out_dir))
     result = vi.train_judge(
         judge, VI_ARM, n_updates=n_updates, batch=batch, max_len=MAX_LEN, n_actions=N_ACTIONS,
         exclude=excl, probe=probe, seed=seed, sync_every=sync_every, probe_every=probe_every,
@@ -79,7 +87,7 @@ def run(arm, seed, n_updates, batch, sync_every, probe_every, draws, out_dir) ->
     rec = {
         **result,
         "arm": arm, "seed": seed, "hidden": cells.HIDDEN[arm], "readout": judge.readout,
-        "n_updates": n_updates, "batch": batch, "max_len": MAX_LEN, "n_actions": N_ACTIONS,
+        "n_updates": n_updates, "resumed_from": resumed_from, "batch": batch, "max_len": MAX_LEN, "n_actions": N_ACTIONS,
         "sync_every": sync_every, "probe_every": probe_every, "draws": draws,
         "n_exclude": len(excl), "n_probe": len(probe),
         "encoder_drift": _encoder_drift(judge, arm, seed, out_dir),

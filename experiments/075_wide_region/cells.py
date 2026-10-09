@@ -36,6 +36,8 @@ HIDDEN = {"X": 512, "Y": 128}
 CONTENT = 64
 T = 32
 E74_OUT = REPO / "experiments" / "074_wide_judge" / "outputs"
+# Spec section 5: the update count a judge must have reached before it may be evaluated.
+N_UPDATES = 4000
 
 heldout_states = c74.heldout_states
 exclusion_set = c74.exclusion_set
