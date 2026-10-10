@@ -302,3 +302,20 @@ taken from training, and the first pretraining wave is checked against it before
    2.9 per second). One 03:31 restart is expected; the phase is relaunched and resumes from the
    last 250-update checkpoint. Commit Gates L and E (`--stage train`).
 3. Gate 0(b) (`cont`), then rank, eval, Gate 0(a) (`det`), and aggregation, as in section 10.
+
+## 13. Record 2026-10-09: pretraining finished, Gate P (before any seed 0-11 VI run)
+
+24 runs (X, Y x seeds 0-11), laptop, checkout `47246ae`, 8 workers, about 5.5 h, no relaunches.
+Records: `experiments/075_wide_region/outputs/exp075_pretrain_*.json`; every one passes
+`check_pretrain_record`. Output of `aggregate.py --stage pretrain`:
+
+| arm | min accuracy | mean accuracy | threshold | Gate P |
+|---|---|---|---|---|
+| X | 0.5518 | 0.5588 | 0.5024 | PASS |
+| Y | 0.4508 | 0.4547 | 0.4097 | PASS |
+
+Y's 12 seeds (0.4508 to 0.4584) sit at EXP-039's 0.449 to 0.457, so laptop pretraining reproduces
+EXP-039's grade. Throughput was below the amendment's estimate: an X run took about 8,500 s at
+8 workers against 3,125 s at 4 in the pilot, so 8 workers bought less total throughput than 4.
+The worker count stays as amended; the training estimate in section 12 is likely low by a similar
+factor, and is re-measured from the first training checkpoints.
