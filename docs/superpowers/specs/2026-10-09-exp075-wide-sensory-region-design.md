@@ -319,3 +319,27 @@ EXP-039's grade. Throughput was below the amendment's estimate: an X run took ab
 8 workers against 3,125 s at 4 in the pilot, so 8 workers bought less total throughput than 4.
 The worker count stays as amended; the training estimate in section 12 is likely low by a similar
 factor, and is re-measured from the first training checkpoints.
+
+## 14. Record 2026-10-10: training finished, Gates L and E (before any rank or J evaluation cell)
+
+24 runs (X, Y x seeds 0-11), laptop, checkout `4e65594`, 8 workers, about 19 h. Records:
+`experiments/075_wide_region/outputs/exp075_train_*.json`; every one passes `check_train_record`.
+Output of `aggregate.py --stage train`:
+
+| arm | mean Gate L margin (12 seeds) | threshold | sign-flip p | Gate L | Gate E (drift) |
+|---|---|---|---|---|---|
+| X | 0.2713 (0.201 to 0.303) | 0.1298 | 0.0002 | PASS | PASS (11.26 to 14.44) |
+| Y | 0.2246 (0.193 to 0.262) | 0.1048 | 0.0002 | PASS | PASS (7.54 to 8.56) |
+
+**One relaunch, not a reboot.** About 15 h in, Windows logged a low virtual memory condition
+(three X workers had committed about 3.6 GB each, above their 2.82 GB working set); two workers
+faulted in VCRUNTIME140 and the pool died. The watcher found no workers and relaunched the phase,
+which skipped the 18 finished runs and resumed the other six from their last 250-update
+checkpoint: X seeds 7 and 8 from update 3001, X 9 from 2501, X 10 and 11 from 1501, Y 11 from 251.
+Their records say so in `resumed_from`, and their `wall_s` covers only the resumed part. A resumed
+run equals an uninterrupted one (`test_resume_equals_an_uninterrupted_run`), so the six are used
+as they stand. The 24 GB working-set budget in section 12 did not bound commit; later phases size
+their worker count from commit, not working set.
+
+Not a claim: X's margin exceeds Y's on 11 of 12 seeds (mean +0.047), and X's mean exceeds W's
+EXP-074 mean (0.2243). The claims are about solved cubes at depths 9 and 11 (section 9).
