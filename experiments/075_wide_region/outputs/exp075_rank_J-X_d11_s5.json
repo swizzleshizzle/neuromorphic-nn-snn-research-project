@@ -1,0 +1,10 @@
+{
+ "chance": 0.5225462962962963,
+ "depth": 11,
+ "hit": 0.59,
+ "judge_updates": 4000,
+ "kind": "J-X",
+ "limit_states": null,
+ "n": 200,
+ "seed": 5
+}

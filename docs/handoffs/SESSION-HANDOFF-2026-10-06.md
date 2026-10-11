@@ -1,7 +1,7 @@
-# Session Handoff - 2026-10-09 - WEEK 27. EXP-070 to 074 done; a learned judge solves deeper cubes.
+# Session Handoff - 2026-10-11 - WEEK 27. EXP-070 to 075 done; a wider learned judge solves deeper cubes.
 
 > **Nothing is running. The laptop is FREE.** `main` at the commit carrying this file. Suite:
-> **976 tests, 953 not slow, 23 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
+> **1032 tests, 1007 not slow, 25 slow** (plus 88 vitest + 2 e2e in `dashboard/`). Worktree
 > `/root/projects/.wt/report` on `phase4-report` belongs to a parallel docs session; leave it.
 >
 > **This supersedes the 2026-09-23 handoff and `NEXT-SESSION-PROMPT.md`**, which describe a
@@ -66,6 +66,26 @@ a wider or retrained sensory region (EXP-074 section 10's option 3, now motivate
 mattered); a deeper tree or a learned no-revisit rule; using J to train the policy; stage B
 (a learned world model in place of `apply_move`). Ask before building any of them.
 
+## 2c. EXP-075 (a wider sensory region) CONFIRMED at depth 9, not significant at depth 11
+
+Michael chose the wider region. X: a region at hidden 512 (four times E1's 128), inverse-model
+pretrained by EXP-039's recipe on the laptop, then trained as a judge by EXP-074's value iteration
+and read through all 576 units. Y: the same recipe at hidden 128, to hold pretraining fixed. W:
+EXP-074's judge, reused under Gate 0(b). Spec `docs/superpowers/specs/2026-10-09-exp075-wide-sensory-region-design.md`,
+results `experiments/075_wide_region/RESULTS.md`.
+
+**Claims 1 and 2 CONFIRMED at depth 9, 12 seeds and the 10-seed line:** J3V-X 0.2571 vs J3V-W
+0.1933 (+0.064) and vs J3V-Y 0.1704 (+0.087), 12/12 seeds each. **Claim 3, depth 11, NOT
+SIGNIFICANT:** 0.1200 vs 0.1013 (+0.019, p 0.076, 8 wins, 1 tie, 3 losses), below the ~0.03 the
+experiment could detect. Every gate passed. Y solves slightly less than W (-0.023), so W's RL
+fine-tuned provenance is worth a little; width is worth much more.
+
+**What is open for Michael to choose next:** at depth 11 the best judge solves about one cube in
+eight. The ceiling diagnostic (a raw-facelet head, 88/200 on depth 9 seed 0, against X's 56/200)
+says the readout still has headroom. Options: wider still or a supervised-then-VI region; a deeper
+tree or learned no-revisit (Gate R's leaf rate at depth 11 is barely above chance for every arm);
+using J to train the policy; a learned world model. Ask before building any of them.
+
 ## 3. Things learned this session that will bite again
 
 - **Worktrees import MAIN's src** through the venv's editable install. Prefix `PYTHONPATH=src`.
@@ -85,6 +105,16 @@ mattered); a deeper tree or a learned no-revisit rule; using J to train the poli
 - **`Start-Process -PassThru` reports `ExitCode` as `$null` unless `.Handle` is read**, so a
   launcher pool counts every cell as failed. Fixed in `launch074.ps1` (`5ca5ead`); copy that
   pattern into any new launcher. `launch073.ps1` still has the bug (never ran an eval phase).
+
+- **Budget laptop workers by COMMIT, not working set.** EXP-075's 8 X training workers had a
+  2.82 GB working set but committed about 3.6 GB each; 15 h in, Windows hit a low virtual memory
+  condition, two workers faulted in VCRUNTIME140 and the pool died (no reboot). Read
+  `PrivateMemorySize64`, not `WorkingSet64`. A watcher that relaunches on zero workers recovered it;
+  checkpoints made the relaunch lossless.
+- **8 workers was slower in total than 4 on the laptop** for hidden-512 training (12 s per X update
+  vs 4.16 s). Throughput saturates around 4 to 6 single-thread workers.
+- **A directory's LastWriteTime is its creation time here, not the last checkpoint.** It was misread
+  as a 2.5 h stall in EXP-075's pilot. Read `state.json`'s `update` field instead.
 
 ## 4. What NOT to do
 

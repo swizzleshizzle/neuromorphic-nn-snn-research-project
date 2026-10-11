@@ -316,6 +316,13 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   p 0.0010). Depth 7 J3V-W 0.7908. Exploratory depth 11, the typical random scramble: J3V-W
 >   0.1013 vs P3V 0.0308. Readout width was a measured bottleneck. States at distance 11, the
 >   typical random scramble, are solved about one time in ten (exploratory, no claim).
+> - **2026-10-11, stage 3 continued (EXP-075):** the same value-iteration judge on a sensory region
+>   four times wider (hidden 512, inverse-model pretrained). Claims 1 and 2 CONFIRMED at depth 9 on
+>   12 seeds and the 10-seed line: J3V-X 0.2571 vs J3V-W 0.1933 (+0.0638, p 0.0002, 12/12 seeds)
+>   and vs the same recipe at hidden 128, J3V-Y 0.1704 (+0.0867, p 0.0002, 12/12). Claim 3, depth
+>   11: J3V-X 0.1200 vs J3V-W 0.1013 (+0.0188, p 0.0757), NOT SIGNIFICANT. Depth 7 0.8908. Width
+>   is a lever at depths 7 to 9; at the typical random scramble the best judge solves about one
+>   cube in eight.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank

@@ -48,7 +48,8 @@ and `test_encoder_seam.py` are cheap once their slow-marked tests are deselected
 906 2026-10-07 (EXP-072),
 934 2026-10-07 (EXP-073),
 976 2026-10-08 (EXP-074),
-**1031 as of 2026-10-09 (1006 not slow, 25 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
+1031 2026-10-09 (EXP-075 code),
+**1032 as of 2026-10-11 (1007 not slow, 25 slow)**, verified by `--collect-only`. The `dashboard/` JS app is separate: **88 vitest + 2 Playwright e2e**, run with `npx vitest run` and `npx playwright test` from `dashboard/`.
 
 **A chunking that actually works.** The `tests/training` remainder is ~837 s and
 **cannot** fit in one call at any timeout, so background it deliberately and let
