@@ -103,6 +103,7 @@ def rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=
     """Gate R at k 4 (reported, not voiding; spec section 7): per-seed mean hit of 'the lowest-J
     4-move leaf is closer to solved than the root', on evaluation held-out states. BFS is the
     yardstick only; unbounded by default because depth + 4 passes the 2x2's diameter."""
+    t0 = time.time()
     torch.set_num_threads(1)
     k = RANK_K
     critic = _critic(seed, judge_dir)
@@ -123,7 +124,8 @@ def rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=
         chances.append(sum(x < d for x in leaf_d) / len(leaf_d))
     rec = {"kind": "J-X4", "k": k, "depth": depth, "seed": seed, "n": len(states),
            "hit": st.mean(hits), "chance": st.mean(chances), "limit_states": limit_states,
-           "judge_updates": e75.judge_updates("X", seed, judge_dir)}
+           "judge_updates": e75.judge_updates("X", seed, judge_dir),
+           "wall_s": round(time.time() - t0, 1)}
     _write(out_dir, rank_record_name(depth, seed), rec)
     return rec
 

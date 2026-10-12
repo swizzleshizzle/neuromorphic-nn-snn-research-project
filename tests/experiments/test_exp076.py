@@ -89,5 +89,143 @@ def test_rank_cell_ranks_four_move_leaves(tmp_path, monkeypatch):
     assert set(seen) == {4}
     assert rec["kind"] == "J-X4" and rec["k"] == 4 and rec["n"] == 2
     assert rec["limit_states"] == 2 and rec["judge_updates"] == 4000
+    assert rec["wall_s"] >= 0
     assert 0.0 < rec["chance"] < 1.0 and rec["hit"] in (0.0, 0.5, 1.0)
     assert (tmp_path / "exp076_rank_J-X4_d7_s0.json").exists()
+
+
+agg = _load("exp076_aggregate", EXP / "aggregate.py")
+
+
+def _rec(arm, depth, seed, solved, **over):
+    k, kg = evaluate.ARMS[arm]
+    r = {"arm": arm, "depth": depth, "seed": seed, "solved": solved, "n": 200,
+         "success_rate": solved / 200, "k": k, "k_goal": kg if kg is not None else k,
+         "mode": "C", "no_revisit": True, "judge_updates": 4000, "limit_states": None,
+         "fired4": 3, "first_fire_len": {"4": 3}, "mean_steps": 10.0, "optimality": 0.9}
+    r.update(over)
+    return r
+
+
+def _recs(j3, g4, j4, seeds=range(12)):
+    return {(arm, d): {s: _rec(arm, d, s, v) for s in seeds}
+            for arm, v in (("J3V-X", j3), ("J3VG4-X", g4), ("J4V-X", j4)) for d in (9, 11)}
+
+
+def test_alpha_small_and_the_small_verdict():
+    """Catches the claims read at another alpha, and a confirmed gain under 0.01 printed as a
+    plain CONFIRMED (spec section 8's band must be a verdict, not prose)."""
+    assert agg.ALPHA == pytest.approx(0.05 / 3) and agg.SMALL == 0.01
+    assert agg.claim_verdict([0.05] * 12, 0.30, 0.25, True)[0] == "CONFIRMED"
+    assert agg.claim_verdict([0.005] * 12, 0.255, 0.25, True)[0] == "CONFIRMED (SMALL)"
+    assert agg.claim_verdict([0.05] * 12, 0.30, 0.25, False)[0] == "VOID"
+    assert agg.claim_verdict([-0.01] * 12, 0.24, 0.25, True)[0] == "REFUTED"
+    assert agg.claim_verdict([0.0] * 8 + [0.01] * 4, 0.255, 0.25, True)[0] == "NOT SIGNIFICANT"
+    assert agg.claim_verdict([0.005] * 12, 0.015, 0.01, True)[0] == "UNRESOLVED"
+
+
+def test_claims_compare_the_registered_arms_and_depths():
+    """Catches a claim wired to the wrong arm or depth: every arm and depth gets a distinct rate,
+    so each claim's two means identify exactly which cells it read."""
+    rates = {("J3V-X", 9): 0.25, ("J3VG4-X", 9): 0.26, ("J4V-X", 9): 0.30,
+             ("J3V-X", 11): 0.12, ("J3VG4-X", 11): 0.13, ("J4V-X", 11): 0.17}
+    rates = {k: {s: v for s in range(12)} for k, v in rates.items()}
+    v = agg.primary_verdicts(rates, True, range(12))
+    assert v["claim1"][3:] == (pytest.approx(0.17), pytest.approx(0.12))
+    assert v["claim2"][3:] == (pytest.approx(0.30), pytest.approx(0.25))
+    assert v["claim3"][3:] == (pytest.approx(0.17), pytest.approx(0.13))
+
+
+def test_sensitivity_drops_exactly_seeds_0_and_3():
+    """Catches the 10-seed line dropping the wrong seeds or none."""
+    rates = {("J4V-X", 11): {s: float(s) for s in range(12)}}
+    assert sorted(agg.sensitivity_rates(rates)[("J4V-X", 11)]) == [1, 2, 4, 5, 6, 7, 8, 9, 10, 11]
+
+
+def test_gate_d_names_the_violating_cell():
+    """Catches Gate D comparing a different pairing (another seed or depth) or passing with one
+    violation: exactly the broken cell must be reported."""
+    recs = _recs(30, 32, 40)
+    assert agg.gate_d(recs) == []
+    recs[("J3VG4-X", 11)][7] = _rec("J3VG4-X", 11, 7, 29)
+    assert agg.gate_d(recs) == [(11, 7)]
+
+
+def test_gate_g_is_unresolved_only_when_the_deeper_check_never_fired():
+    """Catches Gate G reading fired4 from the wrong arm, or summing over both depths."""
+    recs = _recs(30, 32, 40)
+    assert agg.gate_g(recs) == {9: "RESOLVED", 11: "RESOLVED"}
+    for s in range(12):
+        recs[("J3VG4-X", 9)][s] = _rec("J3VG4-X", 9, s, 32, fired4=0)
+        recs[("J4V-X", 9)][s] = _rec("J4V-X", 9, s, 40, fired4=9)
+    assert agg.gate_g(recs) == {9: "UNRESOLVED", 11: "RESOLVED"}
+
+
+def test_smoke_and_wrong_k_records_are_refused(tmp_path):
+    """REVIEW FOCUS 1. Catches a smoke record or a record from another tree entering a verdict."""
+    p = tmp_path / "exp076_J4V-X_d9_s0.json"
+    p.write_text(json.dumps(_rec("J4V-X", 9, 0, 40, limit_states=20)))
+    with pytest.raises(SystemExit, match="smoke"):
+        agg._read(p)
+    with pytest.raises(SystemExit, match="k_goal"):
+        agg.check_eval_record(_rec("J4V-X", 9, 0, 40, k_goal=3), p)
+    with pytest.raises(SystemExit, match="k is"):
+        agg.check_eval_record(_rec("J4V-X", 9, 0, 40, k=3), p)
+    with pytest.raises(SystemExit, match="arm"):
+        agg.check_eval_record({**_rec("J4V-X", 9, 0, 40), "arm": "J3V-W"}, p)
+
+
+def test_partly_trained_records_are_refused(tmp_path):
+    """REVIEW FOCUS 2. Catches a row evaluated from a judge short of 4000 updates entering a
+    claim, including the EXP-075 J3V-X rows this experiment reuses."""
+    p = tmp_path / "x.json"
+    with pytest.raises(SystemExit, match="judge_updates"):
+        agg.check_eval_record(_rec("J3V-X", 11, 0, 30, judge_updates=3750), p)
+
+
+def test_load_records_reads_j3v_from_exp075_and_new_arms_from_out(tmp_path):
+    """Catches J3V-X read from this experiment's outputs (only Gate 0(b)'s seed 0 is re-run
+    here) and refuses a missing new-arm record by name."""
+    for arm in ("J3VG4-X", "J4V-X"):
+        for d in (9, 11):
+            for s in range(12):
+                (tmp_path / evaluate.record_name(arm, d, s)).write_text(
+                    json.dumps(_rec(arm, d, s, 50)))
+    recs = agg.load_records(tmp_path)
+    committed = json.loads((evaluate.E75_OUT / "exp075_J3V-X_d9_s0.json").read_text())
+    assert recs[("J3V-X", 9)][0]["solved"] == committed["solved"]
+    assert recs[("J4V-X", 11)][5]["solved"] == 50
+    (tmp_path / evaluate.record_name("J4V-X", 11, 5)).unlink()
+    with pytest.raises(SystemExit, match="exp076_J4V-X_d11_s5"):
+        agg.load_records(tmp_path)
+
+
+def test_stage_cont_compares_against_exp075s_committed_records(tmp_path):
+    """THE GATE 0(b) VERDICT. Catches the continuity check comparing a record with itself, or
+    against anything but EXP-075's committed J3V-X seed-0 records."""
+    for d in (9, 11):
+        ref = json.loads((evaluate.E75_OUT / f"exp075_J3V-X_d{d}_s0.json").read_text())
+        (tmp_path / evaluate.record_name("J3V-X", d, 0)).write_text(json.dumps(ref))
+    assert agg.stage_cont(tmp_path) == "PASS"
+    bad = json.loads((tmp_path / evaluate.record_name("J3V-X", 11, 0)).read_text())
+    bad["solved"] += 1
+    (tmp_path / evaluate.record_name("J3V-X", 11, 0)).write_text(json.dumps(bad))
+    assert agg.stage_cont(tmp_path) == "FAIL"
+
+
+def test_pilot_report_projects_cell_hours_from_seconds_per_state(tmp_path):
+    """Catches the amendment's schedule computed from wall_s without dividing by n, or from a
+    pilot at another size."""
+    for arm, wall in (("J3VG4-X", 200.0), ("J4V-X", 600.0)):
+        (tmp_path / evaluate.record_name(arm, 11, 0)).write_text(json.dumps(
+            _rec(arm, 11, 0, 3, n=20, limit_states=20, wall_s=wall)))
+    (tmp_path / evaluate.rank_record_name(11, 0)).write_text(json.dumps(
+        {"kind": "J-X4", "k": 4, "n": 20, "limit_states": 20, "hit": 0.6, "chance": 0.5,
+         "wall_s": 40.0}))
+    r = agg.pilot_report(tmp_path)
+    assert r["s_per_state"]["J4V-X"] == pytest.approx(30.0)
+    assert r["d11_cell_hours"]["J4V-X"] == pytest.approx(30.0 * 200 / 3600)
+    bad = _rec("J4V-X", 11, 0, 3, n=5, limit_states=5, wall_s=1.0)
+    (tmp_path / evaluate.record_name("J4V-X", 11, 0)).write_text(json.dumps(bad))
+    with pytest.raises(SystemExit, match="limit_states"):
+        agg.pilot_report(tmp_path)
