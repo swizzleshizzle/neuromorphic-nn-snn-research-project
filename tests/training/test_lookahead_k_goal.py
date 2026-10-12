@@ -32,10 +32,27 @@ class _HashCritic:
         return torch.tensor([float(hash(s) % 1009) for s in states])
 
 
-def _c(agent, head, states, depth, k, k_goal=None, trace=None):
+class _DistanceCritic:
+    """Steers toward solved: the negative exact distance, so the walk closes in and a deeper goal
+    check is guaranteed to have something to fire on."""
+
+    reads_states = True
+
+    def __init__(self):
+        self.bfs = ExactBFSDistance(max_depth=8)
+
+    def __call__(self, states, generator):
+        out = []
+        for s in states:
+            d = self.bfs.distance(s)
+            out.append(-float(99 if d is None else d))
+        return torch.tensor(out)
+
+
+def _c(agent, head, states, depth, k, k_goal=None, trace=None, critic=None):
     return la.evaluate_lookahead(agent, head, states, depth=depth, mode="C", k=k, k_goal=k_goal,
                                  generator=torch.Generator().manual_seed(3), rng_seed=3,
-                                 imag_seed=3, critic=_HashCritic(), no_revisit=True, trace=trace)
+                                 imag_seed=3, critic=critic or _HashCritic(), no_revisit=True, trace=trace)
 
 
 def test_k_goal_below_k_is_refused():
@@ -93,12 +110,14 @@ def test_first_fire_len_counts_each_episode_once_at_its_first_fire():
 def test_deeper_goal_check_plays_the_same_moves_until_it_first_fires_and_never_solves_less():
     """THE GATE D INVARIANT. Catches the goal-check arm consuming the evaluation or imagination
     stream differently from its k_goal = k twin: before its first fire it must play identical
-    moves on every state, and it must solve at least as many."""
+    moves on every state, and it must solve at least as many. The critic steers toward solved so
+    the deeper check is guaranteed to have something to fire on."""
     agent, head = _agent_and_head()
-    states = _shell(3, 8)
+    states = _shell(4, 8)
     ta, tb = [], []
-    a = _c(agent, head, states, 3, 1, trace=ta)
-    b = _c(agent, head, states, 3, 1, k_goal=2, trace=tb)
+    crit = _DistanceCritic()
+    a = _c(agent, head, states, 4, 1, trace=ta, critic=crit)
+    b = _c(agent, head, states, 4, 1, k_goal=2, trace=tb, critic=crit)
     compared = 0
     for a_steps, b_steps in zip(ta, tb):
         for (aa, _, _), (ba, fired, _) in zip(a_steps, b_steps):
