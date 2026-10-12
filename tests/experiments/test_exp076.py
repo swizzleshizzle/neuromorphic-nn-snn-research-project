@@ -269,3 +269,22 @@ def test_stage_cont_refuses_a_checked_field_violation(tmp_path):
     p.write_text(json.dumps(bad))
     with pytest.raises(SystemExit, match="judge_updates"):
         agg.stage_cont(tmp_path)
+
+
+def test_launcher_carries_the_fixes_and_the_registered_cells():
+    """Catches a launcher without EXP-074's .Handle fix (every cell counted as failed), without
+    the amendment guard, or with an eval list missing an arm or depth."""
+    text = (EXP / "launch076.ps1").read_text()
+    assert "$null = $proc.Handle" in text
+    assert '"J4V-X", "J3VG4-X"' in text and "11, 9" in text
+    assert "a.AMENDMENT" in text and "exp076-det" in text
+    assert "--limit-states" in text and "outputs_pilot" in text
+    assert "k_goal" in text  # the seam check refuses a stale checkout
+
+
+def test_launcher_skips_by_the_phase_directory():
+    """REVIEW FOCUS 4. Catches -SkipExisting checking outputs/ for pilot or det cells, so a
+    relaunch after a Windows Update restart re-runs (or wrongly skips) them."""
+    text = (EXP / "launch076.ps1").read_text()
+    assert '$target = Join-Path $phaseDir $j[1]' in text
+    assert '"pilot" { $pilotDir }' in text and '"det" { $detDir }' in text
