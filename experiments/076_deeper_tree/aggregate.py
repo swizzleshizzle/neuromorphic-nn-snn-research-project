@@ -110,16 +110,26 @@ def _read_checked(path: Path) -> dict:
     return r
 
 
+def _read_cell(path: Path, arm: str, depth: int, seed: int) -> dict:
+    """Read a record, check its spec fields, and check it is the cell its filename claims."""
+    r = _read_checked(path)
+    for field, want in (("arm", arm), ("depth", depth), ("seed", seed)):
+        if r.get(field) != want:
+            raise SystemExit(f"{Path(path).name}: {field} is {r.get(field)!r}, the file name "
+                             f"says {want!r}")
+    return r
+
+
 def load_records(out_dir) -> dict:
     """(arm, depth) -> {seed: record}. J3V-X from EXP-075's committed records (licensed by
     Gate 0(b)); the two new arms from this experiment's outputs."""
     out_dir = Path(out_dir)
     recs = {}
     for d in DEPTHS:
-        recs[("J3V-X", d)] = {s: _read_checked(ev.E75_OUT / f"exp075_J3V-X_d{d}_s{s}.json")
-                              for s in SEEDS}
+        recs[("J3V-X", d)] = {s: _read_cell(ev.E75_OUT / f"exp075_J3V-X_d{d}_s{s}.json",
+                                              "J3V-X", d, s) for s in SEEDS}
         for arm in NEW_ARMS:
-            recs[(arm, d)] = {s: _read_checked(out_dir / ev.record_name(arm, d, s))
+            recs[(arm, d)] = {s: _read_cell(out_dir / ev.record_name(arm, d, s), arm, d, s)
                               for s in SEEDS}
     return recs
 
@@ -144,7 +154,8 @@ def stage_cont(out) -> str:
     """Gate 0(b): J3V-X at seed 0, depths 9 and 11, re-run here, against EXP-075's records."""
     out = Path(out)
     return a71.gate0b_verdict(
-        {("J3V-X", d): _read(out / ev.record_name("J3V-X", d, 0)) for d in DEPTHS},
+        {("J3V-X", d): _read_cell(out / ev.record_name("J3V-X", d, 0), "J3V-X", d, 0)
+         for d in DEPTHS},
         {("J3V-X", d): _read(ev.E75_OUT / f"exp075_J3V-X_d{d}_s0.json") for d in DEPTHS})
 
 

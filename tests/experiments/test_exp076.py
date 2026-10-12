@@ -233,3 +233,39 @@ def test_pilot_report_projects_cell_hours_from_seconds_per_state(tmp_path):
     (tmp_path / evaluate.record_name("J4V-X", 11, 0)).write_text(json.dumps(bad))
     with pytest.raises(SystemExit, match="limit_states"):
         agg.pilot_report(tmp_path)
+
+
+def _fill_new_arms(tmp_path):
+    for arm in ("J3VG4-X", "J4V-X"):
+        for d in (9, 11):
+            for s in range(12):
+                (tmp_path / evaluate.record_name(arm, d, s)).write_text(
+                    json.dumps(_rec(arm, d, s, 50)))
+
+
+def test_record_identity_must_match_its_filename(tmp_path):
+    """Catches a record filed under another arm, depth or seed's name entering a claim."""
+    _fill_new_arms(tmp_path)
+    name = evaluate.record_name("J4V-X", 9, 3)
+    (tmp_path / name).write_text(json.dumps(_rec("J3VG4-X", 9, 3, 50)))
+    with pytest.raises(SystemExit, match=name):
+        agg.load_records(tmp_path)
+    (tmp_path / name).write_text(json.dumps(_rec("J4V-X", 9, 5, 50)))
+    with pytest.raises(SystemExit, match="seed is 5"):
+        agg.load_records(tmp_path)
+    (tmp_path / name).write_text(json.dumps(_rec("J4V-X", 11, 3, 50)))
+    with pytest.raises(SystemExit, match="depth is 11"):
+        agg.load_records(tmp_path)
+
+
+def test_stage_cont_refuses_a_checked_field_violation(tmp_path):
+    """Catches a cont record from a partly trained judge or another k_goal being compared."""
+    for d in (9, 11):
+        ref = json.loads((evaluate.E75_OUT / f"exp075_J3V-X_d{d}_s0.json").read_text())
+        (tmp_path / evaluate.record_name("J3V-X", d, 0)).write_text(json.dumps(ref))
+    p = tmp_path / evaluate.record_name("J3V-X", 11, 0)
+    bad = json.loads(p.read_text())
+    bad["judge_updates"] = 3750
+    p.write_text(json.dumps(bad))
+    with pytest.raises(SystemExit, match="judge_updates"):
+        agg.stage_cont(tmp_path)
