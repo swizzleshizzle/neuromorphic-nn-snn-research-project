@@ -149,6 +149,10 @@ def test_gate_d_names_the_violating_cell():
     assert agg.gate_d(recs) == []
     recs[("J3VG4-X", 11)][7] = _rec("J3VG4-X", 11, 7, 29)
     assert agg.gate_d(recs) == [(11, 7)]
+    # the pairing is per seed: a J3V-X seed that scores higher than seed 0 must be compared to itself
+    recs = _recs(30, 32, 40)
+    recs[("J3V-X", 9)][4] = _rec("J3V-X", 9, 4, 35)
+    assert agg.gate_d(recs) == [(9, 4)]
 
 
 def test_gate_g_is_unresolved_only_when_the_deeper_check_never_fired():
