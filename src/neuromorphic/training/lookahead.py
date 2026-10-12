@@ -113,11 +113,22 @@ def _greedy_unvisited(state, root_logits, n_actions, visited, info):
     return max(eligible, key=lambda a: (float(root_logits[a]), -a))
 
 
+def _check_k_goal(k, k_goal) -> int:
+    """k_goal defaults to k. A goal check shallower than the judge tree is refused (EXP-076)."""
+    if k_goal is None:
+        return k
+    if k_goal < k:
+        raise ValueError(f"k_goal {k_goal} is below k {k}: the judge tree would score leaves "
+                         f"past the goal check")
+    return k_goal
+
+
 def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None,
-                imag_generator=None, critic=None, visited=None, info=None):
+                imag_generator=None, critic=None, visited=None, info=None, k_goal=None):
     """One real move. Returns (action, goal_fired). Never sees the evaluation generator."""
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
+    k_goal = _check_k_goal(k, k_goal)
     greedy = int(root_logits.argmax())
     if mode == "G":
         if visited is not None:
@@ -125,8 +136,10 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
         return greedy, False
     if k < 1:
         raise ValueError(f"mode {mode} needs k >= 1, got {k}")
-    prefix = solving_prefix(state, k, n_actions)
+    prefix = solving_prefix(state, k_goal, n_actions)
     if prefix is not None:
+        if info is not None:
+            info["fire_len"] = len(prefix)
         return prefix[0], True
     if mode == "E":
         if visited is not None:
@@ -159,7 +172,7 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
 
 
 def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_seed=0,
-                       imag_seed=0, trace=None, critic=None, no_revisit=False):
+                       imag_seed=0, trace=None, critic=None, no_revisit=False, k_goal=None):
     """`evaluate_states` with a look-ahead move rule. At mode G, k 0 it IS `evaluate_states`.
 
     Every mode draws the real state's logits from `generator` exactly once per real move, the
@@ -168,6 +181,7 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
     """
     if mode == "G" and k != 0:
         raise ValueError("mode G is the published evaluator and takes k=0")
+    k_goal = _check_k_goal(k, k_goal)
     limit = max_steps_for(depth)
     env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
     n_actions = env.action_space.n
@@ -178,12 +192,14 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
     fired_moves = 0
     fallback_moves = 0
     modal_fracs: list[float] = []
+    fire_hist: dict[int, int] = {}
     for i, state in enumerate(states):
         obs, _ = env.reset(options={"state": state})
         visited = [env._state]
         visited_set = set(visited)
         actions: list[int] = []
         state_trace: list[tuple[int, bool, list[float]]] = []
+        first_len = None
         for t in range(1, limit + 1):
             with torch.no_grad():
                 _, logits = action_distribution(agent, head, obs, generator=generator)
@@ -193,9 +209,11 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
                                         agent=agent, head=head, imag_generator=imag,
                                         critic=critic,
                                         visited=visited_set if no_revisit else None,
-                                        info=info)
+                                        info=info, k_goal=k_goal)
             fallback_moves += int(info.get("fallback", False))
             fired_moves += int(fired)
+            if fired and first_len is None:
+                first_len = info["fire_len"]
             actions.append(int(action))
             state_trace.append((int(action), bool(fired), logits.reshape(-1).tolist()))
             obs, _, terminated, truncated, _ = env.step(action)
@@ -209,6 +227,8 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
             if truncated:
                 break
         eval_revisits += len(visited) - len(set(visited))
+        if first_len is not None:
+            fire_hist[first_len] = fire_hist.get(first_len, 0) + 1
         modal_fracs.append(modal_action_fraction(actions))
         if trace is not None:
             trace.append(state_trace)
@@ -225,6 +245,8 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
         "goal_fired_frac": (fired_moves / eval_steps) if eval_steps else 0.0,
         "mode": mode,
         "k": k,
+        "k_goal": k_goal,
+        "first_fire_len": {str(n): fire_hist[n] for n in sorted(fire_hist)},
         "no_revisit": bool(no_revisit),
         "fallback_frac": (fallback_moves / eval_steps) if eval_steps else 0.0,
     }

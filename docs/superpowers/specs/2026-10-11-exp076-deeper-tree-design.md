@@ -178,3 +178,26 @@ but practically negligible gain from one that matters to the goal of solving the
 - Retraining any judge, or the Y and W judges.
 - Depths 7 and 8: J3V-X already solves 0.89 and 0.52 there; the goal is depth 11.
 - A learned no-revisit rule, training the policy from J, a learned world model, 3x3.
+
+## 11. Amendment 2026-10-11: from the final code review, before any pilot or full cell runs
+
+No pilot record and no evaluation number existed when this was written.
+
+- **Gate D gains two instrument clauses.** A move changes the distance to solved by at most 1,
+  and every start is at depth 9 or 11. So the first time a walk comes within 4 moves of solved,
+  it is exactly 4 away, and the goal check fires there. Two more things therefore hold by
+  construction, on every (depth, seed) cell:
+  - (a) for J3VG4-X and J4V-X, `first_fire_len` has no key other than "4";
+  - (b) J3VG4-X `fired4` >= J3V-X `solved`, because every J3V-X solve passes distance 4, where
+    J3VG4-X fires.
+  A violation of either is a bug, exactly like a dominance violation, and **voids every claim**.
+- **Gate G cannot in practice be UNRESOLVED**, by clause (b): summed `fired4` is at least J3V-X's
+  summed solves, which is in the hundreds. It stays in the aggregator, and RESULTS.md reports
+  only its size.
+- **Peak committed memory is logged by the launcher** per worker (5 s polls, so a peak between
+  polls can be missed). This replaces a hand-taken sample.
+- **The launcher refuses more than 6 workers.**
+- **Rank `wall_s` includes the unbounded BFS build** (about 67 s per process), so the pilot's
+  rank seconds per state are conservative.
+- **Gate 0(b)'s field list is EXP-071's `OUTCOME_FIELDS`**, which omits `fallback_frac`, as in
+  EXP-074 and EXP-075. The code-path test compares `fallback_frac` too.
