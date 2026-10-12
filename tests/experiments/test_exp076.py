@@ -103,6 +103,9 @@ def _rec(arm, depth, seed, solved, **over):
          "success_rate": solved / 200, "k": k, "k_goal": kg if kg is not None else k,
          "mode": "C", "no_revisit": True, "judge_updates": 4000, "limit_states": None,
          "fired4": 3, "first_fire_len": {"4": 3}, "mean_steps": 10.0, "optimality": 0.9}
+    if arm == "J3VG4-X":  # fires at distance 4 on every solve (Gate D clause iii holds by default)
+        r["fired4"] = solved
+        r["first_fire_len"] = {"4": solved}
     r.update(over)
     return r
 
@@ -147,12 +150,26 @@ def test_gate_d_names_the_violating_cell():
     violation: exactly the broken cell must be reported."""
     recs = _recs(30, 32, 40)
     assert agg.gate_d(recs) == []
-    recs[("J3VG4-X", 11)][7] = _rec("J3VG4-X", 11, 7, 29)
+    recs[("J3VG4-X", 11)][7] = _rec("J3VG4-X", 11, 7, 29, fired4=40)  # fired4 high: only dominance can flag it
     assert agg.gate_d(recs) == [(11, 7)]
     # the pairing is per seed: a J3V-X seed that scores higher than seed 0 must be compared to itself
     recs = _recs(30, 32, 40)
     recs[("J3V-X", 9)][4] = _rec("J3V-X", 9, 4, 35)
     assert agg.gate_d(recs) == [(9, 4)]
+
+
+def test_gate_d_first_fire_instrument_clauses():
+    """Catches Gate D missing the by-construction instrument checks: a first-fire length other
+    than 4 on either new arm, or J3VG4-X firing fewer times than J3V-X solved."""
+    recs = _recs(30, 32, 40)
+    recs[("J4V-X", 11)][2] = _rec("J4V-X", 11, 2, 40, first_fire_len={"3": 1, "4": 2})
+    assert agg.gate_d(recs) == [(11, 2)]
+    recs = _recs(30, 32, 40)
+    recs[("J3VG4-X", 9)][6] = _rec("J3VG4-X", 9, 6, 32, first_fire_len={"5": 1, "4": 31})
+    assert agg.gate_d(recs) == [(9, 6)]
+    recs = _recs(30, 32, 40)
+    recs[("J3VG4-X", 9)][5] = _rec("J3VG4-X", 9, 5, 32, fired4=1)
+    assert agg.gate_d(recs) == [(9, 5)]
 
 
 def test_gate_g_is_unresolved_only_when_the_deeper_check_never_fired():
@@ -277,7 +294,8 @@ def test_launcher_carries_the_fixes_and_the_registered_cells():
     text = (EXP / "launch076.ps1").read_text()
     assert "$null = $proc.Handle" in text
     assert '"J4V-X", "J3VG4-X"' in text and "11, 9" in text
-    assert "a.AMENDMENT" in text and "exp076-det" in text
+    assert "a.AMENDMENT" in text and "outputs_det" in text and "exp076-det" not in text
+    assert "-gt 6" in text and "Workers" in text
     assert "--limit-states" in text and "outputs_pilot" in text
     assert "k_goal" in text  # the seam check refuses a stale checkout
 
@@ -288,3 +306,10 @@ def test_launcher_skips_by_the_phase_directory():
     text = (EXP / "launch076.ps1").read_text()
     assert '$target = Join-Path $phaseDir $j[1]' in text
     assert '"pilot" { $pilotDir }' in text and '"det" { $detDir }' in text
+
+
+def test_launcher_tracks_peak_committed_memory():
+    """Catches a launcher that never samples each worker's peak PrivateMemorySize64, which the
+    pilot needs to size the worker count."""
+    text = (EXP / "launch076.ps1").read_text()
+    assert "PrivateMemorySize64" in text and ".Refresh()" in text and "peak commit MB" in text

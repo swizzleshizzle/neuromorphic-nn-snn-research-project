@@ -140,9 +140,26 @@ def rates_of(recs) -> dict:
 
 
 def gate_d(recs) -> list:
-    """(depth, seed) cells where the goal-check arm solved fewer than J3V-X. Empty is PASS."""
-    return [(d, s) for d in DEPTHS for s in SEEDS
-            if recs[("J3VG4-X", d)][s]["solved"] < recs[("J3V-X", d)][s]["solved"]]
+    """Cells (depth, seed), sorted and deduplicated, that violate Gate D. Empty is PASS.
+
+    Three clauses; the last two hold by construction (a move changes distance by at most 1 and
+    every start is at depth >= 9, so the first time a walk is within 4 moves of solved it is
+    exactly 4 away):
+      (i)   dominance: J3VG4-X solved fewer than J3V-X;
+      (ii)  first-fire instrument: for either new arm, first_fire_len has a key other than "4";
+      (iii) J3VG4-X fired4 < J3V-X solved (a J3V-X solve implies its walk passed distance 4,
+            where J3VG4-X fires)."""
+    bad = set()
+    for d in DEPTHS:
+        for s in SEEDS:
+            g4, j3, j4 = recs[("J3VG4-X", d)][s], recs[("J3V-X", d)][s], recs[("J4V-X", d)][s]
+            if g4["solved"] < j3["solved"]:
+                bad.add((d, s))
+            if any(set(r["first_fire_len"]) - {"4"} for r in (g4, j4)):
+                bad.add((d, s))
+            if g4["fired4"] < j3["solved"]:
+                bad.add((d, s))
+    return sorted(bad)
 
 
 def gate_g(recs) -> dict:
@@ -233,7 +250,7 @@ def main() -> None:
 
     print(f"GATE 0(a) determinism: {'PASS' if args.determinism_ok else 'NOT CHECKED'}")
     print(f"GATE 0(b) J3V-X continuity with EXP-075 (d9, d11, seed 0): {g0b}")
-    print(f"GATE D dominance (J3VG4-X >= J3V-X on every cell): "
+    print(f"GATE D dominance and first-fire instrument (J3VG4-X >= J3V-X on every cell): "
           f"{'PASS' if not viol else 'FAIL at (depth, seed) ' + str(viol)}")
     print(f"GATE G (4-move goal check fired): {gg}")
     print("GATE R at k 4 (reported, not voiding): lowest-J 4-move leaf closer than root")

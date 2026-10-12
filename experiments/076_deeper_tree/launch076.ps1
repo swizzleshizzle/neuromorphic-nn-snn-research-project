@@ -8,7 +8,7 @@
 #   ... -File C:\Users\mlgbr\launch076.ps1 -Phase det   -Workers 1
 #
 # Order (spec section 9): pilot -> dated amendment (worker count, schedule; sets
-# aggregate.AMENDMENT) -> cont (Gate 0(b)) -> rank -> eval -> det (Gate 0(a), separate dir).
+# aggregate.AMENDMENT) -> cont (Gate 0(b)) -> rank -> eval -> det (Gate 0(a), into outputs_det).
 # Every phase but check and pilot refuses to run while aggregate.AMENDMENT is None.
 # Evaluation cells take -SkipExisting: re-run the same phase after a Windows Update restart.
 #
@@ -66,10 +66,11 @@ if ($Phase -ne "pilot") {
 }
 
 if ($Workers -eq 0) { $Workers = 4 }
+if ($Workers -gt 6) { Write-Error "Workers capped at 6 (spec section 6); got $Workers."; exit 1 }
 $log = Join-Path $repo ("$exp\phase_" + $Phase + ".log")
 $outDir   = Join-Path $repo "$exp\outputs"
 $pilotDir = Join-Path $repo "$exp\outputs_pilot"
-$detDir   = "C:\Users\mlgbr\exp076-det"
+$detDir   = Join-Path $repo "$exp\outputs_det"
 $phaseDir = switch ($Phase) { "pilot" { $pilotDir } "det" { $detDir } default { $outDir } }
 $seeds = 0..11
 
@@ -103,11 +104,37 @@ switch ($Phase) {
 ""
 $running = @()
 $failed = 0
+$peak = @{}
+$labels = @{}
+$maxPeak = 0
 $stamp = { param($m) Add-Content -Path $log -Value $m; $m }
+# Sample each live child's committed memory (PrivateMemorySize64) and log the peak at exit.
+$sample = {
+    foreach ($p in $running) {
+        try {
+            if (-not $p.HasExited) {
+                $p.Refresh()
+                $m = [int]($p.PrivateMemorySize64 / 1MB)
+                if ($m -gt $peak[$p.Id]) { $peak[$p.Id] = $m }
+            }
+        } catch { }
+    }
+}
+$reap = {
+    foreach ($p in $running) {
+        if ($p.HasExited -and $labels.ContainsKey($p.Id)) {
+            $v = [int]$peak[$p.Id]
+            & $stamp "peak commit MB $($labels[$p.Id]) $v" | Out-Null
+            if ($v -gt $script:maxPeak) { $script:maxPeak = $v }
+            $labels.Remove($p.Id)
+        }
+    }
+}
 foreach ($j in $jobs) {
     $target = Join-Path $phaseDir $j[1]
     if ($SkipExisting -and (Test-Path $target)) { continue }
-    while (@($running | Where-Object { -not $_.HasExited }).Count -ge $Workers) { Start-Sleep -Seconds 5 }
+    while (@($running | Where-Object { -not $_.HasExited }).Count -ge $Workers) { & $sample; & $reap; Start-Sleep -Seconds 5 }
+    & $reap
     foreach ($p in @($running | Where-Object { $_.HasExited })) { if ($p.ExitCode -ne 0) { $failed++ } }
     $running = @($running | Where-Object { -not $_.HasExited })
     & $stamp "start $($j[0])" | Out-Null
@@ -117,8 +144,12 @@ foreach ($j in $jobs) {
     $proc = Start-Process -FilePath $py -ArgumentList $argList -PassThru -NoNewWindow -WorkingDirectory $repo
     $null = $proc.Handle
     $running += $proc
+    $labels[$proc.Id] = $j[0]
+    $peak[$proc.Id] = 0
 }
-while (@($running | Where-Object { -not $_.HasExited }).Count -gt 0) { Start-Sleep -Seconds 5 }
+while (@($running | Where-Object { -not $_.HasExited }).Count -gt 0) { & $sample; & $reap; Start-Sleep -Seconds 5 }
+& $reap
+"max peak commit MB = $maxPeak"
 foreach ($p in $running) { if ($p.ExitCode -ne 0) { $failed++ } }
 if ($failed -gt 0) { Write-Error "$failed cells exited non-zero; do not aggregate."; exit 1 }
 "PHASE OK"
