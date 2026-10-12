@@ -201,3 +201,49 @@ No pilot record and no evaluation number existed when this was written.
   rank seconds per state are conservative.
 - **Gate 0(b)'s field list is EXP-071's `OUTCOME_FIELDS`**, which omits `fallback_frac`, as in
   EXP-074 and EXP-075. The code-path test compares `fallback_frac` too.
+
+## 12. Amendment 2026-10-12: pilot results, worker count and schedule (before any full cell)
+
+The pilot ran on the laptop at d60f198, 3 workers, on the first 20 depth-11 held-out states of
+seed 0. Records are in `experiments/076_deeper_tree/outputs_pilot/`. `aggregate.py
+--pilot-report` gives:
+
+| quantity | J3VG4-X | J4V-X | rank (J-X4) |
+|---|---|---|---|
+| seconds per state | 9.95 | 26.03 | 8.21 (includes the ~67 s BFS build) |
+| projected depth-11 cell | 0.55 h | 1.45 h | about 0.3 h |
+| solved (20 states, disclosed, seed 0) | 4 | 2 | hit 0.200, chance 0.147 |
+| first_fire_len | {"4": 4} | {"4": 2} | |
+
+The projected evaluation total is **41.9 cell-hours** for the 48 cells, scaling depth 9 by
+EXP-075's d9/d11 wall ratio of 0.747.
+
+**Disclosure.** Both pilot arms' outcomes on these 20 states were seen before any full cell. They
+are seed 0, which the 10-seed sensitivity line drops (section 5). The pilot is not a
+pre-registered comparison: 20 states is about 2 se of a single cell, and it decides nothing.
+
+**Instrument checks on the pilot.** Every first fire was at length 4 (Gate D clause a). Every
+solve came from a fire, so `fired4` equals `solved` in both arms.
+
+**Memory.** The launcher's `peak commit MB` reads 2 MB for every cell. It is measuring the venv's
+`python.exe` redirector, not the `python3.13.exe` interpreter it starts. The final review
+predicted this; the finding is parked in the implementation ledger. That log line is therefore
+not an instrument. A separate 10 s probe of every `^python` process (`probe076m.ps1`) measured
+the real workers:
+- peak committed memory **1994 MB**, from the rank cell, which holds the full BFS table;
+- evaluation workers between about 0.9 and 1.9 GB committed.
+
+**Worker count: 6.** At a 2 GB peak, 6 workers commit at most about 12 GB, under the 24 GB budget.
+EXP-075 measured no throughput gain beyond 4 to 6 single-thread workers, and the launcher caps it
+at 6.
+
+**Schedule**, all at 6 workers with `-SkipExisting`:
+1. cont: 2 cells, about 0.7 h. Gate 0(b) is read with `--stage cont` and committed before rank
+   starts.
+2. rank: 24 cells, about 1.5 h.
+3. eval: 48 cells, 41.9 cell-hours, so about 8 to 12 h of wall time depending on how per-cell time
+   scales past 3 workers.
+4. det: 1 cell, about 1.1 h.
+
+This is about 11 to 15 h in all. A Windows Update restart at about 03:31 local loses at most one
+wave: every cell banks its own record, and the same phase re-run with `-SkipExisting` resumes.
