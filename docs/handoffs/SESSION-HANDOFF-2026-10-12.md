@@ -78,11 +78,10 @@ reusing it.
 
 1. Collect EXP-076 (section 2's close-out).
 2. **Report:** EXP-075 is now in `docs/writeup/report.md` section 9, the README and the index
-   (merged `746e633`). Section 1 still says 74 experiments and 58 with results; the index says 76
-   and 59. EXP-076 goes in once it has a number.
-3. **Branch `report-phase4-sync`** (worktree `/root/projects/.wt/report-phase4-sync`) holds one
-   unmerged commit from 2026-10-09, a parallel docs session: header and sections 6.2, 6.3, 8.1
-   brought in line with Phase 4. Not this session's; ask Michael or review and merge it.
+   (merged `746e633`). EXP-076 goes in once it has a number.
+3. **Branch `report-phase4-sync`** (a parallel docs session's header and sections 6.2, 6.3,
+   8.1) was reviewed and merged (`9d63a94`), then brought up to EXP-075 with section 1's counts
+   (`934abdb`). Branch and worktree deleted.
 4. **The next stage is Michael's call.** The menu, from handoff 2026-10-06 section 2c and
    whatever EXP-076 says: wider still or a supervised-then-VI region; a learned no-revisit rule;
    using J to train the policy; a learned world model (stage B). Ask before building any.
