@@ -77,9 +77,9 @@ reusing it.
 ## 3. Week 28 (Oct 12-18)
 
 1. Collect EXP-076 (section 2's close-out).
-2. **Report:** EXP-075 was missing from `docs/writeup/report.md` section 9 and the index. A branch
-   adding it was made this session (see `git branch`); review and merge it if not yet merged.
-   EXP-076 goes in once it has a number.
+2. **Report:** EXP-075 is now in `docs/writeup/report.md` section 9, the README and the index
+   (merged `746e633`). Section 1 still says 74 experiments and 58 with results; the index says 76
+   and 59. EXP-076 goes in once it has a number.
 3. **Branch `report-phase4-sync`** (worktree `/root/projects/.wt/report-phase4-sync`) holds one
    unmerged commit from 2026-10-09, a parallel docs session: header and sections 6.2, 6.3, 8.1
    brought in line with Phase 4. Not this session's; ask Michael or review and merge it.
