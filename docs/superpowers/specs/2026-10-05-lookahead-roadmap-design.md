@@ -323,9 +323,11 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   11: J3V-X 0.1200 vs J3V-W 0.1013 (+0.0188, p 0.0757), NOT SIGNIFICANT. Depth 7 0.8908. Width
 >   is a lever at depths 7 to 9; at the typical random scramble the best judge solves about one
 >   cube in eight.
-> - **2026-10-12, EXP-076 dispatched:** a 4-move tree with EXP-075's committed X judges, nothing
->   retrained, with a third arm that separates the deeper goal check from the deeper judge tree.
->   No number yet.
+> - **2026-10-13, EXP-076 (a 4-move tree, same X judges, nothing retrained):** all three claims
+>   CONFIRMED on 12 seeds and the 10-seed line. Depth 11: J4V-X 0.1950 vs J3V-X 0.1200 (+0.0750,
+>   p 0.0002, 12/12). Depth 9: 0.4004 vs 0.2571 (+0.1433, 12/12). A 4-move goal check alone
+>   (J3VG4-X) changed no cell of 24, so the gain is the judge scoring leaves nearer the goal. A
+>   5-move full tree is priced at about 20 h per depth-11 cell; deeper needs a cheaper search.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
