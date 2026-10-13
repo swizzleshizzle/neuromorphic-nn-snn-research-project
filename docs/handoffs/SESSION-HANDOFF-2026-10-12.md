@@ -1,9 +1,8 @@
-# Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 is RUNNING on the laptop.
+# Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
-> **EXP-076 IS RUNNING.** Launched Mon 2026-10-12 20:05 laptop time, after Michael said go on
-> issue #17 (resolved). `main` at the commit carrying this file; the laptop checkout is at
-> `79930b2`, which is all the run needs. Suite: **1059 tests, 1034 not slow, 25 slow** (plus 88
-> vitest + 2 e2e in `dashboard/`).
+> **Nothing is running. The laptop is FREE.** EXP-076 ran 2026-10-12 20:05 to 2026-10-13 02:44
+> laptop time (6.6 h) and is closed out: `experiments/076_deeper_tree/RESULTS.md`, records tracked.
+> Suite: **1059 tests, 1034 not slow, 25 slow** (plus 88 vitest + 2 e2e in `dashboard/`).
 >
 > **This supersedes `SESSION-HANDOFF-2026-10-06.md`** (which covers 2026-10-06 to 11 and is
 > misnamed; its header says 2026-10-11). Read that one for EXP-070 to 075 and its section 3, the
@@ -24,6 +23,15 @@ look-ahead, reading all 192 sensory neurons, CONFIRMED at depth 9 (0.1933 vs P3V
 a sensory region four times wider CONFIRMED at depth 9 (0.2571 vs 0.1933), NOT SIGNIFICANT at
 depth 11 (0.1200 vs 0.1013). Sessions Mon 5 to Thu 8 and Sun 11 (Pacific nights); Fri 9 and Sat
 10 were unattended laptop runs plus the EXP-075 close-out.
+
+## 2a. EXP-076 outcome
+
+**All three claims CONFIRMED, 12 seeds and the 10-seed line, every gate passed.** Depth 11: J4V-X
+0.1950 vs J3V-X 0.1200 (+0.0750, 12/12). Depth 9: 0.4004 vs 0.2571 (+0.1433, 12/12). The 4-move
+goal check alone (J3VG4-X) equalled J3V-X on all 24 cells, so the gain is the judge scoring
+leaves one move nearer the goal. A 5-move full tree is about 20 h per depth-11 cell, so going
+deeper needs a cheaper search (beam or pruned). Section 2 below is the run as dispatched, kept
+for the relaunch procedure.
 
 ## 2. EXP-076: what is running
 
@@ -76,18 +84,17 @@ reusing it.
 
 ## 3. Week 28 (Oct 12-18)
 
-1. Collect EXP-076 (section 2's close-out).
+1. ~~Collect EXP-076~~ done 2026-10-13 (section 2a).
 2. **Report:** EXP-075 is now in `docs/writeup/report.md` section 9, the README and the index
    (merged `746e633`). EXP-076 goes in once it has a number.
 3. **Branch `report-phase4-sync`** (a parallel docs session's header and sections 6.2, 6.3,
    8.1) was reviewed and merged (`9d63a94`), then brought up to EXP-075 with section 1's counts
    (`934abdb`). Branch and worktree deleted.
-4. **The next stage is Michael's call.** The menu, from handoff 2026-10-06 section 2c and
-   whatever EXP-076 says: wider still or a supervised-then-VI region; a learned no-revisit rule;
+4. **The next stage is Michael's call.** The menu, from handoff 2026-10-06 section 2c plus
+   EXP-076: a cheaper deeper search (beam or pruned 5-move), since depth pays off; wider still or a supervised-then-VI region; a learned no-revisit rule;
    using J to train the policy; a learned world model (stage B). Ask before building any.
 
 ## 4. What NOT to do
 
-- Do not start a new experiment on the laptop while EXP-076 holds it.
-- Do not read the pilot's 2 vs 4 solves as a result.
+- Do not read the pilot's 2 vs 4 solves as a result; the full cells reversed it.
 - Do not schedule work against a publishing date. There is none.
