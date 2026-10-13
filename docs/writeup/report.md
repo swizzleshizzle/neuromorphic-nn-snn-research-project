@@ -20,11 +20,12 @@ the regionalized network solves 2x2 cubes from scrambles up to **depth 8** (0.07
 a measured chance floor of exactly 0.0000, EXP-062), far past the 1-move checkpoint the plan set
 and the 3-move stretch goal.
 Since then, a search wrapped around the trained networks, with a judge the network learned from
-its own look-ahead, has reached **0.1933** at depth 9 (EXP-074) and, in an exploratory run, about one
-typical random scramble in ten (section 9).
+its own look-ahead, has reached **0.1933** at depth 9 (EXP-074), and **0.2571** with a sensory region four times
+wider (EXP-075). At depth 11, the typical random scramble, that judge solves about one cube in
+eight (section 9).
 
-**It mostly did not work for the reasons the architecture was built to test.** Across 74 numbered
-experiments, 58 of them with a committed results file (Appendix A), almost every architectural
+**It mostly did not work for the reasons the architecture was built to test.** Across 76 numbered
+experiments, 59 of them with a committed results file (Appendix A), almost every architectural
 idea lost to a training idea:
 
 | idea | kind | verdict |
@@ -774,7 +775,7 @@ That was written before the budget law existed. It was right about the science a
 the arithmetic: with the policy as built, it is the exchange rate between compute and depth that
 stops it. Section 9 takes up what would change that exchange rate. The grade above is the one
 recorded for the reactive policy and is left as it was; a search with a learned judge has since
-solved about one typical random scramble in ten, in an exploratory run (EXP-074).
+solved about one typical random scramble in eight (0.1200 at depth 11, EXP-075).
 
 ## 7. Reproducing the results
 
@@ -878,9 +879,10 @@ themselves are plain Python and most take `--workers`.
 
 **What was solved.** The trained policy acting on its own solves held-out states up to 8 moves
 from solved, at 0.0783 at depth 8 (EXP-062); for that policy, depth 9 is at the floor and depth 11,
-the modal distance of a random cube, was priced out rather than attempted. A 3-move search around
-the same networks, scored by a judge trained from its own look-ahead, reaches **0.1933** at depth 9
-(EXP-074, confirmed) and about 0.10 at depth 11 (exploratory, no claim). The plan's target, a cube
+the modal distance of a random cube, was priced out rather than attempted. A 3-move search scored by
+a judge trained from its own look-ahead, on a sensory region four times wider, reaches **0.2571** at depth 9
+(EXP-075, confirmed) and 0.1200 at depth 11 (where its gain over EXP-074's judge was not
+significant). The plan's target, a cube
 solved *"from any scramble"*, is still not met (section 6.2).
 
 **What the solver is.** With `recall=False`, the policy is the 192-neuron sensory region and a
