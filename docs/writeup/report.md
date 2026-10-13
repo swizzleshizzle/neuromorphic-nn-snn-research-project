@@ -1115,7 +1115,8 @@ still solves about one cube in eight.
 confirmed.** EXP-076 changed only the tree: four moves ahead instead of three, scored by EXP-075's 12
 committed wide judges, with nothing retrained. A third arm kept the 3-move tree but extended its goal
 check to four moves, so that the gain from a deeper judged tree could be told apart from the gain from
-spotting a nearby solution. It ran on all 12 seeds and on the 10 seeds that were never looked at, and
+spotting a nearby solution. It ran on all 12 seeds and on the 10-seed line that drops
+seeds 0 and 3, and
 every validity gate passed (EXP-076):
 
 | claim | arm | control | 12 seeds | 10 seeds (0 and 3 dropped) | verdict |
