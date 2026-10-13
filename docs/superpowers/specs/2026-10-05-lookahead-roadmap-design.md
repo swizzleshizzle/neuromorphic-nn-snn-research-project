@@ -323,6 +323,9 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   11: J3V-X 0.1200 vs J3V-W 0.1013 (+0.0188, p 0.0757), NOT SIGNIFICANT. Depth 7 0.8908. Width
 >   is a lever at depths 7 to 9; at the typical random scramble the best judge solves about one
 >   cube in eight.
+> - **2026-10-12, EXP-076 dispatched:** a 4-move tree with EXP-075's committed X judges, nothing
+>   retrained, with a third arm that separates the deeper goal check from the deeper judge tree.
+>   No number yet.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
