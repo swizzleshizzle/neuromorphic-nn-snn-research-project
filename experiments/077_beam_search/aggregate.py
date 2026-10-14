@@ -10,7 +10,8 @@ pairing is EXP-072's, all reused through importlib. Alpha is 0.05 / 3.
 Usage:
     .venv/bin/python experiments/077_beam_search/aggregate.py --pilot-report
     .venv/bin/python experiments/077_beam_search/aggregate.py --stage cont
-    .venv/bin/python experiments/077_beam_search/aggregate.py --determinism-ok
+    .venv/bin/python experiments/077_beam_search/aggregate.py   # full report; Gate 0(a) is
+    #   computed from outputs_det/ (--det-dir) against outputs/
 """
 
 from __future__ import annotations
@@ -133,6 +134,23 @@ def load_records(out_dir) -> dict:
             recs[(arm, d)] = {s: _read_cell(out_dir / ev.record_name(arm, d, s), arm, d, s)
                               for s in SEEDS}
     return recs
+
+
+DET_NAME = "exp077_B5-X_d9_s0.json"
+DET_IGNORED = ("wall_s", "git_commit")
+
+
+def gate0a(out_dir, det_dir) -> str:
+    """Gate 0(a): the det re-run of B5-X d9 s0 equals the full-run record in every field except
+    wall_s and git_commit. Computed, never asserted by hand."""
+    recs = []
+    for d in (Path(out_dir), Path(det_dir)):
+        p = d / DET_NAME
+        if not p.exists():
+            raise SystemExit(f"missing {p}: Gate 0(a) cannot be computed")
+        recs.append({k: v for k, v in json.loads(p.read_text()).items()
+                     if k not in DET_IGNORED})
+    return "PASS" if recs[0] == recs[1] else "FAIL"
 
 
 def rates_of(recs) -> dict:
@@ -292,19 +310,24 @@ def main() -> None:
     ap.add_argument("--pilot-report", action="store_true",
                     help="print the amendment's numbers from the pilot records and stop")
     ap.add_argument("--stage", choices=("cont",), help="read only Gate 0(b) and stop")
+    ap.add_argument("--det-dir", type=Path, default=HERE / "outputs_det",
+                    help="the det re-run's output directory, compared for Gate 0(a)")
     ap.add_argument("--determinism-ok", action="store_true",
-                    help="set only after the det re-run matches its full-run copy")
+                    help="ignored: Gate 0(a) is now computed from --det-dir")
     args = ap.parse_args()
     if args.pilot_report:
         for key, val in pilot_report(args.pilot_dir).items():
             print(f"{key}: {val}")
         return
+    if args.determinism_ok:
+        print("note: --determinism-ok is ignored; Gate 0(a) is computed from --det-dir")
     out = args.out_dir
     g0b = stage_cont(out)
     if args.stage == "cont":
         print(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
         return
-    print("\n".join(report_lines(load_records(out), g0b, args.determinism_ok)))
+    print("\n".join(report_lines(load_records(out), g0b,
+                                   gate0a(out, args.det_dir) == "PASS")))
 
 
 if __name__ == "__main__":

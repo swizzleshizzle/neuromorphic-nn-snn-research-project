@@ -60,14 +60,18 @@ if ($Phase -eq "check") { "CHECK OK"; exit 0 }
 
 # Every phase but the pilot produces numbers that decide a claim, and none may run before the
 # dated amendment. Check the exit code too: an import failure prints nothing.
+$amWn = 0
 if ($Phase -ne "pilot") {
     $amend = & $py -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','$($exp.Replace('\','/'))/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.AMENDMENT))"
     if ($LASTEXITCODE -ne 0 -or $amend -eq "") { Write-Error "could not read AMENDMENT (got '$amend'); refusing to run."; exit 1 }
     if ($amend -eq "None") { Write-Error "AMENDMENT is unset: commit the dated post-pilot amendment before this phase."; exit 1 }
     "amendment               = $amend"
+    $amW = & $py -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','$($exp.Replace('\','/'))/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.AMENDMENT['workers']))"
+    if ($LASTEXITCODE -ne 0 -or -not [int]::TryParse("$amW", [ref]$amWn) -or $amWn -lt 1) { Write-Error "could not read an integer AMENDMENT workers (got '$amW'); refusing to run."; exit 1 }
 }
 
 if ($Workers -eq 0) { $Workers = 4 }
+if ($Phase -ne "pilot" -and $Workers -gt $amWn) { Write-Error "Workers $Workers exceeds the amended count $amWn (AMENDMENT workers); refusing to run."; exit 1 }
 if ($Workers -gt 6) { Write-Error "Workers capped at 6 (spec section 6); got $Workers."; exit 1 }
 $log = Join-Path $repo ("$exp\phase_" + $Phase + ".log")
 $outDir   = Join-Path $repo "$exp\outputs"
@@ -128,6 +132,7 @@ $reap = {
         if ($p.HasExited -and $labels.ContainsKey($p.Id)) {
             $v = [int]$peak[$p.Id]
             & $stamp "peak commit MB $($labels[$p.Id]) $v" | Out-Null
+            if ($v -lt 50) { & $stamp "WARNING peak commit under 50 MB for $($labels[$p.Id]): the sampler may be reading the redirector" | Out-Null }
             if ($v -gt $script:maxPeak) { $script:maxPeak = $v }
             $labels.Remove($p.Id)
         }

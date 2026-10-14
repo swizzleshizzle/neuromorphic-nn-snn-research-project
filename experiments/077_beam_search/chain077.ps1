@@ -18,7 +18,15 @@ foreach ($p in $order) {
         if ($g -notmatch "continuity.*: PASS") { Say "STOP: Gate 0(b) did not pass"; exit 2 }
         continue
     }
-    $w = 6; if ($p -eq "cont") { $w = 2 }; if ($p -eq "det") { $w = 1 }
+    if ($p -eq "cont") { $w = 2 }
+    elseif ($p -eq "det") { $w = 1 }
+    else {
+        # rank and eval take the worker count the dated amendment fixed (spec section 6).
+        $env:PYTHONPATH = Join-Path $repo "src"
+        $wr = & (Join-Path $repo ".venv\Scripts\python.exe") -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','experiments/077_beam_search/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.AMENDMENT['workers']))" 2>&1 | Out-String
+        $w = 0
+        if ($LASTEXITCODE -ne 0 -or -not [int]::TryParse($wr.Trim(), [ref]$w) -or $w -lt 1) { Say "STOP: could not read AMENDMENT workers (got '$($wr.Trim())')"; exit 2 }
+    }
     Say "phase $p workers $w"
     if ($p -eq "det") { & powershell -NoProfile -ExecutionPolicy Bypass -File $l -Phase $p -Workers $w }
     else { & powershell -NoProfile -ExecutionPolicy Bypass -File $l -Phase $p -Workers $w -SkipExisting }

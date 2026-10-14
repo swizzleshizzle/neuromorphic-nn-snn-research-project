@@ -77,6 +77,10 @@ def test_full_width_beam_final_frontier_is_the_bfs_shell():
                             info=info)
         shell = _bfs_shell(root, 4, visited)
         assert set(info["beam_frontier"]) == shell
+        # First occurrence wins within a level: no state is listed or scored twice.
+        assert len(info["beam_frontier"]) == len(shell)
+        assert info["judge_evals"] == sum(len(_bfs_shell(root, l, visited))
+                                          for l in range(1, 5))
         best = max(shell, key=lambda s: float(hash(s) % 1_000_003))
         assert info["beam_leaf"] == best
         assert move is not None
@@ -187,3 +191,16 @@ def test_evaluate_records_judge_evals_and_beam_width():
                                **common)
     assert rb["beam_width"] == 4 and rb["mode"] == "B" and rb["k"] == 3
     assert 0 < rb["judge_evals"] <= N_ACTIONS + 2 * 4 * N_ACTIONS
+
+
+def test_judge_evals_excludes_goal_fire_moves():
+    """Catches a mean judge_evals that counts moves where the goal check fired (no judge call)
+    in its denominator: states 3 moves from solved with k 2, k_goal 2 search their first moves
+    and fire once within 2 of solved (measured: some fire, most search), yet every searched move still costs exactly 6^2 judge calls."""
+    agent, head = _agent_and_head()
+    states = _shell(3, 5)
+    r = la.evaluate_lookahead(agent, head, states, depth=3, mode="C", k=2, k_goal=2,
+                              generator=torch.Generator().manual_seed(3), rng_seed=3,
+                              imag_seed=3, critic=_HashCritic(), no_revisit=True)
+    assert r["goal_fired_frac"] > 0
+    assert r["judge_evals"] == N_ACTIONS ** 2

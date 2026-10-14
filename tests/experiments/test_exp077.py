@@ -198,3 +198,43 @@ def test_chain_stops_unless_gate_0b_passes():
     t = _ps("chain077.ps1")
     assert "--stage cont" in t and "STOP" in t
     assert t.index('"cont"') < t.index('"gate"') < t.index('"eval"') < t.index('"det"')
+
+
+def test_chain_and_launcher_take_workers_from_the_amendment():
+    """Catches the chain running eval at a hardcoded 6 workers that the dated amendment (spec
+    section 6) never fixed, and a launcher that lets -Workers exceed the amended count."""
+    chain, launch = _ps("chain077.ps1"), _ps("launch077.ps1")
+    assert "$w = 6" not in chain
+    assert "AMENDMENT['workers']" in chain and "AMENDMENT['workers']" in launch
+    assert "exceeds the amended count" in launch
+
+
+def test_launcher_warns_when_the_sampler_reads_the_redirector():
+    """Catches a failed CIM child query silently logging the ~2 MB redirector as the peak."""
+    assert "under 50 MB" in _ps("launch077.ps1")
+
+
+def _write_det(d, **over):
+    d.mkdir(exist_ok=True)
+    r = _rec("B5-X", 9, 0, wall_s=10.0, git_commit="aaa")
+    r.update(over)
+    (d / ag.DET_NAME).write_text(json.dumps(r))
+
+
+def test_gate0a_passes_on_equal_records_and_ignores_wall_s_and_git_commit(tmp_path):
+    """Catches Gate 0(a) being a hand-set flag, or comparing the two fields that legitimately
+    differ between the full run and the re-run."""
+    _write_det(tmp_path / "o")
+    _write_det(tmp_path / "d")
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "PASS"
+    _write_det(tmp_path / "d", wall_s=99.0, git_commit="bbb")
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "PASS"
+
+
+def test_gate0a_fails_on_a_differing_outcome_and_exits_on_a_missing_file(tmp_path):
+    """Catches a non-deterministic re-run passing, and a missing det record being read as PASS."""
+    _write_det(tmp_path / "o")
+    _write_det(tmp_path / "d", solved=51)
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "FAIL"
+    with pytest.raises(SystemExit):
+        ag.gate0a(tmp_path / "o", tmp_path / "nope")
