@@ -147,3 +147,21 @@ def test_load_records_reads_j4v_from_exp076(tmp_path):
     recs = ag.load_records(tmp_path)
     ref = json.loads((ev.E76_OUT / "exp076_J4V-X_d11_s0.json").read_text())
     assert recs[("J4V-X", 11)][0]["solved"] == ref["solved"] == 36
+
+
+def test_report_runs_on_real_shaped_records_and_prints_seconds_per_state():
+    """Catches main() raising KeyError on EXP-076's J4V-X records (no judge_evals, no fired5),
+    and the full-run seconds-per-state secondary being absent."""
+    recs = _recs()
+    for key, by_seed in recs.items():
+        for r in by_seed.values():
+            r.update(mean_steps=7.0, optimality=0.5, wall_s=100.0)
+    for by_seed in (recs[("J4V-X", 9)], recs[("J4V-X", 11)]):
+        for r in by_seed.values():
+            r.pop("judge_evals"), r.pop("fired5")
+    for s in ag.SEEDS:
+        recs[("B5-X", 11)][s]["wall_s"] = 400.0
+    text = "\n".join(ag.report_lines(recs, "PASS", True))
+    assert "CLAIM 1 (primary) d11 B5-X - J4V-X" in text
+    assert "J4V-X 0.2500 (7.00, 0.500, n/a)" in text
+    assert "B5-X 2.000" in text and "J4V-X 0.500" in text

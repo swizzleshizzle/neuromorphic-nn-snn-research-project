@@ -220,6 +220,71 @@ def _mean(recs, key, field):
     return st.mean(r[field] for r in recs[key].values())
 
 
+def _evals(recs, arm, d) -> str:
+    """Mean judge_evals; EXP-076's committed J4V-X records predate the field."""
+    if arm not in NEW_ARMS:
+        return "n/a"
+    return f"{_mean(recs, (arm, d), 'judge_evals'):.0f}"
+
+
+def report_lines(recs, g0b, determinism_ok) -> list:
+    """Everything main prints after loading, as lines, so it can be tested on real-shaped
+    records."""
+    out = []
+    rates = rates_of(recs)
+    viol = gate_d(recs)
+    gb = gate_b(recs)
+
+    out.append(f"GATE 0(a) determinism: {'PASS' if determinism_ok else 'NOT CHECKED'}")
+    out.append(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
+    out.append(f"GATE D dominance and first-fire instrument (J4VG5-X >= J4V-X on every cell): "
+          f"{'PASS' if not viol else 'FAIL at (depth, seed) ' + str(viol)}")
+    out.append(f"GATE B beam judge evaluations <= {MAX_EVALS} on every cell: "
+          f"{'PASS' if gb['ok'] else 'FAIL'}; mean judge_evals {gb['judge_evals']}, "
+          f"mean fallback_frac {gb['fallback']}")
+
+    out.append("\nMean held-out success (mean steps to solve, optimality, judge_evals)")
+    for d in DEPTHS:
+        out.append(f"  d{d}: " + "  ".join(
+            f"{a} {_mean(recs, (a, d), 'success_rate'):.4f} "
+            f"({_mean(recs, (a, d), 'mean_steps'):.2f}, {_mean(recs, (a, d), 'optimality'):.3f}, "
+            f"{_evals(recs, a, d)})"
+            for a in ALL_ARMS))
+
+    out.append("\nSeconds per state (mean wall_s / n)")
+    for d in DEPTHS:
+        out.append(f"  d{d}: " + "  ".join(
+            f"{a} {st.mean(r['wall_s'] / r['n'] for r in recs[(a, d)].values()):.3f}"
+            for a in ALL_ARMS))
+
+    gate_ok = g0b == "PASS" and determinism_ok and not viol and gb["ok"]
+    if not gate_ok:
+        out.append("Gate 0, D or B did not pass. Every claim is VOID.")
+    full = primary_verdicts(rates, gate_ok, SEEDS)
+    sens_rates = sensitivity_rates(rates)
+    sens = primary_verdicts(sens_rates, gate_ok, sorted(sens_rates[("B5-X", 9)]))
+    for name, label in (("claim1", "CLAIM 1 (primary) d11 B5-X - J4V-X"),
+                        ("claim2", "CLAIM 2 (primary) d9 B5-X - J4V-X"),
+                        ("claim3", "CLAIM 3 (primary) d11 B5-X - J4VG5-X")):
+        v, p, diff, am, bm = full[name]
+        sv, sp, sdiff, _, _ = sens[name]
+        out.append(f"{label}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f} -> {v}")
+        out.append(f"    10-seed line, seeds 0 and 3 dropped: diff {sdiff:+.4f}, p {sp:.4f} -> {sv}")
+        if sv != v:
+            out.append("    10-SEED LINE DISAGREES WITH THE VERDICT: RESULTS.md must lead with this.")
+
+    out.append("\nSecondary (patterns, never confirmations):")
+    v, p, diff, am, bm = contrast(rates, ("B5-X", 9), ("J4VG5-X", 9), gate_ok)
+    out.append(f"  d9 B5-X - J4VG5-X: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f}")
+    for d in DEPTHS:
+        _, p, diff, am, bm = contrast(rates, ("J4VG5-X", d), ("J4V-X", d), gate_ok)
+        f5 = sum(recs[("J4VG5-X", d)][s]["fired5"] for s in SEEDS)
+        out.append(f"  d{d} J4VG5-X - J4V-X (goal reach alone, >= 0 by construction): "
+              f"diff {diff:+.4f}, summed fired5 {f5}")
+    return out
+
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", type=Path, default=HERE / "outputs")
@@ -239,51 +304,7 @@ def main() -> None:
     if args.stage == "cont":
         print(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
         return
-    recs = load_records(out)
-    rates = rates_of(recs)
-    viol = gate_d(recs)
-    gb = gate_b(recs)
-
-    print(f"GATE 0(a) determinism: {'PASS' if args.determinism_ok else 'NOT CHECKED'}")
-    print(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
-    print(f"GATE D dominance and first-fire instrument (J4VG5-X >= J4V-X on every cell): "
-          f"{'PASS' if not viol else 'FAIL at (depth, seed) ' + str(viol)}")
-    print(f"GATE B beam judge evaluations <= {MAX_EVALS} on every cell: "
-          f"{'PASS' if gb['ok'] else 'FAIL'}; mean judge_evals {gb['judge_evals']}, "
-          f"mean fallback_frac {gb['fallback']}")
-
-    print("\nMean held-out success (mean steps to solve, optimality, judge_evals)")
-    for d in DEPTHS:
-        print(f"  d{d}: " + "  ".join(
-            f"{a} {_mean(recs, (a, d), 'success_rate'):.4f} "
-            f"({_mean(recs, (a, d), 'mean_steps'):.2f}, {_mean(recs, (a, d), 'optimality'):.3f}, "
-            f"{_mean(recs, (a, d), 'judge_evals'):.0f})"
-            for a in ALL_ARMS))
-
-    gate_ok = g0b == "PASS" and args.determinism_ok and not viol and gb["ok"]
-    if not gate_ok:
-        print("Gate 0, D or B did not pass. Every claim is VOID.")
-    full = primary_verdicts(rates, gate_ok, SEEDS)
-    sens_rates = sensitivity_rates(rates)
-    sens = primary_verdicts(sens_rates, gate_ok, sorted(sens_rates[("B5-X", 9)]))
-    for name, label in (("claim1", "CLAIM 1 (primary) d11 B5-X - J4V-X"),
-                        ("claim2", "CLAIM 2 (primary) d9 B5-X - J4V-X"),
-                        ("claim3", "CLAIM 3 (primary) d11 B5-X - J4VG5-X")):
-        v, p, diff, am, bm = full[name]
-        sv, sp, sdiff, _, _ = sens[name]
-        print(f"{label}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f} -> {v}")
-        print(f"    10-seed line, seeds 0 and 3 dropped: diff {sdiff:+.4f}, p {sp:.4f} -> {sv}")
-        if sv != v:
-            print("    10-SEED LINE DISAGREES WITH THE VERDICT: RESULTS.md must lead with this.")
-
-    print("\nSecondary (patterns, never confirmations):")
-    v, p, diff, am, bm = contrast(rates, ("B5-X", 9), ("J4VG5-X", 9), gate_ok)
-    print(f"  d9 B5-X - J4VG5-X: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f}")
-    for d in DEPTHS:
-        _, p, diff, am, bm = contrast(rates, ("J4VG5-X", d), ("J4V-X", d), gate_ok)
-        f5 = sum(recs[("J4VG5-X", d)][s]["fired5"] for s in SEEDS)
-        print(f"  d{d} J4VG5-X - J4V-X (goal reach alone, >= 0 by construction): "
-              f"diff {diff:+.4f}, summed fired5 {f5}")
+    print("\n".join(report_lines(load_records(out), g0b, args.determinism_ok)))
 
 
 if __name__ == "__main__":
