@@ -61,7 +61,7 @@ from neuromorphic.envs.cube import CubeEnv
 from neuromorphic.training.cube_baseline import max_steps_for, modal_action_fraction
 from neuromorphic.training.reinforce import action_distribution
 
-MODES = ("G", "E", "P", "R", "C")
+MODES = ("G", "E", "P", "R", "C", "B")
 
 
 def imag_seed_for(base: int, state_index: int, step: int) -> int:
@@ -123,12 +123,55 @@ def _check_k_goal(k, k_goal) -> int:
     return k_goal
 
 
+def beam_move(state, width, depth, n_actions, *, agent, critic, imag_generator, visited=None,
+              info=None):
+    """EXP-077's beam: keep the `width` best states by judge value at each level, `depth` levels
+    deep, and return the first move of the best final state (None if level 1 is empty).
+
+    Each state is scored at most once, at the shallowest level the beam reaches it (`seen`), so
+    no path returns to its own ancestors and a full-width beam's level l is the BFS shell at
+    distance l. One batched judge call per level; ties go to the earlier child."""
+    seen = {state}
+    frontier = [(state, None)]
+    evals = 0
+    for _ in range(depth):
+        kids = []
+        for s, first in frontier:
+            for a in range(n_actions):
+                c = apply_move(s, a)
+                if c in seen or (visited is not None and c in visited):
+                    continue
+                seen.add(c)
+                kids.append((c, a if first is None else first))
+        if not kids:
+            break
+        scores = imagined_values(agent, critic, [c for c, _ in kids],
+                                 generator=imag_generator).reshape(-1).tolist()
+        evals += len(kids)
+        order = sorted(range(len(kids)), key=lambda i: -scores[i])
+        frontier = [kids[i] for i in order[:width]]
+    if info is not None:
+        info["judge_evals"] = info.get("judge_evals", 0) + evals
+    if frontier[0][1] is None:
+        return None
+    if info is not None:
+        info["beam_leaf"] = frontier[0][0]
+        info["beam_frontier"] = [s for s, _ in frontier]
+    return frontier[0][1]
+
+
 def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None,
-                imag_generator=None, critic=None, visited=None, info=None, k_goal=None):
+                imag_generator=None, critic=None, visited=None, info=None, k_goal=None,
+                beam_width=None):
     """One real move. Returns (action, goal_fired). Never sees the evaluation generator."""
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
     k_goal = _check_k_goal(k, k_goal)
+    if mode == "B":
+        if beam_width is None or beam_width < 1:
+            raise ValueError("mode B needs beam_width >= 1")
+    elif beam_width is not None:
+        raise ValueError(f"beam_width is only for mode B, got mode {mode!r}")
     greedy = int(root_logits.argmax())
     if mode == "G":
         if visited is not None:
@@ -141,6 +184,18 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
         if info is not None:
             info["fire_len"] = len(prefix)
         return prefix[0], True
+    if mode == "B":
+        if critic is None:
+            raise ValueError("mode B needs a critic")
+        move = beam_move(state, beam_width, k, n_actions, agent=agent, critic=critic,
+                         imag_generator=imag_generator, visited=visited, info=info)
+        if move is None:
+            # Every neighbour is on the real path: mode C's fallback, its unmasked best.
+            if info is not None:
+                info["fallback"] = True
+            move = beam_move(state, beam_width, k, n_actions, agent=agent, critic=critic,
+                             imag_generator=imag_generator, visited=None, info=info)
+        return move, False
     if mode == "E":
         if visited is not None:
             return _greedy_unvisited(state, root_logits, n_actions, visited, info), False
@@ -153,6 +208,8 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
             raise ValueError("mode C needs a critic")
         levels = tree_levels(state, k, n_actions)
         scores = imagined_values(agent, critic, levels[k], generator=imag_generator)
+        if info is not None:
+            info["judge_evals"] = n_actions ** k
     else:  # "P"
         levels = tree_levels(state, k, n_actions)
         level_logp = [torch.log_softmax(root_logits.reshape(1, -1), dim=-1)]
@@ -172,7 +229,8 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
 
 
 def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_seed=0,
-                       imag_seed=0, trace=None, critic=None, no_revisit=False, k_goal=None):
+                       imag_seed=0, trace=None, critic=None, no_revisit=False, k_goal=None,
+                       beam_width=None):
     """`evaluate_states` with a look-ahead move rule. At mode G, k 0 it IS `evaluate_states`.
 
     Every mode draws the real state's logits from `generator` exactly once per real move, the
@@ -191,6 +249,8 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
     eval_steps = 0
     fired_moves = 0
     fallback_moves = 0
+    judge_evals_total = 0
+    searched_moves = 0
     modal_fracs: list[float] = []
     fire_hist: dict[int, int] = {}
     for i, state in enumerate(states):
@@ -209,8 +269,11 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
                                         agent=agent, head=head, imag_generator=imag,
                                         critic=critic,
                                         visited=visited_set if no_revisit else None,
-                                        info=info, k_goal=k_goal)
+                                        info=info, k_goal=k_goal, beam_width=beam_width)
             fallback_moves += int(info.get("fallback", False))
+            if "judge_evals" in info:
+                judge_evals_total += info["judge_evals"]
+                searched_moves += 1
             fired_moves += int(fired)
             if fired and first_len is None:
                 first_len = info["fire_len"]
@@ -234,7 +297,7 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
             trace.append(state_trace)
     n = len(states)
     total_steps = sum(steps_solved)
-    return {
+    out = {
         "success_rate": solved / n if n else 0.0,
         "mean_steps": total_steps / len(steps_solved) if steps_solved else 0.0,
         "optimality": (depth * len(steps_solved) / total_steps) if total_steps else 0.0,
@@ -250,3 +313,8 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
         "no_revisit": bool(no_revisit),
         "fallback_frac": (fallback_moves / eval_steps) if eval_steps else 0.0,
     }
+    if mode in ("C", "B"):
+        out["judge_evals"] = judge_evals_total / searched_moves if searched_moves else 0.0
+    if mode == "B":
+        out["beam_width"] = beam_width
+    return out
