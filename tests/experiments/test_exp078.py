@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest
@@ -68,3 +67,19 @@ def test_unknown_arm_exits_cleanly(tmp_path):
     """Catches an arm typo running something unregistered."""
     with pytest.raises(SystemExit):
         ev.run_cell("J6V-X", 9, 0, tmp_path, limit_states=1)
+
+
+def test_smoke_record_is_never_overwritten_or_treated_as_done(tmp_path):
+    """Catches a --limit-states smoke record sitting under the real cell's name: run_cell must
+    refuse a call with a different limit_states instead of overwriting or skipping it."""
+    (tmp_path / ev.record_name("J4V-X", 9, 0)).write_text('{"limit_states": 3}')
+    with pytest.raises(SystemExit):
+        ev.run_cell("J4V-X", 9, 0, tmp_path, limit_states=None)
+
+
+def test_stale_checkpoint_of_a_different_size_is_refused(tmp_path):
+    """Catches a smoke checkpoint being resumed by a full run (or silently discarded)."""
+    assert ev.run_cell("J4V-X", 9, 0, tmp_path, limit_states=2, stop_after=1) is None
+    with pytest.raises(ValueError, match="n_states"):
+        ev.run_cell("J4V-X", 9, 0, tmp_path, limit_states=3)
+    assert ev.ckpt_path(tmp_path, "J4V-X", 9, 0).exists()

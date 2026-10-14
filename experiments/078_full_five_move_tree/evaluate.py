@@ -19,6 +19,7 @@ import importlib.util
 import json
 import statistics as st
 import subprocess
+import time
 from pathlib import Path
 
 import torch
@@ -92,6 +93,12 @@ def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None,
     if arm not in ARMS:
         raise SystemExit(f"unknown arm {arm!r}; valid: {list(ARMS)}")
     mode, k, k_goal, beam_width = ARMS[arm]
+    target = Path(out_dir) / record_name(arm, depth, seed)
+    if target.exists():
+        prior = json.loads(target.read_text()).get("limit_states")
+        if prior != limit_states:
+            raise SystemExit(f"{target} exists with limit_states={prior!r} but this call has "
+                             f"limit_states={limit_states!r}; move the old record away by hand")
     critic = _critic(seed, judge_dir)
     agent, head, states, train_seed = e75.load_cell(depth, seed)
     if limit_states is not None:
@@ -120,7 +127,6 @@ def rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=
     """Gate R at k 5 (reported, not voiding): per-seed mean hit of 'the lowest-J 5-move leaf is
     closer to solved than the root', on evaluation held-out states. BFS is the yardstick only;
     unbounded by default because depth + 5 passes the 2x2's diameter."""
-    import time
     t0 = time.time()
     torch.set_num_threads(1)
     k = RANK_K
