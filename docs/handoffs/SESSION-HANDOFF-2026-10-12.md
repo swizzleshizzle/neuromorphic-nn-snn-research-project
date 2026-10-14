@@ -1,8 +1,8 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
-> **Nothing is running. The laptop is FREE.** EXP-076 ran 2026-10-12 20:05 to 2026-10-13 02:44
-> laptop time (6.6 h) and is closed out: `experiments/076_deeper_tree/RESULTS.md`, records tracked.
-> Suite: **1059 tests, 1034 not slow, 25 slow** (plus 88 vitest + 2 e2e in `dashboard/`).
+> **2026-10-14: EXP-077 and EXP-078 are BUILT and MERGED, NOT RUN. The laptop has been OFFLINE on
+> Tailscale since about 2026-10-14 07:00 UTC** (pm ask #19 asks Michael to wake it). Suite: **1122
+> tests, 1097 not slow, 25 slow**. Section 2b is the run procedure.
 >
 > **This supersedes `SESSION-HANDOFF-2026-10-06.md`** (which covers 2026-10-06 to 11 and is
 > misnamed; its header says 2026-10-11). Read that one for EXP-070 to 075 and its section 3, the
@@ -32,6 +32,38 @@ goal check alone (J3VG4-X) equalled J3V-X on all 24 cells, so the gain is the ju
 leaves one move nearer the goal. A 5-move full tree is about 20 h per depth-11 cell, so going
 deeper needs a cheaper search (beam or pruned). Section 2 below is the run as dispatched, kept
 for the relaunch procedure.
+
+## 2b. EXP-077 then EXP-078 (Michael's decision, relayed 2026-10-14): run both, cheap first
+
+Specs: `docs/superpowers/specs/2026-10-14-exp077-beam-search-design.md` (a width-64, depth-5 beam,
+at most 1026 judge evaluations per move vs the 4-move tree's 1296; arms J4V-X reused from EXP-076,
+J4VG5-X, B5-X) and `docs/superpowers/specs/2026-10-14-exp078-full-five-move-tree-design.md` (J5V-X,
+7776 leaves, ~200-250 cell-hours, each cell checkpoints every 10 states and resumes). Plans beside
+them in `docs/superpowers/plans/`. Review ask on #18 (non-blocking).
+
+**Procedure once the laptop is reachable** (`tailscale status | grep swizzles`):
+
+1. `git pull` on the laptop; `launch077.ps1 -Phase check`, then `-Phase pilot -Workers 2`.
+   Read `phase_pilot.log`: the `peak commit MB` lines must be far above 2 MB (the launcher now
+   samples the `python3.13` child; a WARNING line under 50 MB means it is reading the redirector).
+2. `aggregate.py --pilot-report` (EXP-077), then the dated amendment: set
+   `AMENDMENT = {date, workers, spec_section}` in `experiments/077_beam_search/aggregate.py`, add the
+   amendment section to the spec, commit, and put it to Michael with `pm ask` (blocking for the
+   full run only).
+3. After his go: `chain077.ps1` (cont, Gate 0(b), eval, det; eval workers come from AMENDMENT).
+4. EXP-078's pilot may run alongside EXP-077's eval: `launch078.ps1 -Phase pilot -Workers 1
+   -AllowConcurrent`, if EXP-077's amendment leaves memory headroom. Then its own amendment and
+   `pm ask`. Its chain (`chain078.ps1`: cont, gate, eval, det with a forced stop at 50 and resume,
+   rank) starts only after EXP-077's eval has finished (spec section 9).
+5. Aggregators compute every gate; EXP-078's Claims 3-4 read EXP-077's records and VOID if
+   EXP-077 is invalid. Close-out: force-add records AND each `outputs_det` record (the
+   `.gitignore` ignores `outputs_*`; EXP-078's aggregator reads EXP-077's det record).
+
+**Disclosures for the RESULTS files (rulings made while building):** EXP-077's Gate B voids per cell,
+stricter than the per-depth mean in the spec; `fallback_frac` is over all real moves, not beam
+moves; EXP-078's Gate 0(b) compares EXP-071's 8 outcome fields (not first_fire_len or
+fallback_frac); J5V-X `wall_s` is loop time only (EXP-076/077 include load time); rank workers
+hold the full BFS table plus a 7776-leaf batch, so rank memory may exceed the eval pilot's.
 
 ## 2. EXP-076: what is running
 

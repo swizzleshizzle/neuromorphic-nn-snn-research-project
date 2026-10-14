@@ -6,7 +6,8 @@ detail, and duplicating it here would create two versions that drift.
 ---
 
 ```
-Picking up the neuromorphic cube project, week 28. NOTHING IS RUNNING, the laptop is FREE.
+Picking up the neuromorphic cube project, week 28. EXP-077 (5-move beam) and EXP-078 (full 5-move
+tree) are BUILT, NOT RUN: the laptop was offline. Handoff section 2b is the run procedure.
 The goal: an SNN that solves a 2x2 cube, via look-ahead plus a learned judgement. EXP-074: a
 judge trained by value iteration from its own look-ahead CONFIRMED at depth 9 (0.193 vs 0.063).
 EXP-075: a sensory region four times wider, 0.257 at depth 9. EXP-076: a 4-move tree with the
