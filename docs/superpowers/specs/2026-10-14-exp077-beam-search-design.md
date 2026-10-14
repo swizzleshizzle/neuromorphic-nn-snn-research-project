@@ -35,8 +35,9 @@ a beam's early levels sit.
    - the new frontier is the top `width` survivors by judge value (the critic returns -J, higher
      is better, as in mode C), ties to the earlier child.
 2. Return the first move of the best node of the final frontier.
-3. If level 1 has no survivor, fall back to `_greedy_unvisited`, set `info["fallback"]`, exactly
-   as mode C does.
+3. If level 1 has no survivor (every neighbour is on the real path), run the beam again without
+   `visited` and set `info["fallback"]`. That is what mode C does when every sequence is masked:
+   it plays its unmasked best and flags the fallback.
 
 The goal check runs first, as in every judged arm: `solving_prefix(state, k_goal)`, here
 `k_goal = 5`. If it fires, its first move is played and the beam is not run.
