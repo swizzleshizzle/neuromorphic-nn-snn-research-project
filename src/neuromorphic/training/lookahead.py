@@ -10,6 +10,9 @@ source level.
 from __future__ import annotations
 
 import itertools
+import os
+import time
+from pathlib import Path
 
 import torch
 
@@ -230,12 +233,18 @@ def choose_move(mode, state, root_logits, k, n_actions, *, agent=None, head=None
 
 def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_seed=0,
                        imag_seed=0, trace=None, critic=None, no_revisit=False, k_goal=None,
-                       beam_width=None):
+                       beam_width=None, checkpoint=None, checkpoint_every=10,
+                       stop_after=None):
     """`evaluate_states` with a look-ahead move rule. At mode G, k 0 it IS `evaluate_states`.
 
     Every mode draws the real state's logits from `generator` exactly once per real move, the
     same call `greedy_action` makes. That is what keeps G's stream, and therefore Gate 0, intact,
     and what makes E and P see bit-identical real encodings while they play the same moves.
+
+    `checkpoint` (a path) makes the cell resumable (EXP-078): the running counters, the next state
+    index and the evaluation generator's state are saved atomically every `checkpoint_every`
+    states and after the last, and an existing file is loaded on entry. `stop_after` simulates a
+    kill: after that many states in this call it saves and returns None.
     """
     if mode == "G" and k != 0:
         raise ValueError("mode G is the published evaluator and takes k=0")
@@ -243,17 +252,49 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
     limit = max_steps_for(depth)
     env = CubeEnv(scramble_depth=depth, max_steps=limit, scramble_seed=rng_seed)
     n_actions = env.action_space.n
-    solved = 0
-    steps_solved: list[int] = []
-    eval_revisits = 0
-    eval_steps = 0
-    fired_moves = 0
-    fallback_moves = 0
-    judge_evals_total = 0
-    searched_moves = 0
-    modal_fracs: list[float] = []
-    fire_hist: dict[int, int] = {}
-    for i, state in enumerate(states):
+    if checkpoint is not None:
+        if trace is not None:
+            raise ValueError("a trace cannot be resumed from a checkpoint")
+        checkpoint = Path(checkpoint)
+    acc = {"solved": 0, "steps_solved": [], "eval_revisits": 0, "eval_steps": 0,
+           "fired_moves": 0, "fallback_moves": 0, "judge_evals_total": 0, "searched_moves": 0,
+           "modal_fracs": [], "fire_hist": {}}
+    ident = {"depth": depth, "mode": mode, "k": k, "k_goal": k_goal, "beam_width": beam_width,
+             "n_states": len(states), "rng_seed": rng_seed, "imag_seed": imag_seed,
+             "no_revisit": bool(no_revisit)}
+    start, resumes, elapsed = 0, 0, 0.0
+    if checkpoint is not None and checkpoint.exists():
+        ck = torch.load(checkpoint, weights_only=False)
+        for field, value in ident.items():
+            if ck["ident"][field] != value:
+                raise ValueError(f"checkpoint {field} is {ck['ident'][field]!r}, "
+                                 f"this call has {value!r}")
+        acc = ck["acc"]
+        start = ck["next"]
+        generator.set_state(ck["gen"])
+        resumes = ck["resumes"] + 1
+        elapsed = ck["elapsed_s"]
+    t0 = time.monotonic()
+
+    def _save(next_i):
+        tmp = checkpoint.with_name(checkpoint.name + ".tmp")
+        payload = {"ident": ident, "acc": acc, "next": next_i, "gen": generator.get_state(),
+                   "resumes": resumes, "elapsed_s": elapsed + (time.monotonic() - t0)}
+        # A transient Windows PermissionError (Defender scanning the temp file) must not crash
+        # a cell that has hours of work behind it: retry, and re-raise on the last attempt.
+        for attempt in range(3):
+            try:
+                torch.save(payload, tmp)
+                os.replace(tmp, checkpoint)
+                return
+            except OSError:
+                if attempt == 2:
+                    raise
+                time.sleep(2)
+
+    done_here = 0
+    for i in range(start, len(states)):
+        state = states[i]
         obs, _ = env.reset(options={"state": state})
         visited = [env._state]
         visited_set = set(visited)
@@ -270,11 +311,11 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
                                         critic=critic,
                                         visited=visited_set if no_revisit else None,
                                         info=info, k_goal=k_goal, beam_width=beam_width)
-            fallback_moves += int(info.get("fallback", False))
+            acc['fallback_moves'] += int(info.get("fallback", False))
             if "judge_evals" in info:
-                judge_evals_total += info["judge_evals"]
-                searched_moves += 1
-            fired_moves += int(fired)
+                acc['judge_evals_total'] += info["judge_evals"]
+                acc['searched_moves'] += 1
+            acc['fired_moves'] += int(fired)
             if fired and first_len is None:
                 first_len = info["fire_len"]
             actions.append(int(action))
@@ -282,19 +323,38 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
             obs, _, terminated, truncated, _ = env.step(action)
             visited.append(env._state)
             visited_set.add(env._state)
-            eval_steps += 1
+            acc['eval_steps'] += 1
             if terminated:
-                solved += 1
-                steps_solved.append(t)
+                acc['solved'] += 1
+                acc['steps_solved'].append(t)
                 break
             if truncated:
                 break
-        eval_revisits += len(visited) - len(set(visited))
+        acc['eval_revisits'] += len(visited) - len(set(visited))
         if first_len is not None:
-            fire_hist[first_len] = fire_hist.get(first_len, 0) + 1
-        modal_fracs.append(modal_action_fraction(actions))
+            acc['fire_hist'][first_len] = acc['fire_hist'].get(first_len, 0) + 1
+        acc['modal_fracs'].append(modal_action_fraction(actions))
         if trace is not None:
             trace.append(state_trace)
+        done_here += 1
+        if checkpoint is not None:
+            if stop_after is not None and done_here >= stop_after:
+                _save(i + 1)
+                return None
+            if (i + 1) % checkpoint_every == 0:
+                _save(i + 1)
+    if checkpoint is not None:
+        _save(len(states))
+    solved = acc["solved"]
+    steps_solved = acc["steps_solved"]
+    eval_revisits = acc["eval_revisits"]
+    eval_steps = acc["eval_steps"]
+    fired_moves = acc["fired_moves"]
+    fallback_moves = acc["fallback_moves"]
+    judge_evals_total = acc["judge_evals_total"]
+    searched_moves = acc["searched_moves"]
+    modal_fracs = acc["modal_fracs"]
+    fire_hist = acc["fire_hist"]
     n = len(states)
     total_steps = sum(steps_solved)
     out = {
@@ -317,4 +377,7 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
         out["judge_evals"] = judge_evals_total / searched_moves if searched_moves else 0.0
     if mode == "B":
         out["beam_width"] = beam_width
+    if checkpoint is not None:
+        out["resumes"] = resumes
+        out["elapsed_s"] = elapsed + (time.monotonic() - t0)
     return out
