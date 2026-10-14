@@ -191,3 +191,32 @@ def test_gate0a_fail_prints_fail_and_voids_every_claim(tmp_path, monkeypatch):
     assert "GATE 0(a) determinism: FAIL" in lines
     claim1 = next(ln for ln in lines if ln.startswith(ag.CLAIM_LABELS[0][1]))
     assert claim1.endswith("-> VOID")
+
+
+def _ps(name):
+    return (HERE / name).read_text()
+
+
+def test_launcher_carries_the_fixes_and_the_registered_cells():
+    """Catches a launcher missing a carried fix, the resume seam check, or a registered cell."""
+    t = _ps("launch078.ps1")
+    for s in ("$null = $proc.Handle", "AMENDMENT is unset", "Workers -gt 6", "ParentProcessId",
+              "under 50 MB", "'workers'", "checkpoint"):
+        assert s in t, s
+    assert '"J5V-X"' in t and '"J4V-X d9 s0"' in t and '"J4V-X d11 s0"' in t
+    assert '"J5V-X d9 s0"' in t and "--stop-after" in t
+
+
+def test_eval_phase_does_not_skip_a_cell_that_only_has_a_checkpoint():
+    """Catches -SkipExisting keyed on the checkpoint: a cell is done only when its RECORD
+    exists, so an in-flight cell is relaunched and resumes."""
+    t = _ps("launch078.ps1")
+    assert "SkipExisting" in t and ".ckpt" not in t
+
+
+def test_chain_order_and_the_forced_resume_det():
+    """Catches the chain running eval before Gate 0(b), rank before eval, or det without its
+    forced stop and relaunch."""
+    t = _ps("chain078.ps1")
+    assert t.index('"cont"') < t.index('"gate"') < t.index('"eval"') < t.index('"det"') < t.index('"rank"')
+    assert "--stage cont" in t and "STOP" in t and "'workers'" in t
