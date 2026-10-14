@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 4. 77 numbered experiments, 60 with a committed results file.
+**Status:** Phase 4. 78 numbered experiments, 60 with a committed results file.
 **Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
 **The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
