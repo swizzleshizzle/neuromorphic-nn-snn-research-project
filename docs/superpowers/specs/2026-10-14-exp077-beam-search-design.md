@@ -23,11 +23,13 @@ a beam's early levels sit.
 
 `beam_move(state, *, width, depth, critic, agent, visited, imag_generator, info)`:
 
-1. The frontier starts as the root alone. For level l = 1 to `depth`:
+1. The frontier starts as the root alone, and a `seen` set holds the root. For level l = 1 to
+   `depth`:
    - expand every frontier node in frontier order, moves 0 to 5 in order;
-   - drop a child if it is in `visited` (the real path, when no-revisit is on), if it equals the
-     root or any state on its own node's path, or if the same state is already a child at this
-     level (the first occurrence is kept);
+   - drop a child if it is in `visited` (the real path, when no-revisit is on) or in `seen`; add
+     every kept child to `seen` at once, so the first occurrence wins. **Each state is scored at
+     most once, at the shallowest level the beam reaches it**, which also rules out any path that
+     returns to its own ancestors;
    - if no child survives, stop and use the last non-empty frontier;
    - score the survivors with the judge in ONE batched `imagined_values` call;
    - the new frontier is the top `width` survivors by judge value (the critic returns -J, higher
@@ -39,8 +41,14 @@ a beam's early levels sit.
 The goal check runs first, as in every judged arm: `solving_prefix(state, k_goal)`, here
 `k_goal = 5`. If it fires, its first move is played and the beam is not run.
 
-**Width B = 64, depth 5.** Judge evaluations per real move, before pruning: 6 + 36 + 216 + 384 +
-384 = **1026**, against the full 4-move tree's 1296 (and the full 5-move tree's 7776). Pruning
+*Revised 2026-10-14 while planning, before any code or number existed: the pruning rule was
+"drop a child equal to an ancestor on its own path, or repeated within its level", under which a
+full-width beam can miss a leaf a simple path reaches (U2 is reached by U U and by U' U'). The
+shallowest-level rule above replaces it and has an independent reference (a BFS).*
+
+**Width B = 64, depth 5.** Judge evaluations per real move, at most: 6 + 36 + 216 + 384 +
+384 = **1026** (the shallowest-level rule only lowers this; on the 2x2 only 27 distinct states
+are 2 moves from any state, not 36), against the full 4-move tree's 1296 (and the full 5-move tree's 7776). Pruning
 only lowers it. So the beam reaches one level deeper on about 79% of J4V-X's leaf budget. It makes
 five batched judge calls per move instead of one, which the pilot prices.
 
@@ -83,9 +91,12 @@ and 11, seeds 0 to 11, paired across arms.
   the search, so goal fires are excluded) for every judged arm. For mode C it is exactly 6^k,
   an instrument check.
 - Unit tests, beyond the default-path pin:
-  - a full-width beam (width >= 6^(depth-1)) at depth 4 chooses a final leaf whose score equals
-    the best mode-C k 4 leaf score over sequences that do not revisit their own path, on many
-    states, with the deterministic test critics (`_HashCritic`, `_DistanceCritic`);
+  - a full-width beam (width >= every level's size) at depth 4 has, as its final frontier,
+    exactly the states at BFS distance 4 from the root in the graph with `visited` removed
+    (computed independently by a plain BFS), and picks the best-scoring one, on many states, with
+    deterministic test critics;
+  - at depth 1 the beam, at any width, plays the same move as mode C at k 1, with and without a
+    `visited` set, including the fallback;
   - a narrow beam (width 1) is greedy hill-climbing and is checked against a hand-computed walk;
   - the pruning rules each have a case that fails if the rule is deleted;
   - the fallback sets `info["fallback"]`.
