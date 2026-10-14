@@ -18,7 +18,14 @@ foreach ($p in $order) {
         if ($g -notmatch "continuity.*: PASS") { Say "STOP: Gate 0(b) did not pass"; exit 2 }
         continue
     }
-    if ($p -eq "cont") { $w = 2 }
+    if ($p -eq "cont") {
+        # cont runs two cells; the launcher refuses more workers than the amendment allows.
+        $env:PYTHONPATH = Join-Path $repo "src"
+        $wc = & (Join-Path $repo ".venv\Scripts\python.exe") -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','experiments/078_full_five_move_tree/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.AMENDMENT['workers']))" 2>&1 | Out-String
+        $wn = 0
+        if ($LASTEXITCODE -ne 0 -or -not [int]::TryParse($wc.Trim(), [ref]$wn) -or $wn -lt 1) { Say "STOP: could not read AMENDMENT workers (got '$($wc.Trim())')"; exit 2 }
+        $w = [Math]::Min(2, $wn)
+    }
     elseif ($p -eq "det") { $w = 1 }
     else {
         # rank and eval take the worker count the dated amendment fixed (spec section 6).

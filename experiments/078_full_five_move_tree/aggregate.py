@@ -143,17 +143,32 @@ def load_records(out_dir, include_e77: bool = True) -> dict:
 DET_IGNORED = ("wall_s", "git_commit", "resumes", "elapsed_s")
 
 
-def gate0a(out_dir, det_dir) -> str:
-    """Gate 0(a): the det re-run of J5V-X d9 s0 equals the full-run record in every field except
-    the session fields (a resumed cell differs in resumes and elapsed_s by design)."""
+def _det_records(out_dir, det_dir) -> list:
     recs = []
     for d in (Path(out_dir), Path(det_dir)):
         p = d / ev.record_name("J5V-X", 9, 0)
         if not p.exists():
             raise SystemExit(f"missing {p}: Gate 0(a) cannot be computed")
-        recs.append({k: v for k, v in json.loads(p.read_text()).items()
-                     if k not in DET_IGNORED})
-    return "PASS" if recs[0] == recs[1] else "FAIL"
+        recs.append(json.loads(p.read_text()))
+    return recs
+
+
+def det_resumes(out_dir, det_dir) -> tuple:
+    """(full-run resumes, det resumes), for the report."""
+    full, det = _det_records(out_dir, det_dir)
+    return full.get("resumes", 0), det.get("resumes", 0)
+
+
+def gate0a(out_dir, det_dir) -> str:
+    """Gate 0(a): the det re-run of J5V-X d9 s0 equals the full-run record in every field except
+    the session fields (a resumed cell differs in resumes and elapsed_s by design). VACUOUS, and
+    voiding like FAIL, unless the det record was actually resumed (resumes >= 1): a restarted det
+    phase can finish the cell straight through, which tests no resume."""
+    full, det = _det_records(out_dir, det_dir)
+    if det.get("resumes", 0) < 1:
+        return "VACUOUS"
+    keep = lambda r: {k: v for k, v in r.items() if k not in DET_IGNORED}
+    return "PASS" if keep(full) == keep(det) else "FAIL"
 
 
 def exp077_valid() -> tuple[bool, str]:
@@ -275,7 +290,7 @@ CLAIM_LABELS = (("claim1", "CLAIM 1 (primary) d11 J5V-X - J4V-X"),
                 ("claim4", "CLAIM 4 (primary) d11 J5V-X - B5-X"))
 
 
-def report_lines(recs, g0b, g0a, e77=(True, ""), out_dir=None) -> list:
+def report_lines(recs, g0b, g0a, e77=(True, ""), out_dir=None, resumes=None) -> list:
     """Everything main prints after loading, as lines, so it can be tested on real-shaped
     records."""
     out = []
@@ -286,6 +301,8 @@ def report_lines(recs, g0b, g0a, e77=(True, ""), out_dir=None) -> list:
     e77_ok, e77_why = e77
 
     out.append(f"GATE 0(a) determinism: {g0a}")
+    if resumes is not None:
+        out.append(f"GATE 0(a) resumes: full-run record {resumes[0]}, det record {resumes[1]}")
     out.append(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
     out.append("GATE D first-fire instrument (J5V-X first_fire_len only \"5\"): "
                f"{'PASS' if not viol else 'FAIL at (depth, seed) ' + str(viol)}")
@@ -359,7 +376,8 @@ def main() -> None:
         return
     e77 = exp077_valid()
     print("\n".join(report_lines(load_records(out, include_e77=e77[0]), g0b,
-                                 gate0a(out, args.det_dir), e77, out)))
+                                 gate0a(out, args.det_dir), e77, out,
+                                 resumes=det_resumes(out, args.det_dir))))
 
 
 if __name__ == "__main__":

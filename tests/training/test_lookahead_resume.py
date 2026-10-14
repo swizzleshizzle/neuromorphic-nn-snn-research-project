@@ -116,7 +116,7 @@ def test_a_checkpoint_from_another_cell_is_refused(tmp_path):
     agent, head = _agent_and_head()
     ck = tmp_path / "cell.ckpt"
     _run(agent, head, checkpoint=ck, checkpoint_every=2, stop_after=2)
-    with pytest.raises(ValueError, match="k"):
+    with pytest.raises(ValueError, match=r"checkpoint k is"):
         la.evaluate_lookahead(agent, head, STATES, depth=5, mode="E", k=3,
                               generator=torch.Generator().manual_seed(11), rng_seed=11,
                               imag_seed=11, critic=_HashCritic(), no_revisit=True,
@@ -133,3 +133,74 @@ def test_trace_with_checkpoint_is_refused(tmp_path):
     agent, head = _agent_and_head()
     with pytest.raises(ValueError):
         _run(agent, head, checkpoint=tmp_path / "c.ckpt", trace=[])
+
+
+class _SpyCritic:
+    """Records the first value drawn from the imagination generator on every call."""
+    reads_states = True
+
+    def __init__(self):
+        self.log = []
+
+    def __call__(self, states, generator):
+        v = torch.rand(len(states), generator=generator)
+        self.log.append(float(v[0]))
+        return v
+
+
+def _spy_run(spy, **kw):
+    agent, head = _agent_and_head()
+    return la.evaluate_lookahead(agent, head, STATES, depth=5, mode="C", k=1, critic=spy,
+                                 generator=torch.Generator().manual_seed(11), rng_seed=11,
+                                 imag_seed=11, no_revisit=True, **kw)
+
+
+@pytest.mark.parametrize("m", [3, 4])
+def test_resume_replays_the_same_imagination_seeds(tmp_path, m):
+    """Catches a wrong imagination-seed state index after a resume (e.g. i - start instead of
+    i): the critic's imagination stream, seen through a spy, in the stopped run followed by the
+    resumed run must equal the straight-through run's, call for call."""
+    ref = _SpyCritic()
+    _spy_run(ref)
+    ck = tmp_path / "c.ckpt"
+    first, second = _SpyCritic(), _SpyCritic()
+    assert _spy_run(first, checkpoint=ck, checkpoint_every=2, stop_after=m) is None
+    _spy_run(second, checkpoint=ck, checkpoint_every=2)
+    assert len(ref.log) > 0 and len(second.log) > 0
+    assert first.log + second.log == ref.log
+
+
+def test_a_transient_permission_error_on_save_is_retried(tmp_path, monkeypatch):
+    """Catches one Defender PermissionError on os.replace crashing a cell: the first replace
+    raises, the retry succeeds, the run completes and the checkpoint exists."""
+    real = la.os.replace
+    calls = {"n": 0}
+
+    def flaky(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise PermissionError("Defender")
+        return real(src, dst)
+
+    monkeypatch.setattr(la.os, "replace", flaky)
+    monkeypatch.setattr(la.time, "sleep", lambda s: None)
+    agent, head = _agent_and_head()
+    ck = tmp_path / "cell.ckpt"
+    r = _run(agent, head, checkpoint=ck, checkpoint_every=2)
+    assert r is not None and ck.exists() and calls["n"] > 1
+
+
+def test_a_persistent_save_failure_is_reraised_after_three_attempts(tmp_path, monkeypatch):
+    """Catches the retry swallowing a real fault: three failed attempts re-raise."""
+    calls = {"n": 0}
+
+    def broken(src, dst):
+        calls["n"] += 1
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(la.os, "replace", broken)
+    monkeypatch.setattr(la.time, "sleep", lambda s: None)
+    agent, head = _agent_and_head()
+    with pytest.raises(PermissionError):
+        _run(agent, head, checkpoint=tmp_path / "cell.ckpt", checkpoint_every=2)
+    assert calls["n"] == 3

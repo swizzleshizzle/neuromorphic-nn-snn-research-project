@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import statistics as st
 import subprocess
 import time
@@ -82,7 +83,9 @@ def _critic(seed, judge_dir):
 def _write(out_dir, name, rec) -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / name).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    tmp = out_dir / (name + ".tmp")
+    tmp.write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, out_dir / name)
 
 
 def run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None,

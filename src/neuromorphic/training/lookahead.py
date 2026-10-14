@@ -278,9 +278,19 @@ def evaluate_lookahead(agent, head, states, *, depth, mode, k, generator, rng_se
 
     def _save(next_i):
         tmp = checkpoint.with_name(checkpoint.name + ".tmp")
-        torch.save({"ident": ident, "acc": acc, "next": next_i, "gen": generator.get_state(),
-                    "resumes": resumes, "elapsed_s": elapsed + (time.monotonic() - t0)}, tmp)
-        os.replace(tmp, checkpoint)
+        payload = {"ident": ident, "acc": acc, "next": next_i, "gen": generator.get_state(),
+                   "resumes": resumes, "elapsed_s": elapsed + (time.monotonic() - t0)}
+        # A transient Windows PermissionError (Defender scanning the temp file) must not crash
+        # a cell that has hours of work behind it: retry, and re-raise on the last attempt.
+        for attempt in range(3):
+            try:
+                torch.save(payload, tmp)
+                os.replace(tmp, checkpoint)
+                return
+            except OSError:
+                if attempt == 2:
+                    raise
+                time.sleep(2)
 
     done_here = 0
     for i in range(start, len(states)):

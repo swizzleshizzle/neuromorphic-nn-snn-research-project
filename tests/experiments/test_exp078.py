@@ -128,8 +128,50 @@ def test_gate0a_ignores_only_the_session_fields(tmp_path):
     (tmp_path / "d" / name).write_text(json.dumps({**rec, "wall_s": 9.0, "git_commit": "b",
                                                    "resumes": 1, "elapsed_s": 9.0}))
     assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "PASS"
-    (tmp_path / "d" / name).write_text(json.dumps({**rec, "solved": 79}))
+    (tmp_path / "d" / name).write_text(json.dumps({**rec, "solved": 79, "resumes": 1}))
     assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "FAIL"
+
+
+def test_gate0a_is_vacuous_unless_the_det_record_was_resumed(tmp_path):
+    """Catches Gate 0(a) passing with no resume tested: a det record with resumes 0 (the cell
+    ran straight through twice) is VACUOUS; resumes 1 with equal fields is PASS."""
+    rec = {"solved": 80, "wall_s": 1.0, "git_commit": "a", "resumes": 0, "elapsed_s": 1.0}
+    (tmp_path / "o").mkdir(); (tmp_path / "d").mkdir()
+    name = ev.record_name("J5V-X", 9, 0)
+    (tmp_path / "o" / name).write_text(json.dumps(rec))
+    (tmp_path / "d" / name).write_text(json.dumps(rec))
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "VACUOUS"
+    (tmp_path / "d" / name).write_text(json.dumps({**rec, "resumes": 1}))
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "PASS"
+    assert ag.det_resumes(tmp_path / "o", tmp_path / "d") == (0, 1)
+
+
+def test_vacuous_gate0a_voids_every_claim_and_the_report_prints_resumes(tmp_path, monkeypatch):
+    """Catches VACUOUS not voiding like FAIL, or the report hiding both records' resumes."""
+    monkeypatch.setattr(ag.ev, "E77_OUT", tmp_path / "none")
+    _synthetic_j5(tmp_path)
+    lines = ag.report_lines(ag.load_records(tmp_path, include_e77=False), "PASS", "VACUOUS",
+                            (False, "x"), tmp_path, resumes=(0, 0))
+    assert "GATE 0(a) determinism: VACUOUS" in lines
+    assert "GATE 0(a) resumes: full-run record 0, det record 0" in lines
+    claim1 = next(ln for ln in lines if ln.startswith(ag.CLAIM_LABELS[0][1]))
+    assert claim1.endswith("-> VOID")
+
+
+def test_record_write_is_atomic(tmp_path, monkeypatch):
+    """Catches a kill mid-write leaving a truncated record that -SkipExisting treats as done:
+    when the final replace fails, no file with the record's name exists."""
+    def boom(a, b):
+        raise OSError("killed")
+
+    monkeypatch.setattr(ev.os, "replace", boom)
+    with pytest.raises(OSError):
+        ev._write(tmp_path, "r.json", {"a": 1})
+    assert not (tmp_path / "r.json").exists()
+    monkeypatch.undo()
+    ev._write(tmp_path, "r.json", {"a": 1})
+    assert json.loads((tmp_path / "r.json").read_text()) == {"a": 1}
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_gate_d_is_the_first_fire_clause():
@@ -220,3 +262,32 @@ def test_chain_order_and_the_forced_resume_det():
     t = _ps("chain078.ps1")
     assert t.index('"cont"') < t.index('"gate"') < t.index('"eval"') < t.index('"det"') < t.index('"rank"')
     assert "--stage cont" in t and "STOP" in t and "'workers'" in t
+
+
+def test_det_resume_job_checks_its_preconditions():
+    """Catches the det resume spending a cell with no checkpoint to resume, or after a record
+    already exists."""
+    t = _ps("launch078.ps1")
+    assert "det resume precondition failed" in t
+    assert 'Join-Path $detDir "ckpt"' in t and "exp078_J5V-X_d9_s0*" in t
+    assert "(Test-Path $target)" in t
+
+
+def test_allow_concurrent_is_pilot_only_and_skips_the_process_guard():
+    """Catches the pilot being unable to run beside EXP-077, or -AllowConcurrent being
+    accepted for a phase that produces claim numbers."""
+    t = _ps("launch078.ps1")
+    assert "[switch]$AllowConcurrent" in t
+    assert '$AllowConcurrent -and $Phase -ne "pilot"' in t
+    assert "-not $AllowConcurrent -and $alive -gt 2" in t
+
+
+def test_launcher_forced_stop_matches_evaluate():
+    """Catches the launcher's hardcoded --stop-after drifting from evaluate.FORCED_STOP."""
+    assert f'"--stop-after", {ev.FORCED_STOP}' in _ps("launch078.ps1")
+
+
+def test_chain_cont_workers_do_not_exceed_the_amendment():
+    """Catches cont hardcoded to 2 workers when the amendment allows fewer."""
+    t = _ps("chain078.ps1")
+    assert "[Math]::Min(2, $wn)" in t and '$p -eq "cont") { $w = 2 }' not in t

@@ -24,8 +24,12 @@
 param(
     [Parameter(Mandatory=$true)][ValidateSet("check","pilot","cont","eval","det","rank")][string]$Phase,
     [int]$Workers = 0,
-    [switch]$SkipExisting
+    [switch]$SkipExisting,
+    [switch]$AllowConcurrent
 )
+
+# -AllowConcurrent lets the pilot run beside EXP-077 (spec section 6); no other phase may.
+if ($AllowConcurrent -and $Phase -ne "pilot") { Write-Error "-AllowConcurrent is accepted only with -Phase pilot (got $Phase)."; exit 1 }
 
 $repo = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project"
 $py   = Join-Path $repo ".venv\Scripts\python.exe"
@@ -57,7 +61,7 @@ $head = (& git rev-parse --short HEAD).Trim()
 "X judges, J4V-X records = $present"
 
 $alive = @(Get-Process | Where-Object { $_.ProcessName -match "^python" }).Count
-if ($alive -gt 2) { Write-Error "$alive python processes already running; refusing to start."; exit 1 }
+if (-not $AllowConcurrent -and $alive -gt 2) { Write-Error "$alive python processes already running; refusing to start."; exit 1 }
 "pyprocs                 = $alive"
 
 if ($Phase -eq "check") { "CHECK OK"; exit 0 }
@@ -159,6 +163,16 @@ foreach ($j in $jobs) {
     & $reap
     foreach ($p in @($running | Where-Object { $_.HasExited })) { if ($p.ExitCode -ne 0) { $failed++ } }
     $running = @($running | Where-Object { -not $_.HasExited })
+    if ($Phase -eq "det" -and $j[0] -like "* resume") {
+        # The resume job is only a test of resuming if the stopped run left a checkpoint and no
+        # record; otherwise it would spend a cell on nothing.
+        $ckHit = @(Get-ChildItem -Path (Join-Path $detDir "ckpt") -Filter "exp078_J5V-X_d9_s0*" -ErrorAction SilentlyContinue).Count
+        if ($ckHit -lt 1 -or (Test-Path $target)) {
+            & $stamp "ERROR det resume job: need a checkpoint in outputs_det and no record (checkpoints $ckHit, record present $(Test-Path $target))" | Out-Null
+            Write-Error "det resume precondition failed: stopped run left no checkpoint, or a record already exists."
+            exit 1
+        }
+    }
     & $stamp "start $($j[0])" | Out-Null
     $argList = @("-u", "$exp\evaluate.py") + @($j[2..($j.Count - 1)] | ForEach-Object { "$_" }) + @("--out-dir", $phaseDir)
     # Read .Handle at once: without it Windows PowerShell 5.1 reports ExitCode as $null after the
