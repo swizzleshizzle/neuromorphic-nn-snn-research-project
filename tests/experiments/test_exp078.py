@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,65 @@ def test_stale_checkpoint_of_a_different_size_is_refused(tmp_path):
     with pytest.raises(ValueError, match="n_states"):
         ev.run_cell("J4V-X", 9, 0, tmp_path, limit_states=3)
     assert ev.ckpt_path(tmp_path, "J4V-X", 9, 0).exists()
+
+
+ag = _load("exp078_aggregate", HERE / "aggregate.py")
+
+
+def _rates(**over):
+    rates = {(a, d): {s: 0.1 for s in range(12)}
+             for a in ("J5V-X", "J4V-X", "J4VG5-X", "B5-X") for d in ev.DEPTHS}
+    for key, val in over.items():
+        arm, d = key.rsplit("_d", 1)
+        rates[(arm.replace("_", "-"), int(d))] = {s: val + 0.001 * s for s in range(12)}
+    return rates
+
+
+def test_alpha_is_four_way():
+    """Catches the three-claim alpha carried over from EXP-077."""
+    assert ag.ALPHA == pytest.approx(0.0125) and ag.SMALL == 0.01
+
+
+def test_four_claims_compare_the_registered_pairs():
+    """Catches a claim wired to the wrong arm or depth (spec section 8)."""
+    v = ag.primary_verdicts(_rates(J5V_X_d11=0.3, J5V_X_d9=0.5), True, True, range(12))
+    assert [v[c][0] for c in ("claim1", "claim2", "claim3", "claim4")] == ["CONFIRMED"] * 4
+    v = ag.primary_verdicts(_rates(J5V_X_d11=0.3, B5_X_d11=0.3), True, True, range(12))
+    assert v["claim4"][0] == "REFUTED" and v["claim1"][0] == "CONFIRMED"
+
+
+def test_exp077_void_voids_only_claims_3_and_4():
+    """Catches EXP-077's validity being ignored, or voiding claims that do not read its arms."""
+    v = ag.primary_verdicts(_rates(J5V_X_d11=0.3, J5V_X_d9=0.5), True, False, range(12))
+    assert v["claim1"][0] == "CONFIRMED" and v["claim2"][0] == "CONFIRMED"
+    assert v["claim3"][0] == "VOID" and v["claim4"][0] == "VOID"
+
+
+def test_gate0a_ignores_only_the_session_fields(tmp_path):
+    """Catches Gate 0(a) failing on a resumed det cell (resumes, elapsed_s differ by design) or
+    passing a real difference."""
+    rec = {"solved": 80, "wall_s": 1.0, "git_commit": "a", "resumes": 0, "elapsed_s": 1.0}
+    (tmp_path / "o").mkdir(); (tmp_path / "d").mkdir()
+    name = ev.record_name("J5V-X", 9, 0)
+    (tmp_path / "o" / name).write_text(json.dumps(rec))
+    (tmp_path / "d" / name).write_text(json.dumps({**rec, "wall_s": 9.0, "git_commit": "b",
+                                                   "resumes": 1, "elapsed_s": 9.0}))
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "PASS"
+    (tmp_path / "d" / name).write_text(json.dumps({**rec, "solved": 79}))
+    assert ag.gate0a(tmp_path / "o", tmp_path / "d") == "FAIL"
+
+
+def test_gate_d_is_the_first_fire_clause():
+    """Catches the first-fire instrument check missing for J5V-X."""
+    recs = {("J5V-X", d): {s: {"first_fire_len": {"5": 3}} for s in range(12)} for d in ev.DEPTHS}
+    assert ag.gate_d(recs) == []
+    recs[("J5V-X", 11)][4] = {"first_fire_len": {"4": 1, "5": 2}}
+    assert ag.gate_d(recs) == [(11, 4)]
+
+
+def test_exp077_valid_reports_why_when_its_run_is_missing(tmp_path, monkeypatch):
+    """Catches Claims 3 and 4 reading EXP-077 arms that never finished: with EXP-077's outputs
+    pointed at an empty directory, exp077_valid is (False, reason)."""
+    monkeypatch.setattr(ag.ev, "E77_OUT", tmp_path)
+    ok, why = ag.exp077_valid()
+    assert ok is False and why
