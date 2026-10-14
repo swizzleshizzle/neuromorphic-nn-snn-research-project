@@ -165,3 +165,36 @@ def test_report_runs_on_real_shaped_records_and_prints_seconds_per_state():
     assert "CLAIM 1 (primary) d11 B5-X - J4V-X" in text
     assert "J4V-X 0.2500 (7.00, 0.500, n/a)" in text
     assert "B5-X 2.000" in text and "J4V-X 0.500" in text
+
+
+def _ps(name):
+    return (HERE / name).read_text()
+
+
+def test_launcher_carries_the_fixes_and_the_registered_cells():
+    """Catches a launcher missing the EXP-074 handle fix, the amendment guard, the worker cap,
+    the beam seam check, or a registered cell."""
+    t = _ps("launch077.ps1")
+    assert "$null = $proc.Handle" in t
+    assert "AMENDMENT is unset" in t
+    assert "Workers -gt 6" in t
+    assert "beam_width" in t
+    for arm in ("J4VG5-X", "B5-X"):
+        assert f'"{arm}"' in t
+    assert '"J4V-X d9 s0"' in t and '"J4V-X d11 s0"' in t      # cont
+    assert '"B5-X d9 s0"' in t                                   # det
+
+
+def test_launcher_measures_the_worker_not_the_redirector():
+    """Catches EXP-076's 2 MB peak: the venv's python.exe is a redirector whose CHILD is the
+    python3.13 worker, so memory must be read from the child process."""
+    t = _ps("launch077.ps1")
+    assert "ParentProcessId" in t and "Win32_Process" in t
+    assert "PrivateMemorySize64" in t
+
+
+def test_chain_stops_unless_gate_0b_passes():
+    """Catches the chain spending the evaluation's hours after a failed continuity check."""
+    t = _ps("chain077.ps1")
+    assert "--stage cont" in t and "STOP" in t
+    assert t.index('"cont"') < t.index('"gate"') < t.index('"eval"') < t.index('"det"')
