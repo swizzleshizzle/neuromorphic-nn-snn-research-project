@@ -146,3 +146,48 @@ def test_exp077_valid_reports_why_when_its_run_is_missing(tmp_path, monkeypatch)
     monkeypatch.setattr(ag.ev, "E77_OUT", tmp_path)
     ok, why = ag.exp077_valid()
     assert ok is False and why
+
+
+def _synthetic_j5(tmp_path):
+    """J5V-X records beside the REAL EXP-076 J4V-X ones: 0.05 above each seed's J4V-X rate."""
+    for d in ev.DEPTHS:
+        for s in range(12):
+            base = json.loads((ev.E76_OUT / f"exp076_J4V-X_d{d}_s{s}.json").read_text())
+            rec = {"arm": "J5V-X", "depth": d, "seed": s, "k": 5, "k_goal": 5, "mode": "C",
+                   "no_revisit": True, "beam_width": None, "judge_updates": 4000,
+                   "limit_states": None, "success_rate": base["success_rate"] + 0.05,
+                   "mean_steps": 5.0, "optimality": 0.5, "judge_evals": 100, "wall_s": 10.0,
+                   "n": 200, "first_fire_len": {"5": 1}}
+            (tmp_path / ev.record_name("J5V-X", d, s)).write_text(json.dumps(rec))
+
+
+def test_main_path_voids_claims_3_and_4_but_reports_1_and_2_when_exp077_is_missing(
+        tmp_path, monkeypatch):
+    """Catches the aggregator exiting on EXP-077's missing records before Claims 1 and 2, which
+    stand when EXP-077 is VOID, are printed."""
+    empty = tmp_path / "e77"
+    empty.mkdir()
+    monkeypatch.setattr(ag.ev, "E77_OUT", empty)
+    _synthetic_j5(tmp_path)
+    e77 = ag.exp077_valid()
+    assert e77[0] is False
+    recs = ag.load_records(tmp_path, include_e77=e77[0])
+    lines = ag.report_lines(recs, "PASS", "PASS", e77, tmp_path)
+    claim = {n: next(ln for ln in lines if ln.startswith(label))
+             for n, label in ag.CLAIM_LABELS}
+    for c in ("claim1", "claim2"):
+        assert "VOID" not in claim[c] and "->" in claim[c]
+    for c in ("claim3", "claim4"):
+        assert "VOID" in claim[c] and "EXP-077" in claim[c]
+    assert any("d9 J5V-X - B5-X: EXP-077 invalid" in ln for ln in lines)
+
+
+def test_gate0a_fail_prints_fail_and_voids_every_claim(tmp_path, monkeypatch):
+    """Catches a Gate 0(a) FAIL printing NOT CHECKED, or a FAIL not voiding the claims."""
+    monkeypatch.setattr(ag.ev, "E77_OUT", tmp_path / "none")
+    _synthetic_j5(tmp_path)
+    lines = ag.report_lines(ag.load_records(tmp_path, include_e77=False), "PASS", "FAIL",
+                            (False, "x"), tmp_path)
+    assert "GATE 0(a) determinism: FAIL" in lines
+    claim1 = next(ln for ln in lines if ln.startswith(ag.CLAIM_LABELS[0][1]))
+    assert claim1.endswith("-> VOID")

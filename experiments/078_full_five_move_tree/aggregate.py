@@ -124,7 +124,7 @@ def _read_cell(path: Path, arm: str, depth: int, seed: int) -> dict:
     return r
 
 
-def load_records(out_dir) -> dict:
+def load_records(out_dir, include_e77: bool = True) -> dict:
     """(arm, depth) -> {seed: record}. J5V-X from this experiment's outputs; J4V-X from
     EXP-076's committed records (licensed by Gate 0(b)); J4VG5-X and B5-X from EXP-077's."""
     out_dir = Path(out_dir)
@@ -134,7 +134,7 @@ def load_records(out_dir) -> dict:
                                               "J5V-X", d, s) for s in SEEDS}
         recs[("J4V-X", d)] = {s: _read_cell(ev.E76_OUT / f"exp076_J4V-X_d{d}_s{s}.json",
                                               "J4V-X", d, s) for s in SEEDS}
-        for arm in E77_ARMS:
+        for arm in (E77_ARMS if include_e77 else ()):
             recs[(arm, d)] = {s: _read_cell(ev.E77_OUT / f"exp077_{arm}_d{d}_s{s}.json",
                                               arm, d, s) for s in SEEDS}
     return recs
@@ -205,10 +205,14 @@ def primary_verdicts(rates: dict, gate_ok: bool, e77_ok: bool, seeds) -> dict:
     Claim 4: d11 J5V-X vs B5-X. Claims 3 and 4 also need EXP-077 to be valid."""
     r = {k: {s: v[s] for s in seeds} for k, v in rates.items()}
     g34 = gate_ok and e77_ok
+    nan = float("nan")
+    absent = ("VOID", nan, nan, nan, nan)  # EXP-077's arms were not loaded: it is invalid
     return {"claim1": contrast(r, ("J5V-X", 11), ("J4V-X", 11), gate_ok),
             "claim2": contrast(r, ("J5V-X", 9), ("J4V-X", 9), gate_ok),
-            "claim3": contrast(r, ("J5V-X", 11), ("J4VG5-X", 11), g34),
-            "claim4": contrast(r, ("J5V-X", 11), ("B5-X", 11), g34)}
+            "claim3": (contrast(r, ("J5V-X", 11), ("J4VG5-X", 11), g34)
+                       if ("J4VG5-X", 11) in r else absent),
+            "claim4": (contrast(r, ("J5V-X", 11), ("B5-X", 11), g34)
+                       if ("B5-X", 11) in r else absent)}
 
 
 def sensitivity_rates(rates: dict) -> dict:
@@ -271,15 +275,17 @@ CLAIM_LABELS = (("claim1", "CLAIM 1 (primary) d11 J5V-X - J4V-X"),
                 ("claim4", "CLAIM 4 (primary) d11 J5V-X - B5-X"))
 
 
-def report_lines(recs, g0b, determinism_ok, e77=(True, ""), out_dir=None) -> list:
+def report_lines(recs, g0b, g0a, e77=(True, ""), out_dir=None) -> list:
     """Everything main prints after loading, as lines, so it can be tested on real-shaped
     records."""
     out = []
+    determinism_ok = g0a == "PASS"
+    arms = [a for a in ALL_ARMS if (a, 11) in recs]
     rates = rates_of(recs)
     viol = gate_d(recs)
     e77_ok, e77_why = e77
 
-    out.append(f"GATE 0(a) determinism: {'PASS' if determinism_ok else 'NOT CHECKED'}")
+    out.append(f"GATE 0(a) determinism: {g0a}")
     out.append(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
     out.append("GATE D first-fire instrument (J5V-X first_fire_len only \"5\"): "
                f"{'PASS' if not viol else 'FAIL at (depth, seed) ' + str(viol)}")
@@ -292,13 +298,13 @@ def report_lines(recs, g0b, determinism_ok, e77=(True, ""), out_dir=None) -> lis
             f"{a} {_mean(recs, (a, d), 'success_rate'):.4f} "
             f"({_mean(recs, (a, d), 'mean_steps'):.2f}, {_mean(recs, (a, d), 'optimality'):.3f}, "
             f"{_evals(recs, a, d)})"
-            for a in ALL_ARMS))
+            for a in arms))
 
     out.append("\nSeconds per state (mean wall_s / n)")
     for d in DEPTHS:
         out.append(f"  d{d}: " + "  ".join(
             f"{a} {st.mean(r['wall_s'] / r['n'] for r in recs[(a, d)].values()):.3f}"
-            for a in ALL_ARMS))
+            for a in arms))
 
     gate_ok = g0b == "PASS" and determinism_ok and not viol
     if not gate_ok:
@@ -310,6 +316,9 @@ def report_lines(recs, g0b, determinism_ok, e77=(True, ""), out_dir=None) -> lis
     sens = primary_verdicts(sens_rates, gate_ok, e77_ok, sorted(sens_rates[("J5V-X", 9)]))
     for name, label in CLAIM_LABELS:
         v, p, diff, am, bm = full[name]
+        if am != am:  # nan: EXP-077's arms were not loaded
+            out.append(f"{label}: VOID (EXP-077 invalid: {e77_why})")
+            continue
         sv, sp, sdiff, _, _ = sens[name]
         out.append(f"{label}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f} -> {v}")
         out.append(f"    10-seed line, seeds 0 and 3 dropped: diff {sdiff:+.4f}, p {sp:.4f} -> {sv}")
@@ -318,8 +327,12 @@ def report_lines(recs, g0b, determinism_ok, e77=(True, ""), out_dir=None) -> lis
 
     out.append("\nSecondary (patterns, never confirmations):")
     for arm in ("J4VG5-X", "B5-X"):
+        if (arm, 9) not in rates:
+            out.append(f"  d9 J5V-X - {arm}: EXP-077 invalid ({e77_why})")
+            continue
         _, p, diff, am, bm = contrast(rates, ("J5V-X", 9), (arm, 9), gate_ok and e77_ok)
-        out.append(f"  d9 J5V-X - {arm}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f}")
+        out.append(f"  d9 J5V-X - {arm}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, p {p:.4f}"
+                   + ("" if e77_ok else "  [EXP-077 invalid]"))
     out.append("Gate R (reported only), lowest-J leaf closer than root, k 5 vs EXP-076 k 4:")
     out.extend(gate_r(out_dir if out_dir is not None else HERE / "outputs"))
     return out
@@ -344,8 +357,9 @@ def main() -> None:
     if args.stage == "cont":
         print(f"GATE 0(b) J4V-X continuity with EXP-076 (d9, d11, seed 0): {g0b}")
         return
-    print("\n".join(report_lines(load_records(out), g0b, gate0a(out, args.det_dir) == "PASS",
-                                 exp077_valid(), out)))
+    e77 = exp077_valid()
+    print("\n".join(report_lines(load_records(out, include_e77=e77[0]), g0b,
+                                 gate0a(out, args.det_dir), e77, out)))
 
 
 if __name__ == "__main__":
