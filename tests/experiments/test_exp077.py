@@ -58,3 +58,92 @@ def test_unknown_arm_exits_cleanly(tmp_path):
     """Catches an arm typo running something unregistered."""
     with pytest.raises(SystemExit):
         ev.run_cell("B6-X", 9, 0, tmp_path, limit_states=1)
+
+
+ag = _load("exp077_aggregate", HERE / "aggregate.py")
+
+
+def _rec(arm, d, s, solved=50, **kw):
+    mode, k, kg, w = ev.ARMS[arm]
+    r = {"arm": arm, "depth": d, "seed": s, "mode": mode, "k": k, "k_goal": kg,
+         "no_revisit": True, "judge_updates": 4000, "limit_states": None, "n": 200,
+         "solved": solved, "success_rate": solved / 200, "first_fire_len": {"5": solved},
+         "fired5": solved, "judge_evals": 1296 if mode == "C" else 900, "fallback_frac": 0.0}
+    if arm == "J4V-X":
+        r["first_fire_len"] = {"4": solved}
+    if w is not None:
+        r["beam_width"] = w
+    r.update(kw)
+    return r
+
+
+def _recs(over=None):
+    recs = {}
+    for d in ev.DEPTHS:
+        for arm in ag.ALL_ARMS:
+            recs[(arm, d)] = {s: _rec(arm, d, s) for s in ag.SEEDS}
+    for (arm, d, s), r in (over or {}).items():
+        recs[(arm, d)][s] = r
+    return recs
+
+
+def test_constants_and_arms():
+    """Catches a wrong alpha, a drifted eval bound, or a changed arm list."""
+    assert ag.ALPHA == pytest.approx(0.05 / 3) and ag.SMALL == 0.01 and ag.MAX_EVALS == 1026
+    assert ag.ALL_ARMS == ("J4V-X", "J4VG5-X", "B5-X")
+
+
+def test_claims_compare_the_registered_arms_and_depths():
+    """Catches a claim wired to the wrong pair or depth (spec section 8)."""
+    rates = {(a, d): {s: 0.1 for s in ag.SEEDS} for a in ag.ALL_ARMS for d in ev.DEPTHS}
+    for s in ag.SEEDS:
+        rates[("B5-X", 11)][s] = 0.2 + 0.001 * s
+        rates[("B5-X", 9)][s] = 0.3 + 0.001 * s
+    v = ag.primary_verdicts(rates, True, ag.SEEDS)
+    assert v["claim1"][0] == "CONFIRMED" and v["claim1"][2] == pytest.approx(0.1055, abs=1e-4)
+    assert v["claim2"][2] == pytest.approx(0.2055, abs=1e-4)
+    assert v["claim3"][0] == "CONFIRMED"
+    rates[("J4VG5-X", 11)] = dict(rates[("B5-X", 11)])
+    assert ag.primary_verdicts(rates, True, ag.SEEDS)["claim3"][0] == "REFUTED"
+
+
+def test_gate_d_clauses_each_name_their_cell():
+    """Catches any of the three Gate D clauses missing: dominance, the first-fire key, and
+    fired5 below J4V-X's solves, each on its own cell."""
+    assert ag.gate_d(_recs()) == []
+    bad = _recs({("J4VG5-X", 9, 2): _rec("J4VG5-X", 9, 2, solved=40, fired5=60,
+                                             first_fire_len={"5": 60})})
+    assert ag.gate_d(bad) == [(9, 2)]
+    bad = _recs({("B5-X", 11, 5): _rec("B5-X", 11, 5, first_fire_len={"4": 1, "5": 49})})
+    assert ag.gate_d(bad) == [(11, 5)]
+    bad = _recs({("J4VG5-X", 11, 7): _rec("J4VG5-X", 11, 7, fired5=10)})
+    assert ag.gate_d(bad) == [(11, 7)]
+
+
+def test_gate_b_voids_above_the_eval_bound():
+    """Catches the beam instrument check being reported but never enforced."""
+    assert ag.gate_b(_recs())["ok"] is True
+    assert ag.gate_b(_recs({("B5-X", 9, 0): _rec("B5-X", 9, 0, judge_evals=1100)}))["ok"] is False
+
+
+def test_records_are_refused_unless_they_are_the_registered_cell(tmp_path):
+    """Catches a smoke record, a wrong width, a partly trained judge or a renamed file entering
+    a verdict."""
+    p = tmp_path / ev.record_name("B5-X", 9, 0)
+    for bad in (_rec("B5-X", 9, 0, limit_states=20), _rec("B5-X", 9, 0, beam_width=32),
+                _rec("B5-X", 9, 0, judge_updates=3000), _rec("B5-X", 9, 1)):
+        p.write_text(json.dumps(bad))
+        with pytest.raises(SystemExit):
+            ag._read_cell(p, "B5-X", 9, 0)
+
+
+def test_load_records_reads_j4v_from_exp076(tmp_path):
+    """Catches J4V-X read from this experiment's outputs (re-run data) instead of EXP-076's
+    committed records, which Gate 0(b) licenses."""
+    for d in ev.DEPTHS:
+        for arm in ag.NEW_ARMS:
+            for s in ag.SEEDS:
+                (tmp_path / ev.record_name(arm, d, s)).write_text(json.dumps(_rec(arm, d, s)))
+    recs = ag.load_records(tmp_path)
+    ref = json.loads((ev.E76_OUT / "exp076_J4V-X_d11_s0.json").read_text())
+    assert recs[("J4V-X", 11)][0]["solved"] == ref["solved"] == 36
