@@ -200,3 +200,27 @@ depending on the five-call overhead. About 55 to 80 cell-hours, 9 to 14 h at 6 w
 Other widths or depths (a width or depth sweep would be its own experiment, and choosing one from
 this run's numbers would be outcome-dependent); beam search with the policy head; retraining;
 the full 5-move tree (EXP-078).
+
+## 11. Amendment 2026-10-14: pilot results, worker count and schedule (before any full cell)
+
+The pilot ran on the laptop (checkout `6af6bc0`, 20 depth-11 states of seed 0, 2 workers). No
+full cell had run.
+
+| arm | seconds per state | depth-11 cell | judge evals per move | peak commit |
+|---|---|---|---|---|
+| J4VG5-X | 17.77 | 0.99 h | 1296 | 1612 MB |
+| B5-X | 14.28 | 0.79 h | 717 | 1613 MB |
+
+- Projected evaluation: **35.0 cell-hours** for the 48 cells (depth 9 projected by EXP-076's J4V-X
+  depth-9 over depth-11 wall ratio, 0.637).
+- Memory is now measured on the `python3.13` worker (the launcher samples the child; no
+  under-50 MB warning fired), so the launcher log is the instrument again.
+- **Workers: 6.** 6 x 1.6 GB is under 10 GB committed, well inside the 24 GB budget; more than 6
+  buys no throughput on this laptop.
+- **Schedule:** `chain077.ps1`: cont (2 workers, Gate 0(b), about 1 h), then eval (48 cells,
+  about 6 to 7 h at 6 workers), then det (B5-X d9 s0, about 0.6 h). About 8 h in all. A Windows
+  Update restart costs at most the cells in flight; relaunch with `-From eval`.
+- EXP-078's pilot (one J5V-X cell, 20 states) may run alongside the eval as a seventh process with
+  `-AllowConcurrent` (EXP-078 spec section 6); it will slow the eval slightly.
+- Disclosed, decides nothing: on the 20 pilot states B5-X solved 3 and J4VG5-X 2. Seed 0 is
+  outside the 10-seed line.
