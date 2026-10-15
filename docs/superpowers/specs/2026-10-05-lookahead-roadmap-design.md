@@ -328,6 +328,12 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   p 0.0002, 12/12). Depth 9: 0.4004 vs 0.2571 (+0.1433, 12/12). A 4-move goal check alone
 >   (J3VG4-X) changed no cell of 24, so the gain is the judge scoring leaves nearer the goal. A
 >   5-move full tree is priced at about 20 h per depth-11 cell; deeper needs a cheaper search.
+> - **2026-10-15, EXP-077 (a width-64 beam searched 5 moves deep, same X judges):** Claim 2
+>   CONFIRMED, Claims 1 and 3 REFUTED, all gates pass, the 10-seed line agrees. Depth 9: B5-X
+>   0.5571 vs J4V-X 0.4004 (+0.1567, p 0.0002, 12/12). Depth 11: 0.1475 vs 0.1950 (-0.0475, B5-X
+>   wins 1 of 12). The beam helps near the goal and hurts far from it. A 5-move goal check alone
+>   (J4VG5-X) again changed no cell of 24. EXP-078, the full 5-move tree, is piloted and awaits
+>   Michael's go (about 40 to 48 h).
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank

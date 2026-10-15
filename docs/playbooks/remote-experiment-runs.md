@@ -307,6 +307,16 @@ ssh -n laptop 'powershell -NoProfile -Command "cd C:\Users\mlgbr\Desktop\Project
 - `python -u` keeps the log unbuffered.
 - Run this in the background from the session's side. It is normal for it to take hours.
 
+**Redirect at the OS level when a launcher starts its cells with `Start-Process -NoNewWindow`.**
+Those cells inherit the launcher's stdout, which is the ssh pipe. Measured 2026-10-15 (EXP-077):
+the laptop dropped off the tailnet for 2 minutes. The run survived, but the pipe did not. Every
+cell that finished afterwards wrote its record, failed on its final `print`, and exited 1. The
+launcher counted those cells as failed and the chain stopped, though every record was complete. Launch
+chains as `ssh -n laptop 'cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File X.ps1 > C:\Users\mlgbr\X.out 2>&1"'`
+so the children inherit a file instead. Do not wrap it in `Start-Process` from the ssh session:
+killing that ssh client (a local `timeout`) took the detached chain down with it the same day.
+After a reported phase failure, count and validate the records before re-running anything.
+
 **Do not** chain `if not exist X mkdir X && python ... > log` under `cmd`. It wedges silently at
 0.016 s CPU with no output. Always go through PowerShell.
 
