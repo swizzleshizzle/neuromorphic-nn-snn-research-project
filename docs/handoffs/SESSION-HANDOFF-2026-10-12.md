@@ -1,8 +1,9 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
-> **2026-10-14: EXP-077 and EXP-078 are BUILT and MERGED, NOT RUN. The laptop has been OFFLINE on
-> Tailscale since about 2026-10-14 07:00 UTC** (pm ask #19 asks Michael to wake it). Suite: **1122
-> tests, 1097 not slow, 25 slow**. Section 2b is the run procedure.
+> **2026-10-15: EXP-077 DONE** (section 2c): Claim 2 CONFIRMED, Claims 1 and 3 REFUTED. **EXP-078
+> is PILOTED, its amendment committed (`007521f`, corrected `89c42c0`), and it waits on Michael's
+> go on neuromorphic#21** (about 40 to 48 h, 6 workers). The laptop is idle. Suite: **1122 tests,
+> 1097 not slow, 25 slow**. Section 2b is the run procedure; step 4 below is where it stands.
 >
 > **This supersedes `SESSION-HANDOFF-2026-10-06.md`** (which covers 2026-10-06 to 11 and is
 > misnamed; its header says 2026-10-11). Read that one for EXP-070 to 075 and its section 3, the
@@ -114,6 +115,26 @@ dies around 2-3 h with the run intact, which is not a failure signal.
 (`probe076m.ps1`, `^python` `PrivateMemorySize64`) is the instrument; fix the launcher before
 reusing it.
 
+## 2c. EXP-077 outcome and EXP-078 status (2026-10-15)
+
+**EXP-077:** every gate passed, 10-seed line agrees. Depth 9: B5-X 0.5571 vs J4V-X 0.4004
+(+0.1567, p 0.0002, 12/12), **CONFIRMED**. Depth 11: 0.1475 vs 0.1950 (-0.0475, B5-X wins 1 of
+12), Claims 1 and 3 **REFUTED**. The beam helps near the goal and hurts far from it. J4VG5-X equals
+J4V-X on all 24 cells (late fires run out of step budget). RESULTS.md `b9c23f3`; roadmap and the
+playbook lesson below `a399d73`.
+
+**Lesson, now in the playbook section 3:** a 2-minute tailnet drop killed the ssh pipe the cells
+inherit, so finished cells failed on their last `print` and the chain stopped with every record
+intact. Launch chains with OS-level redirection:
+`ssh -n laptop 'cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File <chain>.ps1 > C:\Users\mlgbr\<chain>.out 2>&1"'`,
+in the background from this side. Never wrap it in `Start-Process`: that died with its ssh client.
+
+**EXP-078:** pilot J5V-X 115 s/state (6.4 h per depth-11 cell at 3 processes), 7776 judge evals
+per move, 2.8 GB per worker, 5/20 solved (B5-X 3, J4VG5-X 2 on the same states). Amendment:
+6 workers, 125.5 cell-hours, depth 11 first, 40 to 48 h once 6-worker contention is applied.
+**On Michael's go (#21):** `pm resolve neuromorphic#21`, `git pull` on the laptop, then
+`chain078.ps1` launched as above. The determinism phase stops itself at 50 states and resumes.
+
 ## 3. Week 28 (Oct 12-18)
 
 1. ~~Collect EXP-076~~ done 2026-10-13 (section 2a).
@@ -122,7 +143,8 @@ reusing it.
 3. **Branch `report-phase4-sync`** (a parallel docs session's header and sections 6.2, 6.3,
    8.1) was reviewed and merged (`9d63a94`), then brought up to EXP-075 with section 1's counts
    (`934abdb`). Branch and worktree deleted.
-4. **The next stage is Michael's call.** The menu, from handoff 2026-10-06 section 2c plus
+4. ~~EXP-077~~ done 2026-10-15 (section 2c). EXP-078 waits on #21.
+5. **The next stage after EXP-078 is Michael's call.** The menu, from handoff 2026-10-06 section 2c plus
    EXP-076: a cheaper deeper search (beam or pruned 5-move), since depth pays off; wider still or a supervised-then-VI region; a learned no-revisit rule;
    using J to train the policy; a learned world model (stage B). Ask before building any.
 
