@@ -1,0 +1,28 @@
+{
+ "arm": "B5-X",
+ "beam_width": 64,
+ "depth": 11,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "fired5": 35,
+ "first_fire_len": {
+  "5": 35
+ },
+ "git_commit": "007521ff791e69a16f6ac1bb10de821df7426d0b",
+ "goal_fired_frac": 0.0371900826446281,
+ "greedy_modal_action_frac": 0.2643041468335586,
+ "judge_evals": 717.4558391687373,
+ "judge_updates": 4000,
+ "k": 5,
+ "k_goal": 5,
+ "limit_states": null,
+ "mean_steps": 13.176470588235293,
+ "mode": "B",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.8348214285714286,
+ "seed": 6,
+ "solved": 34,
+ "success_rate": 0.17,
+ "wall_s": 3953.0
+}
