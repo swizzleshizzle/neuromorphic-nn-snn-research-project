@@ -174,3 +174,7 @@ run.
   with `-From` at the phase in flight.
 - Disclosed, decides nothing: on the same 20 states J5V-X solved 5, against B5-X 3 and J4VG5-X 2
   in EXP-077's pilot. Seed 0 is outside the 10-seed line.
+- **Correction 2026-10-15 (before any full cell, time estimate only):** EXP-077's full run measured
+  6-worker contention: its depth-11 cells took 1.4x to 1.8x their 2-worker pilot time. Applying that
+  factor, the schedule above is **about 40 to 48 h**, with depth 11 taking about 19 to 23 h. Worker
+  count, order and memory are unchanged.
