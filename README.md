@@ -242,7 +242,7 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
 | 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, and a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and a 5-move beam (EXP-077) confirmed at depth 9 but refuted at depth 11 |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and a 5-move beam (EXP-077) confirmed at depth 9 but refuted at depth 11 |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
