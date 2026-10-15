@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 4. 78 numbered experiments, 60 with a committed results file.
+**Status:** Phase 4. 78 numbered experiments, 61 with a committed results file.
 **Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
 **The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
@@ -43,16 +43,16 @@ depth from 3 down the table is scored on held-out states the policy never traine
 
 The table above is the trained policy acting on reflex, one forward pass per move. Phase 4 asks
 whether a search wrapped around the same networks goes further
-(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`). Every search below but the last column looks three
+(`docs/superpowers/specs/2026-10-05-lookahead-roadmap-design.md`). Every search below but the last two columns looks three
 moves ahead and refuses to re-enter a state it has already visited; what differs is the judge that
 scores the candidates:
 
-| scramble depth | reflex policy | judged by the policy head | judged by a learned judge | judged by a wider learned judge | wider judge, 4-move tree | source |
-|---|---|---|---|---|---|---|
-| 7 | 0.2067 | 0.3217 | 0.7908 | 0.8908 | not run | EXP-071, EXP-074, EXP-075 |
-| 8 | 0.0688 | 0.1496 | 0.3792 | 0.5158 | not run | EXP-072, EXP-074, EXP-075 |
-| 9 | 0.0171 | 0.0629 | 0.1933 | 0.2571 | **0.4004** | EXP-072, EXP-074, EXP-075, EXP-076 |
-| 11 (exploratory) | not run | 0.0308 | 0.1013 | 0.1200 | **0.1950** | EXP-074, EXP-075, EXP-076 |
+| scramble depth | reflex policy | judged by the policy head | judged by a learned judge | judged by a wider learned judge | wider judge, 4-move tree | wider judge, 5-move beam | source |
+|---|---|---|---|---|---|---|---|
+| 7 | 0.2067 | 0.3217 | 0.7908 | 0.8908 | not run | not run | EXP-071, EXP-074, EXP-075 |
+| 8 | 0.0688 | 0.1496 | 0.3792 | 0.5158 | not run | not run | EXP-072, EXP-074, EXP-075 |
+| 9 | 0.0171 | 0.0629 | 0.1933 | 0.2571 | 0.4004 | **0.5571** | EXP-072, EXP-074, EXP-075, EXP-076, EXP-077 |
+| 11 (exploratory) | not run | 0.0308 | 0.1013 | 0.1200 | **0.1950** | 0.1475 | EXP-074, EXP-075, EXP-076, EXP-077 |
 
 Pre-registered and **confirmed**: the policy-judged search beats the same search without the
 no-revisit rule at depth 8 (p 0.0005) and the reflex at depth 9 (p 0.0002, 12 of 12 seeds) (EXP-072);
@@ -68,6 +68,9 @@ moves ahead instead of three with these judges and no retraining: it beats the 3
 (+0.0750, p 0.0002, 12 of 12 seeds) and at depth 9 (+0.1433, 12 of 12), and beats a 3-move tree given only
 a 4-move goal check by the same +0.0750 at depth 11, all **confirmed**. The goal check alone changed no
 cell, so the gain is the judge scoring leaves nearer the goal. Depth 11 is now about one cube in five.
+EXP-077 then replaced the full tree with a width-64 beam five moves deep: it beats the 4-move tree at depth 9
+(0.5571 against 0.4004, p 0.0002, 12 of 12 seeds, **confirmed**) but loses at depth 11 (0.1475 against 0.1950,
+wins 1 of 12, both depth-11 claims **refuted**). A 5-move goal check alone changed no cell.
 
 The learned judge reads all 192 sensory neurons and was trained by value iteration from its own
 look-ahead, never from the true distances, with the spiking encoder trained beneath it. The search
@@ -239,7 +242,7 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
 | 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, and a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11 |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, and a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and a 5-move beam (EXP-077) confirmed at depth 9 but refuted at depth 11 |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
