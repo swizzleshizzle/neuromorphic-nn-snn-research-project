@@ -55,7 +55,7 @@ E76_RANK = REPO / "experiments" / "076_deeper_tree" / "outputs"
 
 # Set by the dated post-pilot amendment (spec section 6): worker count and schedule. The
 # launcher refuses every phase but `check` and `pilot` while this is None.
-AMENDMENT: dict | None = None
+AMENDMENT: dict | None = {"date": "2026-10-15", "workers": 6, "spec_section": 11}
 
 
 def claim_verdict(diffs, a_mean: float, b_mean: float, gate_ok: bool) -> tuple[str, float]:

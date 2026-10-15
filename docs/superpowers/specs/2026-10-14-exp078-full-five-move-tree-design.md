@@ -146,3 +146,31 @@ power.
 
 k 6 or deeper as a full tree (another 6x); other judges; retraining; beam widths other than
 EXP-077's.
+
+## 11. Amendment 2026-10-15: pilot results, worker count and schedule (before any full cell)
+
+The pilot ran on the laptop (checkout `b756c20`, J5V-X, the first 20 depth-11 held-out states of
+seed 0, 1 worker), beside EXP-077's `cont` phase (2 workers) as section 6 allows. No full cell had
+run.
+
+| arm | seconds per state | depth-11 cell (200 states) | judge evals per move | peak commit |
+|---|---|---|---|---|
+| J5V-X | 115.0 | 6.39 h | 7776 | 2785 MB |
+
+- `judge_evals` is exactly 6^5, so every move scored the full tree. `first_fire_len` is
+  `{"5": 9}`, the shape Gate D requires.
+- Against EXP-076's J4V-X depth-11 cell on the laptop (1.35 h), a J5V-X cell is 4.7x, below the
+  8.3x of section 2. The pilot shared the laptop with two EXP-077 workers, so if anything it
+  overstates the cost.
+- Projected evaluation: **125.5 cell-hours** for the 24 J5V-X cells (76.7 at depth 11, 48.8 at
+  depth 9 by EXP-076's depth-9 over depth-11 wall ratio, 0.637). Section 2's 200 to 250 is
+  superseded.
+- **Workers: 6.** 6 x 2.8 GB is 16.7 GB committed, under the 24 GB budget of section 6.
+- **Schedule:** `chain078.ps1`, started only after EXP-077's eval has finished: cont (Gate 0(b),
+  2 workers, about 1.4 h), eval (depth 11 first, 12 cells in two waves, about 12.8 h, so Claims 1,
+  3 and 4 bank first; then depth 9, about 8.1 h), det (J5V-X d9 s0 with the forced resume, about
+  4.1 h), rank (Gate R, last, not measured by the pilot). About 27 h before rank, so the run will
+  cross at least one 03:31 restart; within-cell checkpoints cover it, and the chain is relaunched
+  with `-From` at the phase in flight.
+- Disclosed, decides nothing: on the same 20 states J5V-X solved 5, against B5-X 3 and J4VG5-X 2
+  in EXP-077's pilot. Seed 0 is outside the 10-seed line.
