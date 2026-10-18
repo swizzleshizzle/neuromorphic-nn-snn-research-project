@@ -1,0 +1,29 @@
+{
+ "arm": "J5V-X",
+ "depth": 11,
+ "elapsed_s": 34008.84140170005,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "fired5": 49,
+ "first_fire_len": {
+  "5": 49
+ },
+ "git_commit": "eb4b3eb92e7b2ea2a960061db195f94b3fc05d28",
+ "goal_fired_frac": 0.05373201438848921,
+ "greedy_modal_action_frac": 0.29880450406147,
+ "judge_evals": 7776.0,
+ "judge_updates": 4000,
+ "k": 5,
+ "k_goal": 5,
+ "limit_states": null,
+ "mean_steps": 13.25531914893617,
+ "mode": "C",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.8298555377207063,
+ "resumes": 0,
+ "seed": 7,
+ "solved": 47,
+ "success_rate": 0.235,
+ "wall_s": 34008.8
+}
