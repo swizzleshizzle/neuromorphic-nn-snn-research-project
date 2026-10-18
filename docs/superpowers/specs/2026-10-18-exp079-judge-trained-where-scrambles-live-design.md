@@ -12,11 +12,17 @@ EXP-076 to EXP-078 deepened the search with EXP-075's 12 committed X judges and 
 |---|---|---|
 | full 4-move tree (EXP-076) | 0.4004 | **0.1950** |
 | width-64 beam, 5 moves (EXP-077) | **0.5571** | 0.1475 |
-| full 5-move tree (EXP-078, **provisional**) | running | 0.1854 |
+| full 5-move tree (EXP-078) | 0.5558 | 0.1854 |
 
-The EXP-078 depth-11 figure is the plain mean of its 12 committed cell records, read
-2026-10-17. Its determinism gate and aggregator have not run. Section 8 is finalised against
-EXP-078's RESULTS.md before any EXP-079 full cell runs.
+**Checked 2026-10-18 against EXP-078's RESULTS.md (before any S judge was trained).** Every
+EXP-078 gate passed. Its Claim 1 (full 5-move tree over full 4-move tree at depth 11) is REFUTED
+at -0.0096, about a third of what that run could detect, and its Claim 2 (the same at depth 9) is
+CONFIRMED. Its Gate R pattern fits the question below: from depth 11 the judge's lowest-J 5-move
+leaf is closer to solved no more often than a random leaf (0.531 against 0.540), where at 4 moves
+it was 0.12 above chance. That instrument has little headroom at depth 11 (RESULTS.md, Gate R),
+so it motivates this experiment and decides nothing. **No claim in section 8 changes**: the
+baseline is still EXP-076's J4V-X (0.1950 and 0.4004), and the detectable difference comes from
+EXP-075's paired sd, not from EXP-078.
 
 A deeper search pays off near the goal and stops paying at depth 11, even when it scores every
 leaf. The working account: the judge's values far from solved are not reliable enough for
@@ -183,7 +189,7 @@ detectable with 80% power. That is the right scale: retraining moves more than s
 
 **Secondary (patterns, never confirmations):** Gate M and Gate R; probe Spearman per distance;
 mean steps to solve and optimality; the realised training histogram; EXP-078's full 5-move tree
-alongside at depth 11, once its RESULTS.md exists.
+alongside at depth 11.
 
 ## 9. Cost
 
