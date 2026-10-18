@@ -1,5 +1,10 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
+> **2026-10-18: EXP-078 DONE** (section 2d): Claim 2 CONFIRMED, Claims 1 and 3 REFUTED, Claim 4
+> CONFIRMED on 12 seeds and NOT SIGNIFICANT on 10. **EXP-079 is SPECIFIED and waits on Michael's
+> review** (`docs/superpowers/specs/2026-10-18-exp079-judge-trained-where-scrambles-live-design.md`):
+> no plan, no code. The laptop is idle.
+>
 > **2026-10-15: EXP-077 DONE** (section 2c): Claim 2 CONFIRMED, Claims 1 and 3 REFUTED. **EXP-078
 > is PILOTED, its amendment committed (`007521f`, corrected `89c42c0`), and it waits on Michael's
 > go on neuromorphic#21** (about 40 to 48 h, 6 workers). The laptop is idle. Suite: **1122 tests,
@@ -135,6 +140,23 @@ per move, 2.8 GB per worker, 5/20 solved (B5-X 3, J4VG5-X 2 on the same states).
 **On Michael's go (#21):** `pm resolve neuromorphic#21`, `git pull` on the laptop, then
 `chain078.ps1` launched as above. The determinism phase stops itself at 50 states and resumes.
 
+## 2d. EXP-078 outcome and EXP-079 (2026-10-18)
+
+**EXP-078:** every gate passed (0(a) with its forced resume, 0(b), D). Depth 9: J5V-X 0.5558 vs
+J4V-X 0.4004 (+0.1554, 12/12), **CONFIRMED**, level with the beam (0.5571). Depth 11: 0.1854 vs
+0.1950 (-0.0096, a third of the detectable difference), Claims 1 and 3 **REFUTED**. Claim 4, the
+full tree over the beam at depth 11: +0.0379, p 0.0039 on 12 seeds, **CONFIRMED**; p 0.0156 on the
+10-seed line, NOT SIGNIFICANT, and RESULTS.md leads with that. Gate R: from depth 11 the judge's
+lowest-J 5-move leaf is closer than the root no more often than chance (0.531 vs 0.540), a pattern
+on an instrument with little headroom there. 33.4 h of wall time, 172 evaluation cell-hours, no
+cell resumed. RESULTS.md `d8efdcd`; report, README and roadmap `1aa26ef`.
+
+**EXP-079** (Michael chose "retrain the judge", 2026-10-18): one lever, the judge's training walks
+from 1-14 moves to 1-40, so the training mass at distance 11 rises from 1.3% to 19.3%. J4V-S
+against EXP-076's J4V-X, Claims 1 (depth 11) and 2 (depth 9). Pilot on seeds 12 and 13 with a
+competence stop rule (Gate L). About 35 to 40 h. Section 1 was checked against EXP-078's
+RESULTS.md (`04ac845`); no claim changed. **Next: Michael's review of the spec, then the plan.**
+
 ## 3. Week 28 (Oct 12-18)
 
 1. ~~Collect EXP-076~~ done 2026-10-13 (section 2a).
@@ -143,8 +165,8 @@ per move, 2.8 GB per worker, 5/20 solved (B5-X 3, J4VG5-X 2 on the same states).
 3. **Branch `report-phase4-sync`** (a parallel docs session's header and sections 6.2, 6.3,
    8.1) was reviewed and merged (`9d63a94`), then brought up to EXP-075 with section 1's counts
    (`934abdb`). Branch and worktree deleted.
-4. ~~EXP-077~~ done 2026-10-15 (section 2c). EXP-078 waits on #21.
-5. **The next stage after EXP-078 is Michael's call.** The menu, from handoff 2026-10-06 section 2c plus
+4. ~~EXP-077~~ done 2026-10-15 (section 2c). ~~EXP-078~~ done 2026-10-18 (section 2d).
+5. **Next stage chosen 2026-10-18: EXP-079, retrain the judge (section 2d).** The older menu, for reference. The menu, from handoff 2026-10-06 section 2c plus
    EXP-076: a cheaper deeper search (beam or pruned 5-move), since depth pays off; wider still or a supervised-then-VI region; a learned no-revisit rule;
    using J to train the policy; a learned world model (stage B). Ask before building any.
 
