@@ -334,6 +334,14 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   wins 1 of 12). The beam helps near the goal and hurts far from it. A 5-move goal check alone
 >   (J4VG5-X) again changed no cell of 24. EXP-078, the full 5-move tree, is piloted and awaits
 >   Michael's go (about 40 to 48 h).
+> - **2026-10-18, EXP-078 (the full 5-move tree, same X judges):** Claim 2 CONFIRMED, Claims 1 and
+>   3 REFUTED, Claim 4 CONFIRMED on 12 seeds and NOT SIGNIFICANT on the 10-seed line; all gates
+>   pass. Depth 9: J5V-X 0.5558 vs J4V-X 0.4004 (+0.1554, 12/12), level with the beam. Depth 11:
+>   0.1854 vs 0.1950 (-0.0096, a third of the detectable difference), and +0.0379 over the beam.
+>   A fifth judged level pays near the goal and not at the typical scramble; Gate R puts the
+>   judge's best 5-move leaf from depth 11 at chance. More search with this judge has stopped
+>   helping at depth 11. EXP-079 (retrain the judge on walks up to 40 moves) is specified and
+>   awaits Michael's review.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
