@@ -419,13 +419,15 @@ def _ev(arm, depth, seed, solved, **over):
 
 def test_constants_are_the_spec():
     """Catches alpha, the stop bar, the Gate M band or the training settings drifting from
-    spec sections 6 to 8, and an amendment committed before the pilot."""
+    spec sections 6 to 8, and the amendment (section 12) drifting from its committed values."""
     assert agg.ALPHA == 0.025 and agg.SMALL == 0.01 and agg.GATE_M_ALPHA == 0.05
     assert agg.X_PILOT_GATE_L == 0.12983333333333333 and agg.M_BAND == (9, 11)
     assert agg.TRAIN_SETTINGS == {"n_updates": 4000, "batch": 1000, "sync_every": 100,
                                   "probe_every": 250, "draws": 1, "max_len": 40}
     assert agg.DET_IGNORED == ("wall_s", "git_commit")
-    assert agg.AMENDMENT is None and agg.GATE_L_THRESHOLD is None
+    assert agg.AMENDMENT == {"date": "2026-10-19", "train_workers": 4, "eval_workers": 6,
+                             "spec_section": 12}
+    assert agg.GATE_L_THRESHOLD == 0.11183333333333334
 
 
 def test_claim_verdicts_use_alpha_0025():
@@ -532,11 +534,22 @@ def test_gate_m_continuity_compares_with_the_committed_record(tmp_path):
     assert agg.gate_m_continuity(tmp_path) == "FAIL"
 
 
+def test_amended_threshold_is_the_committed_pilot():
+    """Catches GATE_L_THRESHOLD drifting from half the committed pilot records' mean margin, and
+    an amendment committed over a pilot whose stop rule fired (spec section 12)."""
+    a = agg.pilot_amendment(EXP / "outputs_pilot")
+    assert a["stop"] is False
+    assert a["mean_margin"] == 0.22366666666666668
+    assert agg.GATE_L_THRESHOLD == a["gate_l_threshold"] == a["mean_margin"] / 2
+
+
 def test_stage_train_needs_the_amendment_and_voids_on_l_or_e(tmp_path, monkeypatch):
     """Catches Gates L and E read before the amendment, Gate E not checked on every seed, and
     Gate L passing with a mean below its threshold."""
     _write_s_train(tmp_path, 0.0)
     _write_gatel_x(tmp_path)
+    monkeypatch.setattr(agg, "AMENDMENT", None)
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", None)
     with pytest.raises(SystemExit, match="amendment"):
         agg.stage_train(tmp_path)
     monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-20"})

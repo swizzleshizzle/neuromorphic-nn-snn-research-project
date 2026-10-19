@@ -223,3 +223,62 @@ alongside at depth 11.
 - Warm-starting from the X judges.
 - Searches other than J4V.
 - The narrow (Y) or EXP-074 judges.
+
+## 12. Amendment 2026-10-19: pilot results, Gate L threshold, worker counts and schedule (before any seed 0-11 trains)
+
+The pilot (section 6: S on seeds 12 and 13, section 3's settings, 2 workers, laptop, checkout
+`7604414`) finished 2026-10-19 04:20 laptop time, with no restart (`resumed_from` 0 on both).
+EXP-075's pilot encoders were reused after matching their records (drift 11.6127 and 12.3260).
+Records: `experiments/079_judge_trained_deep/outputs_pilot/`. Numbers below are from
+`aggregate.py --pilot-report`.
+
+**The stop rule did not fire.** S's mean pilot Gate L margin is 0.2237, above the 0.1298 bar.
+
+**Gate L** (b) (half S's mean pilot margin, 250 probe states, 50 per distance):
+
+| arm | margin s12 | margin s13 | mean | threshold |
+|---|---|---|---|---|
+| S | 0.2439 | 0.2034 | 0.2237 | **0.11183** |
+| X (EXP-075 section 12, same seeds) | 0.2719 | 0.2474 | 0.2597 | 0.12983 |
+
+`aggregate.GATE_L_THRESHOLD` holds the exact value, 0.11183333333333334. The margin is bounded by
+1 minus chance (about 0.75), so the gate can pass.
+
+**S ranks below X overall on both pilot seeds.** Reported, not gating (section 6): S minus X per
+probe distance, on the same probe states.
+
+| seed | 7 | 8 | 9 | 10 | 11 | mean over 9 to 11 |
+|---|---|---|---|---|---|---|
+| 12 | -0.18 | -0.06 | 0.00 | +0.06 | +0.04 | +0.033 |
+| 13 | -0.12 | -0.08 | -0.02 | 0.00 | 0.00 | -0.007 |
+
+With 50 states per distance, hit rates step in 0.02, so exact ties are ordinary. S loses at 7 and
+8 on both seeds and gains at 9 to 11 only on seed 12. This is the pilot preview of Gate M, the
+quantity that discriminates the arms, and it is small. Two seeds decide nothing. Final
+spearman_7_11: S 0.334 and 0.295, X 0.384 and 0.271. The lever landed as designed: the training
+histogram puts 19.5% of states at distance 11 (section 2 predicted 19.3%).
+
+**Gate E on the pilot:** encoder drift S 13.04 and 12.82.
+
+**Throughput and memory** (2 workers): 5.07 s per update, 20,275 and 20,268 s per run (5.6 h).
+Peak committed memory **4210 MB per worker** (the `python3.13` child), 8684 MB across all python
+processes. EXP-075's X ran 4.16 s per update at 4 workers, so the longer walks cost more per update.
+
+**Training workers: 4.** 6 x 4210 MB is 25.3 GB, over the 24 GB budget; 5 is 21.1 GB. 4 is
+16.8 GB, gives three even waves of 4 (5 workers would also need three waves, 5, 5 and 2), and
+EXP-075 measured no throughput gain past 4 single-thread workers.
+
+**Evaluation workers: 6** (eval and rank; cont stays at 2, det at 1). The pilot did not measure
+evaluation. EXP-076 measured J4V-X evaluation at 0.9 to 1.9 GB committed and its rank cell at
+2.0 GB (EXP-076 spec section 12), and S has X's architecture, so 6 workers commit about 12 GB.
+
+**Schedule** (`chain079.ps1`, section 10 step 4; section 9's estimate is superseded):
+- cont (Gate 0(b) and Gate M's X continuity cell, 2 workers): about 1.5 h;
+- train: 12 runs in three waves of 4. Under 4-worker contention an update should take about 6 to
+  8 s, so about 20 to 27 h;
+- Gates L, E and M continuity, then eval (depth 11 first): about 6 to 8 h;
+- det (1 worker): about 1 h; rank: about 2 h, not measured by the pilot.
+
+**About 30 to 40 h in all**, crossing at least one 03:31 restart. Training resumes from its
+250-update checkpoints and evaluation skips banked cells, so the chain is relaunched with `-From`
+at the phase in flight.

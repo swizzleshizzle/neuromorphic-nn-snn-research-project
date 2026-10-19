@@ -58,12 +58,12 @@ TRAIN_SETTINGS = {"n_updates": 4000, "batch": 1000, "sync_every": 100, "probe_ev
 # Evaluation runs without a checkpoint, so these are the only session fields a record has.
 DET_IGNORED = ("wall_s", "git_commit")
 
-# Set together by the dated post-pilot amendment (spec section 6), before any seed 0-11 trains:
-# AMENDMENT = {"date", "train_workers", "eval_workers", "spec_section"}, and Gate L's threshold,
-# half S's mean pilot margin. The launcher refuses every phase but check and pilot while either
-# is None.
-AMENDMENT: dict | None = None
-GATE_L_THRESHOLD: float | None = None
+# Set together by the dated post-pilot amendment (spec section 12, 2026-10-19), before any seed
+# 0-11 trains: the worker counts, and Gate L's threshold, half S's mean pilot margin (0.22366...).
+# The launcher refuses every phase but check and pilot while either is None.
+AMENDMENT: dict | None = {"date": "2026-10-19", "train_workers": 4, "eval_workers": 6,
+                          "spec_section": 12}
+GATE_L_THRESHOLD: float | None = 0.11183333333333334
 
 
 def claim_verdict(diffs, a_mean: float, b_mean: float, gate_ok: bool) -> tuple[str, float]:
