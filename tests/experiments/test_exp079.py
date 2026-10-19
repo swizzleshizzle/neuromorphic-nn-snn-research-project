@@ -373,3 +373,259 @@ def test_gatel_x_cell_reproduces_the_committed_gate_l(tmp_path):
     assert rec["gate_l"] == ref
     assert rec["kind"] == "gatel-X" and rec["judge_updates"] == 4000
     assert (tmp_path / "exp079_gatel_X_s0.json").exists()
+
+
+agg = _load("exp079_aggregate", EXP / "aggregate.py")
+
+
+def _x_train(seed, pilot=False):
+    d = cells.E75_PILOT if pilot else cells.E75_OUT
+    return json.loads((d / f"exp075_train_X_s{seed}.json").read_text())
+
+
+def _as_s(rec, shift=0.0, dists=("9", "10", "11")):
+    """An S training record built from a real X record: same probe and per-distance n, hits at
+    `dists` moved by `shift`, overall margin recomputed, S's walk evidence added."""
+    r = copy.deepcopy(rec)
+    bd = r["gate_l"]["by_distance"]
+    for d in dists:
+        bd[d]["hit"] += shift
+    n = sum(v["n"] for v in bd.values())
+    hit = sum(v["hit"] * v["n"] for v in bd.values()) / n
+    chance = sum(v["chance"] * v["n"] for v in bd.values()) / n
+    r["gate_l"].update(hit=hit, chance=chance, margin=hit - chance)
+    r.update(arm="S", max_len=40, walk_max_lens=[40], train_hist_updates=250,
+             train_hist={"10": 0.5, "11": 0.5})
+    return r
+
+
+def _write_s_train(out, shift=0.0, seeds=range(12), pilot=False, **over):
+    out.mkdir(parents=True, exist_ok=True)
+    for s in seeds:
+        r = _as_s(_x_train(s, pilot), shift)
+        r.update(over)
+        (out / cells.record_name(s)).write_text(json.dumps(r))
+
+
+def _ev(arm, depth, seed, solved, **over):
+    r = {"arm": arm, "depth": depth, "seed": seed, "solved": solved, "n": 200,
+         "success_rate": solved / 200, "k": 4, "k_goal": 4, "mode": "C", "no_revisit": True,
+         "judge_updates": 4000, "limit_states": None, "mean_steps": 10.0, "optimality": 0.9}
+    if arm == "J4V-S":
+        r["judge"] = "S"
+    r.update(over)
+    return r
+
+
+def test_constants_are_the_spec():
+    """Catches alpha, the stop bar, the Gate M band or the training settings drifting from
+    spec sections 6 to 8, and an amendment committed before the pilot."""
+    assert agg.ALPHA == 0.025 and agg.SMALL == 0.01 and agg.GATE_M_ALPHA == 0.05
+    assert agg.X_PILOT_GATE_L == 0.12983333333333333 and agg.M_BAND == (9, 11)
+    assert agg.TRAIN_SETTINGS == {"n_updates": 4000, "batch": 1000, "sync_every": 100,
+                                  "probe_every": 250, "draws": 1, "max_len": 40}
+    assert agg.DET_IGNORED == ("wall_s", "git_commit")
+    assert agg.AMENDMENT is None and agg.GATE_L_THRESHOLD is None
+
+
+def test_claim_verdicts_use_alpha_0025():
+    """Catches a wrong alpha in either direction: p 0.0193 must confirm (it would not at
+    0.05 / 3) and p 0.0327 must not (it would at 0.05)."""
+    v, p = agg.claim_verdict([0.05] * 10 + [-0.05] * 2, 0.3, 0.2, True)
+    assert v == "CONFIRMED" and p == pytest.approx(0.019287109375)
+    v, p = agg.claim_verdict([0.02] * 9 + [-0.02] * 2 + [0.0], 0.3, 0.2, True)
+    assert v == "NOT SIGNIFICANT" and p == pytest.approx(0.03271484375)
+    assert agg.claim_verdict([0.005] * 12, 0.3, 0.2, True)[0] == "CONFIRMED (SMALL)"
+    assert agg.claim_verdict([-0.01] * 12, 0.3, 0.2, True)[0] == "REFUTED"
+    assert agg.claim_verdict([0.05] * 12, 0.3, 0.2, False)[0] == "VOID"
+    assert agg.claim_verdict([0.005] * 12, 0.01, 0.005, True)[0] == "UNRESOLVED"
+
+
+def test_margin_band_pools_over_distances_9_to_11():
+    """Catches Gate M read over all probe distances, or averaged per distance instead of
+    pooled by n."""
+    gl = {"by_distance": {
+        "7": {"hit": 0.9, "chance": 0.1, "n": 50},
+        "9": {"hit": 0.5, "chance": 0.2, "n": 50},
+        "10": {"hit": 0.4, "chance": 0.3, "n": 25},
+        "11": {"hit": 0.7, "chance": 0.5, "n": 25}}}
+    want = (0.5 * 50 + 0.4 * 25 + 0.7 * 25) / 100 - (0.2 * 50 + 0.3 * 25 + 0.5 * 25) / 100
+    assert agg.margin_band(gl) == pytest.approx(want)
+
+
+def test_gate_m_is_s_minus_x_by_sign_flip_and_refuses_a_different_probe():
+    """Catches Gate M computed as S alone, at alpha other than 0.05, or across probes that
+    differ (per-distance n must match X's, the cheap proof of the same probe)."""
+    x = {s: _x_train(s) for s in range(12)}
+    shifts = [0.02] * 9 + [-0.02] * 2 + [0.0]
+    s_recs = {s: _as_s(x[s], shifts[s]) for s in range(12)}
+    m = agg.gate_m(s_recs, x)
+    assert m["p"] == pytest.approx(0.03271484375) and m["above"] is True
+    assert m["mean"] == pytest.approx(sum(shifts) / 12)
+    worse = {s: _as_s(x[s], v) for s, v in enumerate([0.05] * 9 + [-0.05] * 3)}
+    assert agg.gate_m(worse, x)["above"] is False
+    s_recs[4]["gate_l"]["by_distance"]["10"]["n"] += 1
+    with pytest.raises(SystemExit, match="seed 4"):
+        agg.gate_m(s_recs, x)
+
+
+def test_train_record_must_prove_its_walk_length():
+    """REVIEW FOCUS 2. Catches an S record trained on 14-move walks, one whose observed walk
+    lengths disagree with its stated max_len, and one that observed no walk at all (a relaunch
+    after the record write was lost), which cannot prove its walk length."""
+    good = _as_s(_x_train(0))
+    agg.check_train_record(good, "r.json")
+    for over, msg in (({"max_len": 14}, "max_len"), ({"walk_max_lens": [14]}, "walk"),
+                      ({"walk_max_lens": [14, 40]}, "walk"), ({"walk_max_lens": []}, "walk"),
+                      ({"arm": "X"}, "arm"), ({"readout": "concept"}, "readout"),
+                      ({"batch": 500}, "batch"), ({"hidden": 128}, "hidden")):
+        bad = {**good, **over}
+        with pytest.raises(SystemExit, match=msg):
+            agg.check_train_record(bad, "r.json")
+
+
+def test_pilot_amendment_states_the_stop_rule_and_the_threshold(tmp_path):
+    """Catches the stop rule read against anything but X's 0.1298, and Gate L's threshold not
+    half S's mean pilot margin (spec sections 6 and 7)."""
+    _write_s_train(tmp_path, 0.0, seeds=(12, 13), pilot=True)
+    a = agg.pilot_amendment(tmp_path)
+    xs = [_x_train(s, pilot=True)["gate_l"]["margin"] for s in (12, 13)]
+    assert a["mean_margin"] == pytest.approx(sum(xs) / 2)
+    assert a["stop"] is False
+    assert a["gate_l_threshold"] == pytest.approx(a["mean_margin"] / 2)
+    assert set(a["by_distance_margin"][12]) == {"S", "X"}
+    low = tmp_path / "low"
+    low.mkdir()
+    for s in (12, 13):
+        r = _as_s(_x_train(s, pilot=True), -0.2, dists=("7", "8", "9", "10", "11"))
+        (low / cells.record_name(s)).write_text(json.dumps(r))
+    b = agg.pilot_amendment(low)
+    assert b["mean_margin"] < agg.X_PILOT_GATE_L and b["stop"] is True
+
+
+def _write_gatel_x(out, **gl_over):
+    ref = _x_train(0)["gate_l"]
+    (out / evaluate.gatel_x_record_name(0)).write_text(
+        json.dumps({"kind": "gatel-X", "seed": 0, "gate_l": {**ref, **gl_over}}))
+
+
+def test_gate_m_continuity_compares_with_the_committed_record(tmp_path):
+    """Catches Gate M read against X's published margins without checking they reproduce, and
+    a continuity check blind to a changed per-distance hit."""
+    with pytest.raises(SystemExit, match="exp079_gatel_X_s0"):
+        agg.gate_m_continuity(tmp_path)
+    _write_gatel_x(tmp_path)
+    assert agg.gate_m_continuity(tmp_path) == "PASS"
+    bd = copy.deepcopy(_x_train(0)["gate_l"]["by_distance"])
+    bd["10"]["hit"] += 0.02
+    _write_gatel_x(tmp_path, by_distance=bd)
+    assert agg.gate_m_continuity(tmp_path) == "FAIL"
+
+
+def test_stage_train_needs_the_amendment_and_voids_on_l_or_e(tmp_path, monkeypatch):
+    """Catches Gates L and E read before the amendment, Gate E not checked on every seed, and
+    Gate L passing with a mean below its threshold."""
+    _write_s_train(tmp_path, 0.0)
+    _write_gatel_x(tmp_path)
+    with pytest.raises(SystemExit, match="amendment"):
+        agg.stage_train(tmp_path)
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-20"})
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.1)
+    res = agg.stage_train(tmp_path)
+    assert res["l"]["pass"] is True and res["e"] is True and res["m"]["above"] is False
+    assert res["m_cont"] == "PASS"
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.9)
+    assert agg.stage_train(tmp_path)["l"]["pass"] is False
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.1)
+    r = json.loads((tmp_path / cells.record_name(5)).read_text())
+    r["encoder_drift"] = 0.0
+    (tmp_path / cells.record_name(5)).write_text(json.dumps(r))
+    assert agg.stage_train(tmp_path)["e"] is False
+
+
+def test_load_records_reads_x_from_exp076_and_s_from_out(tmp_path):
+    """REVIEW FOCUS 4. Catches J4V-X read from anywhere but EXP-076's committed records, which
+    carry no judge field, and a J4V-S record labelled with another judge."""
+    for d in (9, 11):
+        for s in range(12):
+            (tmp_path / evaluate.record_name("J4V-S", d, s)).write_text(
+                json.dumps(_ev("J4V-S", d, s, 50)))
+    recs = agg.load_records(tmp_path)
+    ref = json.loads((cells.E76_OUT / "exp076_J4V-X_d11_s3.json").read_text())
+    assert recs[("J4V-X", 11)][3]["solved"] == ref["solved"] and "judge" not in ref
+    assert recs[("J4V-S", 9)][7]["solved"] == 50
+    (tmp_path / evaluate.record_name("J4V-S", 9, 7)).write_text(
+        json.dumps(_ev("J4V-S", 9, 7, 50, judge="X")))
+    with pytest.raises(SystemExit, match="judge"):
+        agg.load_records(tmp_path)
+
+
+def test_eval_records_at_other_settings_or_smoke_are_refused(tmp_path):
+    """Catches a smoke cell, a 3-move cell, a partly trained judge, or a record whose content
+    is not the cell its filename names."""
+    for over, msg in (({"limit_states": 20}, "smoke"), ({"k": 3}, "k is"),
+                      ({"judge_updates": 3750}, "judge_updates"), ({"seed": 4}, "seed")):
+        for d in (9, 11):
+            for s in range(12):
+                (tmp_path / evaluate.record_name("J4V-S", d, s)).write_text(
+                    json.dumps(_ev("J4V-S", d, s, 50)))
+        rec = _ev("J4V-S", 9, 2, 50)
+        rec.update(over)
+        (tmp_path / evaluate.record_name("J4V-S", 9, 2)).write_text(json.dumps(rec))
+        with pytest.raises(SystemExit, match=msg):
+            agg.load_records(tmp_path)
+
+
+def test_stage_cont_compares_against_exp076s_committed_records(tmp_path):
+    """Catches Gate 0(b) checked against the wrong records, or blind to a changed outcome."""
+    for d in (9, 11):
+        ref = json.loads((cells.E76_OUT / f"exp076_J4V-X_d{d}_s0.json").read_text())
+        (tmp_path / evaluate.record_name("J4V-X", d, 0)).write_text(json.dumps(ref))
+    assert agg.stage_cont(tmp_path) == "PASS"
+    p = tmp_path / evaluate.record_name("J4V-X", 11, 0)
+    r = json.loads(p.read_text())
+    r["solved"] += 1
+    p.write_text(json.dumps(r))
+    assert agg.stage_cont(tmp_path) == "FAIL"
+
+
+def test_gate0a_ignores_only_the_session_fields(tmp_path):
+    """Catches a determinism check that ignores an outcome field (judge_evals here) or that
+    fails on wall_s and git_commit, which differ by design."""
+    full, det = tmp_path / "o", tmp_path / "d"
+    for d in (full, det):
+        d.mkdir()
+    base = _ev("J4V-S", 9, 0, 77, judge_evals=1296.0)
+    (full / evaluate.record_name("J4V-S", 9, 0)).write_text(json.dumps(base))
+    (det / evaluate.record_name("J4V-S", 9, 0)).write_text(
+        json.dumps({**base, "wall_s": 1.0, "git_commit": "abc"}))
+    assert agg.gate0a(full, det) == "PASS"
+    (det / evaluate.record_name("J4V-S", 9, 0)).write_text(
+        json.dumps({**base, "judge_evals": 1295.0}))
+    assert agg.gate0a(full, det) == "FAIL"
+
+
+def test_claims_compare_s_with_x_at_the_registered_depths():
+    """Catches Claim 1 read at depth 9 or Claim 2 at depth 11, or the arms reversed."""
+    rates = {("J4V-S", 11): {s: 0.30 for s in range(12)},
+             ("J4V-X", 11): {s: 0.20 for s in range(12)},
+             ("J4V-S", 9): {s: 0.40 for s in range(12)},
+             ("J4V-X", 9): {s: 0.45 for s in range(12)}}
+    full = agg.primary_verdicts(rates, True)
+    assert full["claim1"][0] == "CONFIRMED" and full["claim1"][2] == pytest.approx(0.10)
+    assert full["claim2"][0] == "REFUTED" and full["claim2"][2] == pytest.approx(-0.05)
+
+
+def test_readings_lead_with_gate_m_and_name_a_trade():
+    """Catches the spec's fixed readings missing from the output: a confirmed Claim 1 with
+    Gate M not above 0 must lead RESULTS.md, a confirmed Claim 1 with a refuted Claim 2 is a
+    trade, and a null Claim 1 is about this lever only."""
+    c = ("CONFIRMED", 0.001, 0.05, 0.3, 0.25)
+    r = ("REFUTED", 0.9, -0.02, 0.4, 0.42)
+    ns = ("NOT SIGNIFICANT", 0.2, 0.01, 0.2, 0.19)
+    lines = agg.readings({"claim1": c, "claim2": r}, gate_m_above=False)
+    assert any("GATE M" in x and "lead" in x for x in lines)
+    assert any("trade" in x for x in lines)
+    assert agg.readings({"claim1": c, "claim2": c}, gate_m_above=True) == []
+    assert any("BY THIS LEVER" in x for x in
+               agg.readings({"claim1": ns, "claim2": c}, gate_m_above=True))
