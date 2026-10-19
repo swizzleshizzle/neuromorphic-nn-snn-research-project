@@ -1,5 +1,10 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
+> **2026-10-19: EXP-079 BUILT AND PILOTING** (section 2e): code merged `7604414` (suite **1171
+> tests, 1144 not slow, 27 slow**). Pilot-train (seeds 12 and 13, 2 workers) launched on the laptop
+> 2026-10-18 22:40 local; about 13 h, crosses the 03:31 window. Next: `--pilot-report`, then the
+> stop rule or the dated amendment plus `pm ask`.
+>
 > **2026-10-18: EXP-078 DONE** (section 2d): Claim 2 CONFIRMED, Claims 1 and 3 REFUTED, Claim 4
 > CONFIRMED on 12 seeds and NOT SIGNIFICANT on 10. **EXP-079 is SPECIFIED and waits on Michael's
 > review** (`docs/superpowers/specs/2026-10-18-exp079-judge-trained-where-scrambles-live-design.md`):
@@ -139,6 +144,31 @@ per move, 2.8 GB per worker, 5/20 solved (B5-X 3, J4VG5-X 2 on the same states).
 6 workers, 125.5 cell-hours, depth 11 first, 40 to 48 h once 6-worker contention is applied.
 **On Michael's go (#21):** `pm resolve neuromorphic#21`, `git pull` on the laptop, then
 `chain078.ps1` launched as above. The determinism phase stops itself at 50 states and resumes.
+
+## 2e. EXP-079 build and pilot (2026-10-19)
+
+Plan `docs/superpowers/plans/2026-10-19-exp079-judge-trained-deep.md`, approved by Michael
+(neuromorphic#23). Built by subagents, five tasks each reviewed, then a whole-branch review whose
+fix wave made Gate M unreadable after a continuity FAIL and tested the VOID composition
+(`claims_gate_ok`). Merged `7604414`. On the laptop: check OK; pilot-encoders proved both EXP-075
+pilot encoders (drift 11.6127 and 12.3260 match their records) and copied them; pilot-train
+launched 22:40 local with OS-level redirection to `C:\Users\mlgbr\launch079-pilot-train.out`
+(phase log `experiments\079_judge_trained_deep\phase_pilot-train.log`).
+
+If Windows Update restarts the laptop, relaunch `-Phase pilot-train -Workers 2` with the same
+redirection: training resumes from its checkpoint and finished seeds are skipped. The memory peak is
+then split across two sessions; take the max of both for the amendment. Do not write anything into
+`outputs_pilot/` while it runs.
+
+**At amendment time** (all from the final review):
+- update `test_constants_are_the_spec`, which asserts `AMENDMENT` and `GATE_L_THRESHOLD` are None,
+  to assert the amended values;
+- train and eval workers at most 6 (launcher and chain both refuse more), with the schedule computed
+  from that cap: spec section 9's 13 to 19 h training estimate assumes more concurrency;
+- the amendment is spec section 12 (the spec has 11), dated, as EXP-078's section 11 was;
+- keep the string "None" out of AMENDMENT values (the launcher's guard matches it).
+
+**For RESULTS.md:** Gate 0(b) compares EXP-071's 8 `OUTCOME_FIELDS`, as EXP-074 to 078 did.
 
 ## 2d. EXP-078 outcome and EXP-079 (2026-10-18)
 
