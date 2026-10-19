@@ -131,3 +131,130 @@ def test_pilot_encoders_copy_all_or_nothing(tmp_path):
     for s in (12, 13):
         a = cells.c75.encoder_path("X", s, src).read_bytes()
         assert cells.c75.encoder_path("X", s, dest).read_bytes() == a
+
+
+train = _load("exp079_train", EXP / "train.py")
+
+
+def _tiny_judge(seed=0):
+    return cells.c75.build_judge(seed, "X", cells.c75.fresh_sensory("X", seed))
+
+
+def _tiny_probe():
+    s1 = apply_move(SOLVED, 0)
+    return [(SOLVED, 0), (s1, 1), (apply_move(s1, 2), 2)]
+
+
+def _core_kwargs(tmp, max_len, n_updates=2):
+    return dict(max_len=max_len, distance=lambda s: 0, n_updates=n_updates, batch=3,
+                exclude=set(), probe=_tiny_probe(), seed=0, sync_every=1, probe_every=1,
+                draws=1, ckpt_dir=tmp, log=lambda m: None)
+
+
+def test_recorder_returns_the_walks_unchanged_and_keeps_the_last_interval():
+    """Catches a recorder that alters what training sees, or a histogram over every update
+    instead of the last probe interval (spec section 4)."""
+    batches = iter([[0, 0], [1, 2], [2, 2]])
+    rec = train.WalkRecorder(lambda n, m, rng, a, ex: next(batches), lambda s: s, keep=2)
+    assert rec(2, 40, None, 6, set()) == [0, 0]
+    assert rec(2, 40, None, 6, set()) == [1, 2]
+    assert rec(2, 17, None, 6, set()) == [2, 2]
+    out = rec.summary()
+    assert out["walk_max_lens"] == [17, 40]
+    assert out["train_hist"] == {"1": 0.25, "2": 0.75}
+    assert out["train_hist_updates"] == 2 and rec.calls == 3
+
+
+def test_recorder_reports_how_many_updates_it_covers():
+    """REVIEW FOCUS 1. Catches a resumed session's short histogram passed off as a full probe
+    interval: one call under keep=250 reports 1, not 250."""
+    rec = train.WalkRecorder(lambda n, m, rng, a, ex: [5], lambda s: s, keep=250)
+    rec(1, 40, None, 6, set())
+    assert rec.summary()["train_hist_updates"] == 1
+
+
+@pytest.mark.parametrize("max_len", [40, 17])
+def test_max_len_reaches_random_walk_states(tmp_path, max_len):
+    """THE SPEC SECTION 4 TEST. Catches a driver whose walk length never reaches the library:
+    two different values must each arrive, so a hardcoded 14 (or 40) fails one case."""
+    _, walks = train.train_core(_tiny_judge(), **_core_kwargs(tmp_path, max_len))
+    assert walks["walk_max_lens"] == [max_len]
+    assert walks["train_hist_updates"] == 1
+
+
+def test_recorder_does_not_change_training(tmp_path):
+    """Catches the recorder perturbing the RNG or the walks: a judge trained through train_core
+    equals one trained by train_judge directly, tensor for tensor."""
+    a, b = _tiny_judge(), _tiny_judge()
+    train.train_core(a, **_core_kwargs(tmp_path / "a", 40))
+    kw = _core_kwargs(tmp_path / "b", 40)
+    kw.pop("distance")
+    vi.train_judge(b, train.VI_ARM, n_actions=N_ACTIONS, **kw)
+    sa, sb = a.state_dict(), b.state_dict()
+    for k in sa:
+        assert torch.equal(sa[k], sb[k]), k
+
+
+def test_recording_restores_the_library_function_on_error():
+    """Catches a patched random_walk_states left behind after a failed run, which would record
+    (and slow) every later call in the process."""
+    real = vi.random_walk_states
+    with pytest.raises(RuntimeError):
+        with train.recording(lambda s: 0, 5):
+            assert vi.random_walk_states is not real
+            raise RuntimeError("boom")
+    assert vi.random_walk_states is real
+
+
+def test_parser_requires_max_len_and_keeps_exp075s_settings():
+    """Catches a driver that falls back to a default walk length, and settings drifting from
+    EXP-075's X (spec section 3)."""
+    with pytest.raises(SystemExit):
+        train.build_parser().parse_args(["--n-updates", "1"])
+    a = train.build_parser().parse_args(["--n-updates", "1", "--max-len", "40"])
+    assert (a.batch, a.sync_every, a.probe_every, a.draws) == (1000, 100, 250, 1)
+    assert a.max_len == 40 and a.seeds == list(range(12)) and train.VI_ARM == "W"
+
+
+def test_pilot_defaults_to_the_pilot_directories():
+    """REVIEW FOCUS 5. Catches pilot records written among the evaluation records, and the
+    pilot reading EXP-075's evaluation encoders (seeds 12 and 13 have none there)."""
+    a = train.build_parser().parse_args(["--n-updates", "1", "--max-len", "40", "--pilot",
+                                         "--seeds", "12", "13"])
+    assert train.resolve_dirs(a) == (cells.PILOT_OUT, cells.PILOT_OUT)
+    b = train.build_parser().parse_args(["--n-updates", "1", "--max-len", "40"])
+    assert train.resolve_dirs(b) == (cells.OUT, cells.E75_OUT)
+
+
+def test_train_refuses_a_missing_encoder_before_building_anything(tmp_path):
+    """Catches training on a random region when the encoder is absent, and the check running
+    only after the 65 s BFS build."""
+    import time
+    t0 = time.time()
+    with pytest.raises(SystemExit, match="enc_X_s12.pt"):
+        train.run(12, 1, 8, 1, 1, 1, 40, tmp_path / "out", tmp_path)
+    assert time.time() - t0 < 20
+
+
+def test_train_relaunch_skips_runs_whose_record_exists(tmp_path):
+    """Catches a relaunch that resubmits finished runs."""
+    (tmp_path / cells.record_name(13)).write_text("{}")
+    assert train.pending_jobs([12, 13], tmp_path) == [12]
+
+
+@pytest.mark.slow
+def test_run_writes_the_record_with_its_walk_evidence(tmp_path):
+    """Catches a record missing the walk length evidence, the histogram, Gate L or the drift
+    Gate E reads. Slow: builds the full BFS table, as the real driver does."""
+    path = cells.c75.encoder_path("X", 12, tmp_path)
+    path.parent.mkdir(parents=True)
+    save_encoder(cells.c75.fresh_sensory("X", 12), path)
+    rec = train.run(12, 2, 8, 1, 1, 1, 40, tmp_path / "out", tmp_path)
+    on_disk = json.loads((tmp_path / "out" / cells.record_name(12)).read_text())
+    assert on_disk["arm"] == "S" and on_disk["max_len"] == 40
+    assert on_disk["walk_max_lens"] == [40] and on_disk["train_hist_updates"] == 1
+    assert sum(on_disk["train_hist"].values()) == pytest.approx(1.0)
+    assert on_disk["readout"] == "wide" and on_disk["hidden"] == 512
+    assert on_disk["gate_l"]["n"] == 250 and on_disk["encoder_drift"] > 0.0
+    assert (tmp_path / "out" / "judge_S_s12" / "judge.pt").exists()
+    assert rec["gate_l"] == on_disk["gate_l"]
