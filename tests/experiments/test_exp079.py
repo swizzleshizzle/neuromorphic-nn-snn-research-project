@@ -258,3 +258,118 @@ def test_run_writes_the_record_with_its_walk_evidence(tmp_path):
     assert on_disk["gate_l"]["n"] == 250 and on_disk["encoder_drift"] > 0.0
     assert (tmp_path / "out" / "judge_S_s12" / "judge.pt").exists()
     assert rec["gate_l"] == on_disk["gate_l"]
+
+
+evaluate = _load("exp079_evaluate", EXP / "evaluate.py")
+e76 = _load("exp076_evaluate_for_079_tests", E76 / "evaluate.py")
+OUTCOME = ("solved", "n", "success_rate", "mean_steps", "optimality", "eval_revisit_rate",
+           "greedy_modal_action_frac", "goal_fired_frac", "fallback_frac", "first_fire_len",
+           "judge_evals")
+
+
+def _fake_s_ckpt(jdir, seed, update=4000):
+    """An untrained S-shaped judge saved as a finished checkpoint, with its head moved so it
+    differs from X's committed judge."""
+    ck = cells.ckpt_dir(seed, jdir)
+    ck.mkdir(parents=True)
+    judge = cells.c75.build_judge(seed, "X", cells.c75.fresh_sensory("X", seed))
+    with torch.no_grad():
+        judge.head[0].weight.mul_(-1.0)
+    torch.save(judge.state_dict(), ck / "judge.pt")
+    (ck / "state.json").write_text(json.dumps({"update": update}))
+    return judge
+
+
+def test_arms_and_constants_are_the_spec():
+    """Catches an arm list, tree depth or depth list drifting from spec section 3."""
+    assert evaluate.ARMS == ("J4V-S", "J4V-X") and evaluate.K == 4
+    assert evaluate.DEPTHS == (9, 11)
+    assert evaluate.record_name("J4V-S", 11, 3) == "exp079_J4V-S_d11_s3.json"
+    assert evaluate.rank_record_name(9, 3) == "exp079_rank_J-S4_d9_s3.json"
+
+
+def test_j4v_x_here_equals_exp076s_harness_on_a_slice(tmp_path):
+    """THE GATE 0(b) CODE PATH. Catches this harness drifting from EXP-076's: J4V-X through it
+    equals EXP-076's own run_cell on the same states, committed judge, in every outcome field."""
+    mine = evaluate.run_cell("J4V-X", 9, 0, tmp_path / "a", limit_states=2)
+    ref = e76.run_cell("J4V-X", 9, 0, tmp_path / "b", limit_states=2)
+    for f in OUTCOME:
+        assert mine[f] == ref[f], f
+    assert mine["k"] == 4 and mine["k_goal"] == 4 and mine["judge"] == "X"
+
+
+def test_each_arm_loads_its_own_judge(tmp_path):
+    """Catches J4V-S silently running X's judge (the arms would then be one arm measured twice)
+    and J4V-X reading anything but EXP-075's committed judge."""
+    saved = _fake_s_ckpt(tmp_path, 0)
+    s = evaluate.load_judge("J4V-S", 0, tmp_path)
+    assert torch.equal(s.head[0].weight, saved.head[0].weight)
+    x = evaluate.load_judge("J4V-X", 0)
+    ref = torch.load(cells.E75_OUT / "judge_X_s0" / "judge.pt", map_location="cpu")
+    assert torch.equal(x.head[0].weight, ref["head.0.weight"])
+    assert not torch.equal(s.head[0].weight, x.head[0].weight)
+
+
+def test_j4v_s_cell_writes_its_record(tmp_path):
+    """Catches an S record that does not say which judge and tree it ran, so the aggregator
+    could not refuse a mislabelled one."""
+    _fake_s_ckpt(tmp_path / "j", 0)
+    rec = evaluate.run_cell("J4V-S", 7, 0, tmp_path / "o", limit_states=1,
+                            judge_dir=tmp_path / "j")
+    assert rec["arm"] == "J4V-S" and rec["judge"] == "S"
+    assert rec["k"] == 4 and rec["k_goal"] == 4 and rec["mode"] == "C"
+    assert rec["no_revisit"] is True and rec["judge_updates"] == 4000
+    assert rec["limit_states"] == 1 and rec["fired4"] == rec["first_fire_len"].get("4", 0)
+    on_disk = json.loads((tmp_path / "o" / "exp079_J4V-S_d7_s0.json").read_text())
+    assert on_disk["judge"] == "S"
+
+
+def test_partly_trained_s_judge_is_refused_by_evaluation(tmp_path):
+    """Catches a cell evaluated from an S judge that stopped short of 4000 updates."""
+    _fake_s_ckpt(tmp_path / "j", 0, update=3750)
+    with pytest.raises(SystemExit, match="3750"):
+        evaluate.run_cell("J4V-S", 7, 0, tmp_path / "o", limit_states=1,
+                          judge_dir=tmp_path / "j")
+
+
+def test_unknown_arm_exits_cleanly(tmp_path):
+    with pytest.raises(SystemExit, match="unknown arm"):
+        evaluate.run_cell("J3V-S", 7, 0, tmp_path)
+
+
+def test_rank_cell_ranks_four_move_leaves_with_s(tmp_path, monkeypatch):
+    """Catches Gate R measured on 3-move leaves, with X's judge, or without its limit."""
+    _fake_s_ckpt(tmp_path / "j", 0)
+    seen, judges = [], []
+    real_levels, real_load = evaluate.tree_levels, evaluate.load_judge
+
+    def spy_levels(state, k, n):
+        seen.append(k)
+        return real_levels(state, k, n)
+
+    def spy_load(arm, seed, judge_dir=None):
+        judges.append(arm)
+        return real_load(arm, seed, judge_dir)
+
+    monkeypatch.setattr(evaluate, "tree_levels", spy_levels)
+    monkeypatch.setattr(evaluate, "load_judge", spy_load)
+    rec = evaluate.rank_cell(7, 0, tmp_path / "o", judge_dir=tmp_path / "j", limit_states=2,
+                             provider=ExactBFSDistance(max_depth=11))
+    assert set(seen) == {4} and judges == ["J4V-S"]
+    assert rec["kind"] == "J-S4" and rec["k"] == 4 and rec["n"] == 2
+    assert rec["limit_states"] == 2 and rec["judge_updates"] == 4000
+    assert 0.0 < rec["chance"] < 1.0 and rec["hit"] in (0.0, 0.5, 1.0)
+    assert (tmp_path / "o" / "exp079_rank_J-S4_d7_s0.json").exists()
+
+
+@pytest.mark.slow
+def test_gatel_x_cell_reproduces_the_committed_gate_l(tmp_path):
+    """GATE M CONTINUITY. Catches today's Gate L code (tree_levels, the probe set, the judge
+    load) measuring X differently from EXP-075, which would make Gate M compare S with a number
+    the current code cannot produce. Measured 2026-10-19 on the VPS: equal, about 100 s. Slow:
+    builds the full BFS table."""
+    rec = evaluate.gatel_x_cell(0, tmp_path)
+    ref = json.loads((cells.E75_OUT / "exp075_train_X_s0.json").read_text())["gate_l"]
+    assert rec["gate_l"] == ref
+    assert rec["kind"] == "gatel-X" and rec["judge_updates"] == 4000
+    assert (tmp_path / "exp079_gatel_X_s0.json").exists()
