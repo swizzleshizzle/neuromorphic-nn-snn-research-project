@@ -639,3 +639,67 @@ def test_readings_lead_with_gate_m_and_name_a_trade():
     assert agg.readings({"claim1": c, "claim2": c}, gate_m_above=True) == []
     assert any("BY THIS LEVER" in x for x in
                agg.readings({"claim1": ns, "claim2": c}, gate_m_above=True))
+
+
+# The regexes chain079.ps1 applies to the aggregator's stage output (PowerShell -match is
+# case-insensitive). Kept here verbatim so a change to either side fails a test.
+CHAIN_GATE0B = "continuity.*: PASS"
+CHAIN_GATE_L = r"GATE L \(VI worked\): PASS"
+CHAIN_GATE_E = r"GATE E \(encoders trained\): PASS"
+CHAIN_GATE_MC = r"GATE M continuity \(X seed 0 Gate L re-measured here\): PASS"
+
+
+def test_launcher_pins_the_walk_length():
+    """Catches a launcher that can start S training at a walk length other than 40, or that
+    does not pass it to the driver (spec section 4)."""
+    text = (EXP / "launch079.ps1").read_text()
+    assert "[int]$MaxLen = 40" in text
+    assert "if ($MaxLen -ne 40)" in text
+    assert text.count('"--max-len", $MaxLen') == 2  # pilot-train and train
+
+
+def test_launcher_carries_the_fixes_and_the_registered_cells():
+    """Catches a launcher without EXP-074's .Handle fix, without the amendment guard on both
+    fields, with an eval list missing an arm or depth, or with the worker cap lifted."""
+    text = (EXP / "launch079.ps1").read_text()
+    assert "$null = $proc.Handle" in text
+    assert "a.AMENDMENT" in text and "a.GATE_L_THRESHOLD" in text
+    assert 'foreach ($d in 11, 9)' in text and '"J4V-S"' in text and '"J4V-X"' in text
+    assert "-gt 6" in text and "outputs_det" in text
+    assert "prepare-pilot-encoders" in text and '"--gatel-x"' in text
+    assert "075_wide_region\\pretrain.py" in text and '"--arms", "X"' in text
+    assert '$target = Join-Path $phaseDir $j[1]' in text
+
+
+def test_launcher_samples_memory_in_driver_phases_too():
+    """Catches training phases whose peak committed memory is never measured: the driver runs
+    its own pool, so the launcher must sample every python process, not only its own child."""
+    text = (EXP / "launch079.ps1").read_text()
+    assert "RedirectStandardOutput" in text
+    assert text.count("PrivateMemorySize64") >= 2
+    assert "max total commit MB" in text and "peak commit MB" in text
+
+
+def test_chain_order_and_gate_regexes_match_the_aggregator():
+    """Catches a chain that skips a gate, runs eval before Gates L and E, or whose regex no
+    longer matches what the aggregator prints, so a PASS would read as a STOP or a FAIL as a
+    PASS."""
+    text = (EXP / "chain079.ps1").read_text()
+    assert '@("cont","gate0b","train","gatele","eval","det","rank")' in text
+    for rx in (CHAIN_GATE0B, CHAIN_GATE_L, CHAIN_GATE_E, CHAIN_GATE_MC):
+        assert rx in text
+    assert "--stage cont" in text and "--stage train" in text
+    assert "train_workers" in text and "eval_workers" in text
+    assert re.search(CHAIN_GATE0B, agg.format_stage_cont("PASS"), re.I)
+    assert not re.search(CHAIN_GATE0B, agg.format_stage_cont("FAIL"), re.I)
+    m = {"mean": 0.01, "p": 0.2, "wins": 7, "diffs": [0.0] * 12, "above": False}
+    ok = agg.format_stage_train({"l": {"pass": True, "mean": 0.2, "threshold": 0.1, "p": 0.001},
+                                 "e": True, "m": m, "m_cont": "PASS"})
+    bad = agg.format_stage_train({"l": {"pass": False, "mean": 0.05, "threshold": 0.1,
+                                        "p": 0.3}, "e": False, "m": m, "m_cont": "FAIL"})
+    assert re.search(CHAIN_GATE_L, "\n".join(ok), re.I)
+    assert re.search(CHAIN_GATE_E, "\n".join(ok), re.I)
+    assert not re.search(CHAIN_GATE_L, "\n".join(bad), re.I)
+    assert not re.search(CHAIN_GATE_E, "\n".join(bad), re.I)
+    assert re.search(CHAIN_GATE_MC, "\n".join(ok), re.I)
+    assert not re.search(CHAIN_GATE_MC, "\n".join(bad), re.I)
