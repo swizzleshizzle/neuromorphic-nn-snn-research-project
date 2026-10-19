@@ -1,5 +1,11 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
+> **2026-10-19 (later): EXP-079 PILOTED AND AMENDED, waits on Michael's go on neuromorphic#24.**
+> The stop rule did not fire (S mean Gate L margin 0.2237 vs 0.1298), but S ranks below X overall on
+> both pilot seeds. Amendment is spec section 12 (`82c307e`): Gate L threshold 0.11183, 4 training
+> and 6 evaluation workers, about 30 to 40 h. On "go": `chain079.ps1` with OS-level redirection
+> (header of that file). Suite 1172 (1145 not slow, 27 slow).
+>
 > **2026-10-19: EXP-079 BUILT AND PILOTING** (section 2e): code merged `7604414` (suite **1171
 > tests, 1144 not slow, 27 slow**). Pilot-train (seeds 12 and 13, 2 workers) launched on the laptop
 > 2026-10-18 22:40 local; about 13 h, crosses the 03:31 window. Next: `--pilot-report`, then the
