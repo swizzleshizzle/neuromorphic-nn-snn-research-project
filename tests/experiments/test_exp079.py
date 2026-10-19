@@ -753,7 +753,7 @@ def test_chain_refuses_workers_outside_1_to_6_before_any_phase():
     """Catches a chain that reads the amendment's worker counts and only finds out hours later
     (at the train phase) that the launcher refuses more than 6."""
     text = (EXP / "chain079.ps1").read_text()
-    check = text.index("-gt 6")
+    check = text.index("-gt 6)")
     assert "-lt 1" in text
     assert text.index("$trainW, $evalW = $w.Split") < check < text.index('Say "workers:')
     assert check < text.index("foreach ($p in $order)")
