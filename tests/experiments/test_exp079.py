@@ -703,3 +703,86 @@ def test_chain_order_and_gate_regexes_match_the_aggregator():
     assert not re.search(CHAIN_GATE_E, "\n".join(bad), re.I)
     assert re.search(CHAIN_GATE_MC, "\n".join(ok), re.I)
     assert not re.search(CHAIN_GATE_MC, "\n".join(bad), re.I)
+
+
+def test_gate_m_binds_only_when_its_continuity_passed():
+    """Catches Gate M counting as above 0 while X's side failed to reproduce, and the printed
+    verdict line naming ABOVE 0 in that case."""
+    above = {"above": True}
+    assert agg.gate_m_readable_above(above, "FAIL") is False
+    assert agg.gate_m_readable_above(above, "PASS") is True
+    assert agg.gate_m_readable_above({"above": False}, "PASS") is False
+    c = ("CONFIRMED", 0.001, 0.05, 0.3, 0.25)
+    lines = agg.readings({"claim1": c, "claim2": c},
+                         agg.gate_m_readable_above(above, "FAIL"))
+    assert any("GATE M" in x and "lead" in x for x in lines)
+    m = {"mean": 0.01, "p": 0.01, "wins": 10, "diffs": [0.0] * 12, "above": True}
+    res = {"l": {"pass": True, "mean": 0.2, "threshold": 0.1, "p": 0.001}, "e": True, "m": m}
+    bad = "\n".join(agg.format_stage_train({**res, "m_cont": "FAIL"}))
+    assert "GATE M CANNOT BE READ (continuity FAIL)" in bad
+    assert "ABOVE 0" not in bad
+    assert "-> ABOVE 0" in "\n".join(agg.format_stage_train({**res, "m_cont": "PASS"}))
+
+
+def test_claims_gate_ok_needs_all_four_gates_and_voids_the_claims():
+    """Catches a VOID composition that ignores any one of Gate 0(a), 0(b), L or E."""
+    assert agg.claims_gate_ok("PASS", "PASS", True, True) is True
+    flips = [("FAIL", "PASS", True, True), ("PASS", "FAIL", True, True),
+             ("PASS", "PASS", False, True), ("PASS", "PASS", True, False)]
+    rates = {("J4V-S", 11): {s: 0.30 for s in range(12)},
+             ("J4V-X", 11): {s: 0.20 for s in range(12)},
+             ("J4V-S", 9): {s: 0.40 for s in range(12)},
+             ("J4V-X", 9): {s: 0.35 for s in range(12)}}
+    for args in flips:
+        ok = agg.claims_gate_ok(*args)
+        assert ok is False
+        full = agg.primary_verdicts(rates, ok)
+        assert full["claim1"][0] == "VOID" and full["claim2"][0] == "VOID"
+
+
+def test_readings_lead_with_gate_m_for_a_small_confirmation_too():
+    """Catches the Gate M lead line keyed on exactly CONFIRMED, missing CONFIRMED (SMALL)."""
+    small = ("CONFIRMED (SMALL)", 0.001, 0.005, 0.3, 0.295)
+    ok = ("CONFIRMED", 0.001, 0.05, 0.3, 0.25)
+    lines = agg.readings({"claim1": small, "claim2": ok}, gate_m_above=False)
+    assert any("GATE M" in x and "lead" in x for x in lines)
+    assert agg.readings({"claim1": small, "claim2": ok}, gate_m_above=True) == []
+
+
+def test_chain_refuses_workers_outside_1_to_6_before_any_phase():
+    """Catches a chain that reads the amendment's worker counts and only finds out hours later
+    (at the train phase) that the launcher refuses more than 6."""
+    text = (EXP / "chain079.ps1").read_text()
+    check = text.index("-gt 6")
+    assert "-lt 1" in text
+    assert text.index("$trainW, $evalW = $w.Split") < check < text.index('Say "workers:')
+    assert check < text.index("foreach ($p in $order)")
+    assert check < text.index("-File $l")
+    assert "exit 1" in text[check:check + 300]
+
+
+def test_stage_train_refuses_a_record_whose_seed_is_not_its_file_names(tmp_path, monkeypatch):
+    """Catches Gate M pairing S and X by file name while a record inside says another seed."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-20"})
+    monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.1)
+    _write_s_train(tmp_path, 0.0)
+    _write_gatel_x(tmp_path)
+    r = json.loads((tmp_path / cells.record_name(3)).read_text())
+    r["seed"] = 4
+    (tmp_path / cells.record_name(3)).write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match=cells.record_name(3)):
+        agg.stage_train(tmp_path)
+
+
+def test_rank_records_are_checked_for_kind_k_updates_and_smoke(tmp_path):
+    """Catches Gate R reading a record that is not a 4-move J-S4 rank record of the fully
+    trained judge."""
+    good = {"kind": "J-S4", "k": 4, "judge_updates": 4000, "limit_states": None}
+    agg.check_rank_record(good, tmp_path / "rank.json")
+    for field, bad in (("kind", "gatel-X"), ("k", 5), ("judge_updates", 3000),
+                       ("limit_states", 10)):
+        with pytest.raises(SystemExit, match=f"rank.json: {field}"):
+            agg.check_rank_record({**good, field: bad}, tmp_path / "rank.json")
+    (tmp_path / "r.json").write_text(json.dumps({**good, "kind": "gatel-X"}))
+    with pytest.raises(SystemExit, match="kind"):
+        agg._read_rank(tmp_path / "r.json")

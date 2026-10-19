@@ -15,6 +15,9 @@ Say "chain start from $From at $(git rev-parse --short HEAD)"
 $w = & $py -c "import importlib.util, sys; s=importlib.util.spec_from_file_location('a','experiments/079_judge_trained_deep/aggregate.py'); a=importlib.util.module_from_spec(s); s.loader.exec_module(a); sys.stdout.write(str(a.AMENDMENT['train_workers'])+' '+str(a.AMENDMENT['eval_workers']))"
 if ($LASTEXITCODE -ne 0 -or $w -notmatch "^\d+ \d+$") { Say "STOP: could not read train_workers and eval_workers from AMENDMENT (got '$w')"; exit 1 }
 $trainW, $evalW = $w.Split(" ")
+foreach ($wk in @($trainW, $evalW)) {
+    if ([int]$wk -lt 1 -or [int]$wk -gt 6) { Say "STOP: AMENDMENT workers must each be an integer from 1 to 6 (train $trainW, eval $evalW); the launcher refuses more than 6"; exit 1 }
+}
 Say "workers: train $trainW, eval $evalW"
 $order = @("cont","gate0b","train","gatele","eval","det","rank")
 $go = $false

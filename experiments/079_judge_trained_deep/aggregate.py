@@ -121,7 +121,10 @@ def margin_band(gate_l, lo=M_BAND[0], hi=M_BAND[1]) -> float:
 
 def gate_m(s_recs: dict, x_recs: dict) -> dict:
     """Gate M (spec section 7): per seed, S's margin at probe distances 9 to 11 minus X's on the
-    same probe states, by exact one-sided sign-flip. The probes must agree in n per distance."""
+    same probe states, by exact one-sided sign-flip. The n check catches a truncated or
+    mis-sized probe only: every seed's probe has 50 states at each distance 7 to 11, so equal n
+    cannot prove the two sides used the same states. That rests on both calling
+    c75.probe_set(seed)."""
     for s in sorted(s_recs):
         bs, bx = s_recs[s]["gate_l"]["by_distance"], x_recs[s]["gate_l"]["by_distance"]
         if {d: v["n"] for d, v in bs.items()} != {d: v["n"] for d, v in bx.items()}:
@@ -133,6 +136,25 @@ def gate_m(s_recs: dict, x_recs: dict) -> dict:
     m = st.mean(diffs)
     return {"diffs": diffs, "mean": m, "p": p, "wins": sum(d > 0 for d in diffs),
             "above": bool(p < GATE_M_ALPHA and m > 0)}
+
+
+def gate_m_readable_above(m: dict, m_cont: str) -> bool:
+    """Gate M counts as above 0 only when X's side is proved to be a number today's code
+    produces, i.e. the continuity cell passed."""
+    return bool(m["above"] and m_cont == "PASS")
+
+
+def claims_gate_ok(g0a, g0b, l_pass, e_pass) -> bool:
+    """Gates 0(a), 0(b), L and E all passed; otherwise every claim is VOID."""
+    return bool(g0a == "PASS" and g0b == "PASS" and l_pass and e_pass)
+
+
+def check_rank_record(rec, path) -> None:
+    name = Path(path).name
+    for field, want in (("kind", "J-S4"), ("k", 4), ("judge_updates", cells.N_UPDATES),
+                        ("limit_states", None)):
+        if rec.get(field) != want:
+            raise SystemExit(f"{name}: {field} is {rec.get(field)!r}, spec says {want!r}")
 
 
 def _x_train(seed, pilot=False) -> dict:
@@ -194,6 +216,9 @@ def stage_train(out) -> dict:
         name = cells.record_name(seed)
         recs[seed] = _read(out / name)
         check_train_record(recs[seed], name)
+        if recs[seed].get("seed") != seed:
+            raise SystemExit(f"{name}: seed is {recs[seed].get('seed')!r}, the file name says "
+                             f"{seed!r}; Gate M pairs S and X by the file name's seed")
     margins = [recs[seed]["gate_l"]["margin"] for seed in SEEDS]
     return {"l": {"mean": st.mean(margins), "threshold": GATE_L_THRESHOLD,
                   "p": one_sided_p(margins),
@@ -212,7 +237,8 @@ def format_stage_train(res) -> list[str]:
             f"GATE M continuity (X seed 0 Gate L re-measured here): {res['m_cont']}",
             f"GATE M (reported, binds the reading): S - X margin at probe distances 9-11, mean "
             f"{m['mean']:+.4f}, S ahead on {m['wins']} of {len(m['diffs'])}, p {m['p']:.4f} -> "
-            f"{'ABOVE 0' if m['above'] else 'NOT ABOVE 0'}"]
+            + ("GATE M CANNOT BE READ (continuity FAIL)" if res["m_cont"] != "PASS"
+               else "ABOVE 0" if m["above"] else "NOT ABOVE 0")]
 
 
 def check_eval_record(rec, path) -> None:
@@ -312,6 +338,12 @@ def readings(full: dict, gate_m_above: bool) -> list[str]:
     return out
 
 
+def _read_rank(path: Path) -> dict:
+    r = _read(path)
+    check_rank_record(r, path)
+    return r
+
+
 def _mean(recs, key, field):
     return st.mean(r[field] for r in recs[key].values())
 
@@ -349,7 +381,7 @@ def main() -> None:
     g0a = gate0a(out, args.det_dir)
     recs = load_records(out)
     rates = rates_of(recs)
-    rank = {d: [_read(out / ev.rank_record_name(d, s)) for s in SEEDS] for d in DEPTHS}
+    rank = {d: [_read_rank(out / ev.rank_record_name(d, s)) for s in SEEDS] for d in DEPTHS}
     rank76 = {d: [json.loads((cells.E76_OUT / f"exp076_rank_J-X4_d{d}_s{s}.json").read_text())
                   for s in SEEDS] for d in DEPTHS}
 
@@ -372,7 +404,7 @@ def main() -> None:
             f"({_mean(recs, (a, d), 'mean_steps'):.2f}, {_mean(recs, (a, d), 'optimality'):.3f})"
             for a in ev.ARMS))
 
-    gate_ok = g0a == "PASS" and g0b == "PASS" and tr["l"]["pass"] and tr["e"]
+    gate_ok = claims_gate_ok(g0a, g0b, tr["l"]["pass"], tr["e"])
     if not gate_ok:
         print("Gate 0, Gate L or Gate E did not pass. Every claim is VOID.")
     full = primary_verdicts(rates, gate_ok)
@@ -383,7 +415,7 @@ def main() -> None:
                                                   rates[("J4V-X", 11 if name == "claim1" else 9)]))
         print(f"{label}: {am:.4f} vs {bm:.4f}, diff {diff:+.4f}, S ahead on {wins} of 12, "
               f"p {p:.4f} -> {v}")
-    for line in readings(full, tr["m"]["above"]):
+    for line in readings(full, gate_m_readable_above(tr["m"], tr["m_cont"])):
         print("    " + line)
 
     print("\nSecondary (patterns, never confirmations):")
