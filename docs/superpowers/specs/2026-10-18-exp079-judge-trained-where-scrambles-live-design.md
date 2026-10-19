@@ -170,7 +170,10 @@ scramble.** mean(J4V-S - J4V-X) > 0 at depth 11.
 **Claim 2 (primary): the same at depth 9.** mean(J4V-S - J4V-X) > 0 at depth 9.
 
 Verdicts: CONFIRMED, CONFIRMED (SMALL) under 0.01, REFUTED (mean <= 0), NOT SIGNIFICANT,
-UNRESOLVED (Gate 1), VOID (Gate L or Gate 0). The aggregator returns each one as a verdict.
+UNRESOLVED (Gate 1), VOID (Gate L, Gate E or Gate 0). The aggregator returns each one as a verdict.
+**Gate E added to the VOID set 2026-10-19, while writing the plan, before any S judge was trained.**
+Section 7 listed Gate E without saying what its failure does. A seed whose encoder never moved is
+not the S recipe, and EXP-075 voided on Gate E for the same reason, so this is a tightening.
 
 **How each reading reads, fixed now:**
 - **Claim 1 CONFIRMED:** the judge's training distribution was a limit at the typical scramble,
