@@ -44,7 +44,7 @@
 |---|---|
 | `experiments/079_judge_trained_deep/cells.py` | constants, paths, S construction from X's encoder, loading a trained S judge, proving and copying the pilot encoders (CLI `prepare-pilot-encoders`) |
 | `experiments/079_judge_trained_deep/train.py` | value-iteration driver for S, the walk recorder, the training record |
-| `experiments/079_judge_trained_deep/evaluate.py` | one J4V cell per call (J4V-S or J4V-X), Gate R rank cells for S |
+| `experiments/079_judge_trained_deep/evaluate.py` | one J4V cell per call (J4V-S or J4V-X), Gate R rank cells for S, Gate M's X continuity cell |
 | `experiments/079_judge_trained_deep/aggregate.py` | record checks, every gate, both claims, readings, pilot amendment numbers |
 | `experiments/079_judge_trained_deep/launch079.ps1` | laptop launcher, one phase per call, amendment guard, memory sampling |
 | `experiments/079_judge_trained_deep/chain079.ps1` | the full run after the amendment: cont, Gate 0(b), train, Gates L and E, eval, det, rank |
@@ -797,7 +797,7 @@ git commit -m "EXP-079: training driver for S (max_len required and recorded, wa
 
 **Interfaces:**
 - Consumes: Task 1's `cells` (`load_trained`, `judge_updates`, `ckpt_dir`, `E75_OUT`, `OUT`); EXP-075's `evaluate.py` (`JudgeCritic`, `load_cell(depth, seed) -> (agent, head, states, train_seed)`, `load_judge(train_arm, seed, judge_dir)`, `judge_updates(train_arm, seed, judge_dir)`); `neuromorphic.training.lookahead` (`evaluate_lookahead`, `imag_seed_for`, `imagined_values`, `tree_levels`).
-- Produces: `ARMS = ("J4V-S", "J4V-X")`, `K = 4`, `DEPTHS = (9, 11)`, `record_name(arm, depth, seed) -> "exp079_<arm>_d<depth>_s<seed>.json"`, `rank_record_name(depth, seed) -> "exp079_rank_J-S4_d<depth>_s<seed>.json"`, `load_judge(arm, seed, judge_dir=None)`, `run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> dict`, `rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=None) -> dict`. An evaluation record holds `evaluate_lookahead`'s fields plus `depth`, `seed`, `arm`, `judge` ("S" or "X"), `fired4`, `wall_s`, `git_commit`, `limit_states`, `judge_updates`. A rank record holds `kind` ("J-S4"), `k`, `depth`, `seed`, `n`, `hit`, `chance`, `limit_states`, `judge_updates`, `wall_s`.
+- Produces: `ARMS = ("J4V-S", "J4V-X")`, `K = 4`, `DEPTHS = (9, 11)`, `record_name(arm, depth, seed) -> "exp079_<arm>_d<depth>_s<seed>.json"`, `rank_record_name(depth, seed) -> "exp079_rank_J-S4_d<depth>_s<seed>.json"`, `load_judge(arm, seed, judge_dir=None)`, `run_cell(arm, depth, seed, out_dir, limit_states=None, judge_dir=None) -> dict`, `rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=None) -> dict`. `gatel_x_record_name(seed) -> "exp079_gatel_X_s<seed>.json"`, `gatel_x_cell(seed, out_dir, provider=None) -> dict` (Gate M's continuity cell: keys `kind` "gatel-X", `seed`, `gate_l`, `judge_updates`, `wall_s`, `git_commit`). An evaluation record holds `evaluate_lookahead`'s fields plus `depth`, `seed`, `arm`, `judge` ("S" or "X"), `fired4`, `wall_s`, `git_commit`, `limit_states`, `judge_updates`. A rank record holds `kind` ("J-S4"), `k`, `depth`, `seed`, `n`, `hit`, `chance`, `limit_states`, `judge_updates`, `wall_s`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -904,6 +904,19 @@ def test_rank_cell_ranks_four_move_leaves_with_s(tmp_path, monkeypatch):
     assert rec["limit_states"] == 2 and rec["judge_updates"] == 4000
     assert 0.0 < rec["chance"] < 1.0 and rec["hit"] in (0.0, 0.5, 1.0)
     assert (tmp_path / "o" / "exp079_rank_J-S4_d7_s0.json").exists()
+
+
+@pytest.mark.slow
+def test_gatel_x_cell_reproduces_the_committed_gate_l(tmp_path):
+    """GATE M CONTINUITY. Catches today's Gate L code (tree_levels, the probe set, the judge
+    load) measuring X differently from EXP-075, which would make Gate M compare S with a number
+    the current code cannot produce. Measured 2026-10-19 on the VPS: equal, about 100 s. Slow:
+    builds the full BFS table."""
+    rec = evaluate.gatel_x_cell(0, tmp_path)
+    ref = json.loads((cells.E75_OUT / "exp075_train_X_s0.json").read_text())["gate_l"]
+    assert rec["gate_l"] == ref
+    assert rec["kind"] == "gatel-X" and rec["judge_updates"] == 4000
+    assert (tmp_path / "exp079_gatel_X_s0.json").exists()
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -927,6 +940,7 @@ sections 3 and 7.
 Usage (repo root, PYTHONPATH=src):
     .venv/bin/python -u experiments/079_judge_trained_deep/evaluate.py --arm J4V-S --depth 11 --seed 0
     .venv/bin/python -u experiments/079_judge_trained_deep/evaluate.py --rank --depth 11 --seed 0
+    .venv/bin/python -u experiments/079_judge_trained_deep/evaluate.py --gatel-x --seed 0
 """
 
 from __future__ import annotations
@@ -954,7 +968,9 @@ def _load(name, path):
 
 cells = _load("exp079_cells", HERE / "cells.py")
 e75 = _load("exp075_evaluate", REPO / "experiments" / "075_wide_region" / "evaluate.py")
+gate_l = _load("exp074_gate_l", REPO / "experiments" / "074_wide_judge" / "gate_l.py")
 
+from neuromorphic.envs.cube import N_ACTIONS  # noqa: E402
 from neuromorphic.envs.cube_distance import ExactBFSDistance  # noqa: E402
 from neuromorphic.training.lookahead import (  # noqa: E402
     evaluate_lookahead, imag_seed_for, imagined_values, tree_levels,
@@ -973,6 +989,10 @@ def record_name(arm: str, depth: int, seed: int) -> str:
 
 def rank_record_name(depth: int, seed: int) -> str:
     return f"exp079_rank_J-S4_d{depth}_s{seed}.json"
+
+
+def gatel_x_record_name(seed: int) -> str:
+    return f"exp079_gatel_X_s{seed}.json"
 
 
 def _git_commit() -> str:
@@ -1060,19 +1080,46 @@ def rank_cell(depth, seed, out_dir, judge_dir=None, limit_states=None, provider=
     return rec
 
 
+def gatel_x_cell(seed, out_dir, provider=None) -> dict:
+    """Gate M's continuity cell: EXP-075's committed X judge for `seed`, re-measured by today's
+    Gate L code on its own probe set. Gate M pairs S's margins with X's PUBLISHED ones, so this
+    must reproduce the committed training record's gate_l exactly (CLAUDE.md: re-evaluate the
+    baseline, never trust a published per-seed value unchecked)."""
+    torch.set_num_threads(1)
+    t0 = time.time()
+    judge = load_judge("J4V-X", seed)
+    if provider is None:
+        provider = ExactBFSDistance(max_depth=None)
+    probe = cells.probe_set(seed, provider)
+    rec = {"kind": "gatel-X", "seed": seed,
+           "gate_l": gate_l.leaf_rank_margin(judge, probe, provider.distance, seed, N_ACTIONS),
+           "judge_updates": _judge_updates("J4V-X", seed),
+           "wall_s": round(time.time() - t0, 1), "git_commit": _git_commit()}
+    _write(out_dir, gatel_x_record_name(seed), rec)
+    return rec
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=list(ARMS))
     ap.add_argument("--rank", action="store_true")
-    ap.add_argument("--depth", type=int, required=True)
+    ap.add_argument("--gatel-x", action="store_true",
+                    help="Gate M's continuity cell: re-measure X's Gate L for --seed")
+    ap.add_argument("--depth", type=int, default=None)
     ap.add_argument("--seed", type=int, required=True)
     ap.add_argument("--out-dir", type=Path, default=HERE / "outputs")
     ap.add_argument("--judge-dir", type=Path, default=None,
                     help="where judge_S_s<seed>/ lives; this experiment's outputs/ when omitted")
     ap.add_argument("--limit-states", type=int, default=None)
     args = ap.parse_args()
-    if (args.arm is None) == (not args.rank):
-        raise SystemExit("pass exactly one of --arm or --rank")
+    if (args.arm is not None) + args.rank + args.gatel_x != 1:
+        raise SystemExit("pass exactly one of --arm, --rank or --gatel-x")
+    if args.gatel_x:
+        r = gatel_x_cell(args.seed, args.out_dir)
+        print(f"gatel-X s{r['seed']} margin {r['gate_l']['margin']:.6f} wall {r['wall_s']}s")
+        return
+    if args.depth is None:
+        raise SystemExit("--depth is required with --arm or --rank")
     if args.arm:
         r = run_cell(args.arm, args.depth, args.seed, args.out_dir, args.limit_states,
                      args.judge_dir)
@@ -1090,7 +1137,11 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run (Bash tool `timeout: 600000`): `.venv/bin/python -m pytest tests/experiments/test_exp079.py -q -m "not slow"`
-Expected: 23 passed, 1 deselected. The two-state J4V-X slice runs twice and is the slowest test here.
+Expected: 23 passed, 2 deselected. The two-state J4V-X slice runs twice and is the slowest test here.
+
+Then the new slow test alone (Bash tool `timeout: 600000`; full BFS plus 250 probe states, about 100 s):
+`.venv/bin/python -m pytest tests/experiments/test_exp079.py -q -m slow -k gatel`
+Expected: 1 passed.
 
 - [ ] **Step 5: Mutation check**
 
@@ -1100,7 +1151,7 @@ In `load_judge`, make the `J4V-S` branch return `e75.load_judge("X", seed, cells
 
 ```bash
 git add experiments/079_judge_trained_deep/evaluate.py tests/experiments/test_exp079.py
-git commit -m "EXP-079: evaluation cells (J4V-S on S's judge, J4V-X for Gate 0(b)) and Gate R rank cells at k 4"
+git commit -m "EXP-079: evaluation cells (J4V-S on S's judge, J4V-X for Gate 0(b)), Gate R rank cells at k 4, and Gate M's X continuity cell"
 ```
 
 ---
@@ -1112,8 +1163,8 @@ git commit -m "EXP-079: evaluation cells (J4V-S on S's judge, J4V-X for Gate 0(b
 - Modify: `tests/experiments/test_exp079.py` (append)
 
 **Interfaces:**
-- Consumes: Task 1's `cells` (`EVAL_SEEDS`, `PILOT_SEEDS`, `PILOT_OUT`, `E75_OUT`, `E75_PILOT`, `E76_OUT`, `E78_OUT`, `record_name`, `c75`); Task 3's `evaluate` (`ARMS`, `DEPTHS`, `record_name`, `rank_record_name`); EXP-070's aggregate (`one_sided_p(diffs)`, `gate1_verdict(a_mean, b_mean)`); EXP-071's (`gate0b_verdict(recs, ref)`, `gate_r_verdict(rows, hit_key, chance_key) -> (bool, p)`); EXP-072's (`pair_diffs(a, b)`); EXP-074's (`gate_l_verdict(margins, threshold)`); EXP-075's (`GATE_L_THRESHOLD`, `seconds_per_update(rec)`).
-- Produces (all module level): constants `SEEDS`, `DEPTHS`, `ALPHA = 0.05 / 2`, `SMALL = 0.01`, `GATE_M_ALPHA = 0.05`, `M_BAND = (9, 11)`, `X_PILOT_GATE_L`, `TRAIN_SETTINGS`, `DET_IGNORED`, `AMENDMENT = None`, `GATE_L_THRESHOLD = None`; functions `claim_verdict`, `contrast`, `check_train_record(rec, name)`, `margin_band(gate_l, lo=9, hi=11)`, `gate_m(s_recs, x_recs) -> dict`, `pilot_amendment(pilot_dir=cells.PILOT_OUT) -> dict`, `require_amendment()`, `stage_train(out) -> dict`, `format_stage_train(res) -> list[str]`, `check_eval_record(rec, path)`, `load_records(out_dir) -> dict`, `rates_of(recs)`, `stage_cont(out) -> str`, `format_stage_cont(verdict) -> str`, `gate0a(out_dir, det_dir) -> str`, `primary_verdicts(rates, gate_ok) -> dict`, `readings(full, gate_m_above) -> list[str]`, `main()`.
+- Consumes: Task 1's `cells` (`EVAL_SEEDS`, `PILOT_SEEDS`, `PILOT_OUT`, `E75_OUT`, `E75_PILOT`, `E76_OUT`, `E78_OUT`, `record_name`, `c75`); Task 3's `evaluate` (`ARMS`, `DEPTHS`, `K`, `record_name`, `rank_record_name`, `gatel_x_record_name`); EXP-070's aggregate (`one_sided_p(diffs)`, `gate1_verdict(a_mean, b_mean)`); EXP-071's (`gate0b_verdict(recs, ref)`, `gate_r_verdict(rows, hit_key, chance_key) -> (bool, p)`); EXP-072's (`pair_diffs(a, b)`); EXP-074's (`gate_l_verdict(margins, threshold)`); EXP-075's (`GATE_L_THRESHOLD`, `seconds_per_update(rec)`).
+- Produces (all module level): constants `SEEDS`, `DEPTHS`, `ALPHA = 0.05 / 2`, `SMALL = 0.01`, `GATE_M_ALPHA = 0.05`, `M_BAND = (9, 11)`, `X_PILOT_GATE_L`, `TRAIN_SETTINGS`, `DET_IGNORED`, `AMENDMENT = None`, `GATE_L_THRESHOLD = None`; functions `claim_verdict`, `contrast`, `check_train_record(rec, name)`, `margin_band(gate_l, lo=9, hi=11)`, `gate_m(s_recs, x_recs) -> dict`, `pilot_amendment(pilot_dir=cells.PILOT_OUT) -> dict`, `require_amendment()`, `gate_m_continuity(out) -> str`, `stage_train(out) -> dict` (keys `l`, `e`, `m`, `m_cont`, `recs`), `format_stage_train(res) -> list[str]`, `check_eval_record(rec, path)`, `load_records(out_dir) -> dict`, `rates_of(recs)`, `stage_cont(out) -> str`, `format_stage_cont(verdict) -> str`, `gate0a(out_dir, det_dir) -> str`, `primary_verdicts(rates, gate_ok) -> dict`, `readings(full, gate_m_above) -> list[str]`, `main()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1248,16 +1299,37 @@ def test_pilot_amendment_states_the_stop_rule_and_the_threshold(tmp_path):
     assert b["mean_margin"] < agg.X_PILOT_GATE_L and b["stop"] is True
 
 
+def _write_gatel_x(out, **gl_over):
+    ref = _x_train(0)["gate_l"]
+    (out / evaluate.gatel_x_record_name(0)).write_text(
+        json.dumps({"kind": "gatel-X", "seed": 0, "gate_l": {**ref, **gl_over}}))
+
+
+def test_gate_m_continuity_compares_with_the_committed_record(tmp_path):
+    """Catches Gate M read against X's published margins without checking they reproduce, and
+    a continuity check blind to a changed per-distance hit."""
+    with pytest.raises(SystemExit, match="exp079_gatel_X_s0"):
+        agg.gate_m_continuity(tmp_path)
+    _write_gatel_x(tmp_path)
+    assert agg.gate_m_continuity(tmp_path) == "PASS"
+    bd = copy.deepcopy(_x_train(0)["gate_l"]["by_distance"])
+    bd["10"]["hit"] += 0.02
+    _write_gatel_x(tmp_path, by_distance=bd)
+    assert agg.gate_m_continuity(tmp_path) == "FAIL"
+
+
 def test_stage_train_needs_the_amendment_and_voids_on_l_or_e(tmp_path, monkeypatch):
     """Catches Gates L and E read before the amendment, Gate E not checked on every seed, and
     Gate L passing with a mean below its threshold."""
     _write_s_train(tmp_path, 0.0)
+    _write_gatel_x(tmp_path)
     with pytest.raises(SystemExit, match="amendment"):
         agg.stage_train(tmp_path)
     monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-20"})
     monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.1)
     res = agg.stage_train(tmp_path)
     assert res["l"]["pass"] is True and res["e"] is True and res["m"]["above"] is False
+    assert res["m_cont"] == "PASS"
     monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.9)
     assert agg.stage_train(tmp_path)["l"]["pass"] is False
     monkeypatch.setattr(agg, "GATE_L_THRESHOLD", 0.1)
@@ -1504,6 +1576,17 @@ def _x_train(seed, pilot=False) -> dict:
     return _read(d / cells.c75.record_name(cells.BASE_ARM, seed))
 
 
+def gate_m_continuity(out) -> str:
+    """X seed 0's Gate L, re-measured here by evaluate.gatel_x_cell, must equal EXP-075's
+    committed training record exactly, or Gate M's X side is a number today's code does not
+    produce."""
+    p = Path(out) / ev.gatel_x_record_name(0)
+    if not p.exists():
+        raise SystemExit(f"missing {p.name}: run the cont phase (Gate M continuity) first")
+    got = json.loads(p.read_text())["gate_l"]
+    return "PASS" if got == _x_train(0)["gate_l"] else "FAIL"
+
+
 def pilot_amendment(pilot_dir=cells.PILOT_OUT) -> dict:
     """The numbers the dated amendment states (spec section 6), from the two S pilot records,
     with EXP-075's X pilot judges on the same seeds alongside."""
@@ -1553,6 +1636,7 @@ def stage_train(out) -> dict:
                   "pass": a74.gate_l_verdict(margins, GATE_L_THRESHOLD)},
             "e": all(recs[seed]["encoder_drift"] > 0 for seed in SEEDS),
             "m": gate_m(recs, {seed: _x_train(seed) for seed in SEEDS}),
+            "m_cont": gate_m_continuity(out),
             "recs": recs}
 
 
@@ -1561,6 +1645,7 @@ def format_stage_train(res) -> list[str]:
     return [f"GATE L (VI worked): {'PASS' if l['pass'] else 'FAIL'}, mean margin "
             f"{l['mean']:.4f} vs threshold {l['threshold']:.4f}, p {l['p']:.4f}",
             f"GATE E (encoders trained): {'PASS' if res['e'] else 'FAIL'}",
+            f"GATE M continuity (X seed 0 Gate L re-measured here): {res['m_cont']}",
             f"GATE M (reported, binds the reading): S - X margin at probe distances 9-11, mean "
             f"{m['mean']:+.4f}, S ahead on {m['wins']} of {len(m['diffs'])}, p {m['p']:.4f} -> "
             f"{'ABOVE 0' if m['above'] else 'NOT ABOVE 0'}"]
@@ -1744,6 +1829,10 @@ def main() -> None:
     s_sp = st.mean(r["final_probe"]["spearman_7_11"] for r in tr["recs"].values())
     x_sp = st.mean(_x_train(s)["final_probe"]["spearman_7_11"] for s in SEEDS)
     print(f"  probe spearman_7_11, mean over seeds: S {s_sp:.4f}  X {x_sp:.4f}")
+    for d in ("9", "10", "11"):
+        sj = st.mean(r["final_probe"]["mean_j_by_distance"][d] for r in tr["recs"].values())
+        xj = st.mean(_x_train(s)["final_probe"]["mean_j_by_distance"][d] for s in SEEDS)
+        print(f"  probe mean J at distance {d}: S {sj:.3f}  X {xj:.3f}")
     dists = sorted({d for r in tr["recs"].values() for d in r["train_hist"]}, key=int)
     hist = {d: st.mean(r["train_hist"].get(d, 0.0) for r in tr["recs"].values()) for d in dists}
     print("  realised training histogram, mean over seeds (last probe interval): "
@@ -1757,7 +1846,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run (Bash tool `timeout: 600000`): `.venv/bin/python -m pytest tests/experiments/test_exp079.py -q -m "not slow"`
-Expected: 36 passed, 1 deselected.
+Expected: 37 passed, 2 deselected.
 
 - [ ] **Step 5: Mutation check**
 
@@ -1765,9 +1854,10 @@ Apply each mutation alone, run the command, confirm the named test FAILS, then r
 1. `ALPHA = 0.05 / 2` to `ALPHA = 0.05`: `test_claim_verdicts_use_alpha_0025`.
 2. In `check_train_record`, delete the `walk_max_lens` check: `test_train_record_must_prove_its_walk_length`.
 3. In `gate_m`, delete the n-per-distance loop: `test_gate_m_is_s_minus_x_by_sign_flip_and_refuses_a_different_probe`.
-4. In `pilot_amendment`, change `"stop": mean < X_PILOT_GATE_L` to `"stop": mean < X_PILOT_GATE_L / 2`: `test_pilot_amendment_states_the_stop_rule_and_the_threshold`.
-5. Change `DET_IGNORED` to `("wall_s", "git_commit", "judge_evals")`: `test_gate0a_ignores_only_the_session_fields`.
-Confirm `git diff experiments/079_judge_trained_deep/aggregate.py` is clean of mutations afterwards. Record all five results in the report.
+4. In `gate_m_continuity`, return `"PASS"` unconditionally: `test_gate_m_continuity_compares_with_the_committed_record`.
+5. In `pilot_amendment`, change `"stop": mean < X_PILOT_GATE_L` to `"stop": mean < X_PILOT_GATE_L / 2`: `test_pilot_amendment_states_the_stop_rule_and_the_threshold`.
+6. Change `DET_IGNORED` to `("wall_s", "git_commit", "judge_evals")`: `test_gate0a_ignores_only_the_session_fields`.
+Confirm `git diff experiments/079_judge_trained_deep/aggregate.py` is clean of mutations afterwards. Record all six results in the report.
 
 - [ ] **Step 6: Commit**
 
@@ -1800,6 +1890,7 @@ Append to `tests/experiments/test_exp079.py`:
 CHAIN_GATE0B = "continuity.*: PASS"
 CHAIN_GATE_L = r"GATE L \(VI worked\): PASS"
 CHAIN_GATE_E = r"GATE E \(encoders trained\): PASS"
+CHAIN_GATE_MC = r"GATE M continuity \(X seed 0 Gate L re-measured here\): PASS"
 
 
 def test_launcher_pins_the_walk_length():
@@ -1819,7 +1910,7 @@ def test_launcher_carries_the_fixes_and_the_registered_cells():
     assert "a.AMENDMENT" in text and "a.GATE_L_THRESHOLD" in text
     assert 'foreach ($d in 11, 9)' in text and '"J4V-S"' in text and '"J4V-X"' in text
     assert "-gt 6" in text and "outputs_det" in text
-    assert "prepare-pilot-encoders" in text
+    assert "prepare-pilot-encoders" in text and '"--gatel-x"' in text
     assert "075_wide_region\\pretrain.py" in text and '"--arms", "X"' in text
     assert '$target = Join-Path $phaseDir $j[1]' in text
 
@@ -1839,7 +1930,7 @@ def test_chain_order_and_gate_regexes_match_the_aggregator():
     PASS."""
     text = (EXP / "chain079.ps1").read_text()
     assert '@("cont","gate0b","train","gatele","eval","det","rank")' in text
-    for rx in (CHAIN_GATE0B, CHAIN_GATE_L, CHAIN_GATE_E):
+    for rx in (CHAIN_GATE0B, CHAIN_GATE_L, CHAIN_GATE_E, CHAIN_GATE_MC):
         assert rx in text
     assert "--stage cont" in text and "--stage train" in text
     assert "train_workers" in text and "eval_workers" in text
@@ -1847,13 +1938,15 @@ def test_chain_order_and_gate_regexes_match_the_aggregator():
     assert not re.search(CHAIN_GATE0B, agg.format_stage_cont("FAIL"), re.I)
     m = {"mean": 0.01, "p": 0.2, "wins": 7, "diffs": [0.0] * 12, "above": False}
     ok = agg.format_stage_train({"l": {"pass": True, "mean": 0.2, "threshold": 0.1, "p": 0.001},
-                                 "e": True, "m": m})
+                                 "e": True, "m": m, "m_cont": "PASS"})
     bad = agg.format_stage_train({"l": {"pass": False, "mean": 0.05, "threshold": 0.1,
-                                        "p": 0.3}, "e": False, "m": m})
+                                        "p": 0.3}, "e": False, "m": m, "m_cont": "FAIL"})
     assert re.search(CHAIN_GATE_L, "\n".join(ok), re.I)
     assert re.search(CHAIN_GATE_E, "\n".join(ok), re.I)
     assert not re.search(CHAIN_GATE_L, "\n".join(bad), re.I)
     assert not re.search(CHAIN_GATE_E, "\n".join(bad), re.I)
+    assert re.search(CHAIN_GATE_MC, "\n".join(ok), re.I)
+    assert not re.search(CHAIN_GATE_MC, "\n".join(bad), re.I)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -2004,6 +2097,7 @@ switch ($Phase) {
     "cont" {
         foreach ($d in 9, 11) {
             [void]$jobs.Add(@("J4V-X d$d s0", "exp079_J4V-X_d${d}_s0.json", "--arm", "J4V-X", "--depth", $d, "--seed", 0)) }
+        [void]$jobs.Add(@("gatel X s0", "exp079_gatel_X_s0.json", "--gatel-x", "--seed", 0))
     }
     "eval" {
         foreach ($d in 11, 9) { foreach ($s in $seeds) {
@@ -2077,8 +2171,8 @@ if ($failed -gt 0) { Write-Error "$failed cells exited non-zero; do not aggregat
 - [ ] **Step 4: Write `chain079.ps1`**
 
 ```powershell
-# EXP-079 full-run chain, after the dated amendment: cont -> Gate 0(b) -> train -> Gates L and E
-# -> eval -> det -> rank. Re-runnable with -From: training resumes by itself and evaluation
+# EXP-079 full-run chain, after the dated amendment: cont (Gate 0(b) cells and Gate M's X
+# continuity cell) -> Gate 0(b) -> train -> Gates L, E and M continuity -> eval -> det -> rank. Re-runnable with -From: training resumes by itself and evaluation
 # phases skip existing cells. Launch it with OS-level redirection (playbook section 3):
 #   ssh -n laptop 'cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\experiments\079_judge_trained_deep\chain079.ps1 > C:\Users\mlgbr\chain079.out 2>&1"'
 param([string]$From = "cont")
@@ -2111,6 +2205,7 @@ foreach ($p in $order) {
         Say ("gates L, E, M: " + $g.Trim())
         if ($g -notmatch "GATE L \(VI worked\): PASS") { Say "STOP: Gate L did not pass, every claim is VOID"; exit 2 }
         if ($g -notmatch "GATE E \(encoders trained\): PASS") { Say "STOP: Gate E did not pass, every claim is VOID"; exit 2 }
+        if ($g -notmatch "GATE M continuity \(X seed 0 Gate L re-measured here\): PASS") { Say "STOP: X's Gate L does not reproduce, so Gate M cannot be read; re-measure X before going on"; exit 2 }
         continue
     }
     $n = $evalW
@@ -2129,7 +2224,7 @@ Say "chain done"
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run (Bash tool `timeout: 600000`): `.venv/bin/python -m pytest tests/experiments/test_exp079.py -q -m "not slow"`
-Expected: 40 passed, 1 deselected.
+Expected: 41 passed, 2 deselected.
 
 - [ ] **Step 6: Mutation check**
 
@@ -2137,7 +2232,7 @@ Change `"if ($MaxLen -ne 40)"` to `"if ($MaxLen -lt 1)"` in the launcher: `test_
 
 - [ ] **Step 7: Update the test count in CLAUDE.md**
 
-Run (Bash tool `timeout: 600000`): `.venv/bin/python -m pytest tests/ --collect-only -q | tail -1` and `.venv/bin/python -m pytest tests/ --collect-only -q -m "not slow" | tail -1`. In `CLAUDE.md`, change the line `**1122 as of 2026-10-14 (1097 not slow, 25 slow; EXP-078 code)**, verified by \`--collect-only\`.` to the plain entry `1122 2026-10-14 (EXP-078 code),` and add after it a bold line in the same form with the new totals and `EXP-079 code`, dated the day you run it, for example `**1163 as of 2026-10-19 (1137 not slow, 26 slow; EXP-079 code)**, verified by \`--collect-only\`.` with the numbers the two commands print.
+Run (Bash tool `timeout: 600000`): `.venv/bin/python -m pytest tests/ --collect-only -q | tail -1` and `.venv/bin/python -m pytest tests/ --collect-only -q -m "not slow" | tail -1`. In `CLAUDE.md`, change the line `**1122 as of 2026-10-14 (1097 not slow, 25 slow; EXP-078 code)**, verified by \`--collect-only\`.` to the plain entry `1122 2026-10-14 (EXP-078 code),` and add after it a bold line in the same form with the new totals and `EXP-079 code`, dated the day you run it, for example `**1165 as of 2026-10-19 (1138 not slow, 27 slow; EXP-079 code)**, verified by \`--collect-only\`.` with the numbers the two commands print.
 
 - [ ] **Step 8: Commit**
 
