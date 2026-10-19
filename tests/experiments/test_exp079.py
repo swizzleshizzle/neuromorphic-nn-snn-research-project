@@ -501,6 +501,16 @@ def test_pilot_amendment_states_the_stop_rule_and_the_threshold(tmp_path):
         (low / cells.record_name(s)).write_text(json.dumps(r))
     b = agg.pilot_amendment(low)
     assert b["mean_margin"] < agg.X_PILOT_GATE_L and b["stop"] is True
+    # Between the bar and half of it: only the full X bar stops this one.
+    mid = tmp_path / "mid"
+    mid.mkdir()
+    x_mean = sum(xs) / 2
+    for s in (12, 13):
+        r = _as_s(_x_train(s, pilot=True), 0.10 - x_mean, dists=("7", "8", "9", "10", "11"))
+        (mid / cells.record_name(s)).write_text(json.dumps(r))
+    c = agg.pilot_amendment(mid)
+    assert agg.X_PILOT_GATE_L / 2 < c["mean_margin"] < agg.X_PILOT_GATE_L
+    assert c["mean_margin"] == pytest.approx(0.10) and c["stop"] is True
 
 
 def _write_gatel_x(out, **gl_over):
