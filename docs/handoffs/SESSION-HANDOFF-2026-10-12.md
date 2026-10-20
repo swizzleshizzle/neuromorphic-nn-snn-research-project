@@ -1,5 +1,11 @@
 # Session Handoff - 2026-10-12 - WEEK 27 closed, WEEK 28 open. EXP-076 DONE: all three claims confirmed.
 
+> **2026-10-20: EXP-079 DONE, both claims REFUTED, every gate passed** (`18cd4f5`,
+> `experiments/079_judge_trained_deep/RESULTS.md`). Depth 11 J4V-S 0.1713 vs J4V-X 0.1950 (-0.0238,
+> 3 of 12), depth 9 0.3454 vs 0.4004 (-0.0550, 1 of 12). Gate M not above 0 (+0.0117, p 0.231): the
+> walks-to-40 judge does not rank far states better. Chain 30.8 h, no restart. README and roadmap
+> not yet updated. **Next stage is Michael's call** (pm ask on neuromorphic, "EXP-079 done").
+>
 > **2026-10-19 (later): EXP-079 PILOTED AND AMENDED, waits on Michael's go on neuromorphic#24.**
 > The stop rule did not fire (S mean Gate L margin 0.2237 vs 0.1298), but S ranks below X overall on
 > both pilot seeds. Amendment is spec section 12 (`82c307e`): Gate L threshold 0.11183, 4 training
