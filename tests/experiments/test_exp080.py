@@ -31,6 +31,12 @@ def _load(name, path):
 cells = _load("exp080_cells", EXP / "cells.py")
 c75 = cells.c75
 
+# The regexes chain080.ps1 applies to the aggregator's stage output (PowerShell -match is
+# case-insensitive). Kept here verbatim so a change to either side fails a test.
+CHAIN_GATE0 = r"GATE 0 \(X seed 0 re-measured through the mint\): PASS"
+CHAIN_SEARCH = r"SEARCH: RUN"
+CHAIN_NO_SEARCH = r"SEARCH: NOT RUN"
+
 
 def _fake_x(d, seed):
     """EXP-075's layout for one seed under `d`: the pretrained encoder, and an X judge at 4000
@@ -532,3 +538,199 @@ def test_pending_search_skips_finished_cells(tmp_path):
     """Catches a relaunch that re-runs finished search cells."""
     (tmp_path / ev.record_name(3)).write_text("{}")
     assert ev.pending_search([2, 3, 4], tmp_path) == [2, 4]
+
+
+agg = _load("exp080_aggregate", EXP / "aggregate.py")
+E75 = REPO / "experiments" / "075_wide_region"
+
+
+def _x75(seed, pilot=False):
+    d = E75 / ("outputs_pilot" if pilot else "outputs")
+    return json.loads((d / f"exp075_train_X_s{seed}.json").read_text())
+
+
+def _shift(gl, delta):
+    """A copy of a gate_l dict with every distance's hit moved by `delta` (margin moves too)."""
+    out = json.loads(json.dumps(gl))
+    for v in out["by_distance"].values():
+        v["hit"] += delta
+    out["hit"] += delta
+    out["margin"] += delta
+    return out
+
+
+def _train_rec(arm, seed, gl, sha="s", drift=None):
+    rec = {"arm": arm, "seed": seed, "gate_l": gl, "mint_sha": f"{sha}{seed}",
+           "mint_meta": {"n_blocks": 4000, "block": 1000, "max_len": 40},
+           "final_probe": {"spearman_7_11": 0.3, "mean_j_by_distance": {"9": 9.0, "10": 10.0,
+                                                                         "11": 11.0}},
+           "loss_last": 1.0, "wall_s": 100.0, "resumed_from": 0, "limit_states": None}
+    if arm == "O-raw":
+        rec.update(raw_states=600000, raw_epochs=12, raw_batch=512, raw_hidden=512, updates=14064)
+    else:
+        rec.update(n_updates=4000, batch=1000, probe_every=250, updates=4000,
+                   encoder_drift=(0.0 if arm == "O-Xf" else 12.0) if drift is None else drift)
+    return rec
+
+
+def _write_train(out, shifts, seeds=range(12), pilot=False):
+    out.mkdir(parents=True, exist_ok=True)
+    for arm, delta in shifts.items():
+        for s in seeds:
+            rec = _train_rec(arm, s, _shift(_x75(s, pilot)["gate_l"], delta))
+            (out / cells.record_name(arm, s)).write_text(json.dumps(rec))
+
+
+def test_bars_are_the_committed_x_records():
+    """Catches a bar retyped wrong or computed from other records: Gate T is half X's 12-seed
+    mean overall margin, the stop bar is X's pilot far-band mean plus 0.05 (spec sections 5, 6)."""
+    import statistics as st
+    overall = st.mean(_x75(s)["gate_l"]["margin"] for s in range(12))
+    assert agg.GATE_T_THRESHOLD == overall / 2
+    assert round(agg.GATE_T_THRESHOLD, 5) == 0.13564
+    pilot_far = st.mean(agg.margin_band(_x75(s, True)["gate_l"]) for s in (12, 13))
+    assert agg.STOP_BAR == pilot_far + 0.05
+    assert round(agg.STOP_BAR, 5) == 0.14532
+    assert (agg.CLAIM_ALPHA, agg.CLAIM_MIN, agg.GATE_V_ALPHA, agg.GATE_V_MIN, agg.SEARCH_ALPHA,
+            agg.SEARCH_MIN) == (0.025, 0.05, 0.05, 0.05, 0.05, 0.03)
+    assert agg.AMENDMENT is None
+
+
+def test_claim_verdict_bands():
+    """Catches a claim confirmed at alpha 0.05, a small gain reported as CONFIRMED, or a VOID
+    gate that still prints a verdict."""
+    big = [0.08] * 12
+    small = [0.02] * 12
+    mixed = [0.08] * 7 + [-0.08] * 5
+    assert agg.claim_verdict(big, True)[0] == "CONFIRMED"
+    assert agg.claim_verdict(small, True)[0] == "CONFIRMED (SMALL)"
+    assert agg.claim_verdict(mixed, True)[0] == "REFUTED"
+    assert agg.claim_verdict(big, False)[0] == "VOID"
+    # p 0.0322 with mean 0.10: CONFIRMED at alpha 0.05, REFUTED at the registered 0.025.
+    edge = [0.2] * 8 + [-0.1] * 4
+    assert agg.one_sided_p(edge) == pytest.approx(0.0322265625)
+    assert agg.claim_verdict(edge, True)[0] == "REFUTED"
+
+
+def test_gate_v_needs_both_p_and_size():
+    """Catches Gate V passing on significance alone or on size alone."""
+    assert agg.gate_v([0.3] * 12, [0.1] * 12)["pass"]
+    assert not agg.gate_v([0.12] * 12, [0.1] * 12)["pass"]  # p tiny, mean 0.02
+    assert not agg.gate_v([0.5] * 5 + [0.0] * 7, [0.1] * 12)["pass"]  # mean 0.108, p 0.109
+
+
+def test_search_reading_and_its_gate1():
+    """Catches PAYS without the 0.03 bar, or a floor contrast read as a result."""
+    assert agg.search_reading([0.05] * 12, 0.245, 0.195)[0] == "PAYS"
+    assert agg.search_reading([0.01] * 12, 0.205, 0.195)[0] == "DOES NOT PAY"
+    assert agg.search_reading([0.0] * 12, 0.01, 0.01)[0] == "UNRESOLVED"
+
+
+def test_verdict_has_a_line_for_every_gate_outcome():
+    """Catches an outcome the spec names that the aggregator would print as something else
+    (gate-calibration rule: the unresolved band is a verdict of its own)."""
+    ok = {"O-raw": True, "O-Xf": True, "O-Xt": True}
+    assert agg.verdict(False, True, ok, "CONFIRMED", "PAYS") == "UNRESOLVED"
+    assert agg.verdict(True, False, ok, "CONFIRMED", "PAYS") == "UNRESOLVED"
+    assert agg.verdict(True, True, {**ok, "O-raw": False}, "CONFIRMED", "PAYS") == "UNRESOLVED"
+    assert agg.verdict(True, True, {**ok, "O-Xt": False}, "VOID", None) == (
+        "UNRESOLVED (O-Xt UNTRAINED)")
+    assert agg.verdict(True, True, ok, "REFUTED", None) == "ENCODER-LIMITED"
+    assert agg.verdict(True, True, ok, "CONFIRMED (SMALL)", None) == "ORDERING LEARNABLE BUT SMALL"
+    assert agg.verdict(True, True, ok, "CONFIRMED", "PAYS") == "ORDERING LEARNABLE, PAYS"
+    assert agg.verdict(True, True, ok, "CONFIRMED", "DOES NOT PAY") == (
+        "ORDERING LEARNABLE, DOES NOT PAY AT DEPTH 11")
+    assert agg.verdict(True, True, ok, "CONFIRMED", "UNRESOLVED") == (
+        "ORDERING LEARNABLE, SEARCH UNRESOLVED")
+    with pytest.raises(SystemExit, match="search"):
+        agg.verdict(True, True, ok, "CONFIRMED", None)
+
+
+def test_train_record_refuses_a_moved_oxf_or_a_still_oxt():
+    """Catches the freeze failing silently or the gradient never arriving, after the fact."""
+    gl = _x75(0)["gate_l"]
+    agg.check_train_record(_train_rec("O-Xf", 0, gl), "f", "O-Xf", 0)
+    agg.check_train_record(_train_rec("O-Xt", 0, gl), "t", "O-Xt", 0)
+    with pytest.raises(SystemExit, match="O-Xf"):
+        agg.check_train_record(_train_rec("O-Xf", 0, gl, drift=1e-9), "f", "O-Xf", 0)
+    with pytest.raises(SystemExit, match="O-Xt"):
+        agg.check_train_record(_train_rec("O-Xt", 0, gl, drift=0.0), "t", "O-Xt", 0)
+
+
+def test_smoke_and_misnamed_records_are_refused(tmp_path):
+    """Catches a record at another budget, a smoke or timing record, or one whose arm or seed is
+    not its file name's, entering a gate."""
+    gl = _x75(0)["gate_l"]
+    for bad, match in ((dict(n_updates=3), "n_updates"), (dict(seed=1), "file name"),
+                       (dict(arm="O-Xf"), "file name"), (dict(limit_states=20), "smoke")):
+        rec = {**_train_rec("O-Xt", 0, gl), **bad}
+        (tmp_path / cells.record_name("O-Xt", 0)).write_text(json.dumps(rec))
+        with pytest.raises(SystemExit, match=match):
+            agg.read_train(tmp_path, "O-Xt", 0)
+    rec = _train_rec("O-raw", 0, gl)
+    rec["raw_epochs"] = 2
+    (tmp_path / cells.record_name("O-raw", 0)).write_text(json.dumps(rec))
+    with pytest.raises(SystemExit, match="raw_epochs"):
+        agg.read_train(tmp_path, "O-raw", 0)
+
+
+def test_mint_pairing_refuses_arms_trained_on_different_draws():
+    """Catches O-Xf and O-Xt (or O-raw) of one seed trained on different mints, which unpairs
+    the comparison spec section 3 pairs."""
+    gl = _x75(0)["gate_l"]
+    recs = {a: {0: _train_rec(a, 0, gl)} for a in cells.ARMS}
+    agg.check_mint_pairing(recs)
+    recs["O-Xf"][0]["mint_sha"] = "other"
+    with pytest.raises(SystemExit, match="seed 0"):
+        agg.check_mint_pairing(recs)
+
+
+def test_gate0_compares_with_exp075s_committed_record(tmp_path):
+    """Catches a Gate 0 that compares anything less than the whole committed gate_l."""
+    gl = _x75(0)["gate_l"]
+    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": gl}))
+    assert agg.gate0(tmp_path) == "PASS"
+    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": _shift(gl, 1e-12)}))
+    assert agg.gate0(tmp_path) == "FAIL"
+
+
+def test_stage_gates_reads_the_registered_contrasts(tmp_path, monkeypatch):
+    """Catches claims paired against the wrong arm, Gate V built from the wrong arm, or a chain
+    signal that would run the search when Claim 1 is not CONFIRMED."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": _x75(0)["gate_l"]}))
+    _write_train(tmp_path, {"O-raw": 0.30, "O-Xf": 0.01, "O-Xt": 0.08})
+    res = agg.stage_gates(tmp_path)
+    assert res["g0"] == "PASS" and res["v"]["pass"]
+    assert res["v"]["mean"] == pytest.approx(0.30)
+    assert res["c1"][0] == "CONFIRMED" and res["c1"][2] == pytest.approx(0.08)
+    assert res["c2"][0] == "CONFIRMED (SMALL)" and res["c2"][2] == pytest.approx(0.01)
+    lines = "\n".join(agg.format_stage_gates(res))
+    assert re.search(CHAIN_SEARCH, lines, re.I)
+    _write_train(tmp_path, {"O-Xt": 0.02})
+    lines = "\n".join(agg.format_stage_gates(agg.stage_gates(tmp_path)))
+    assert not re.search(CHAIN_SEARCH, lines, re.I) and re.search(CHAIN_NO_SEARCH, lines, re.I)
+    monkeypatch.setattr(agg, "AMENDMENT", None)
+    with pytest.raises(SystemExit, match="AMENDMENT"):
+        agg.stage_gates(tmp_path)
+
+
+def test_stage_gates_voids_the_claims_when_gate_v_fails(tmp_path, monkeypatch):
+    """Catches claims read when the protocol could not show a gain."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": _x75(0)["gate_l"]}))
+    _write_train(tmp_path, {"O-raw": 0.01, "O-Xf": 0.2, "O-Xt": 0.2})
+    res = agg.stage_gates(tmp_path)
+    assert not res["v"]["pass"] and res["c1"][0] == "VOID" and res["c2"][0] == "VOID"
+
+
+def test_pilot_report_states_the_stop_rule(tmp_path):
+    """Catches a stop rule read from the wrong arm or against the wrong bar."""
+    _write_train(tmp_path, {"O-raw": 0.06, "O-Xf": 0.0, "O-Xt": 0.0}, seeds=(12, 13), pilot=True)
+    rep = agg.pilot_report(tmp_path)
+    assert rep["far"]["O-raw"] == pytest.approx(agg.STOP_BAR + 0.01)
+    assert rep["stop"] is False
+    _write_train(tmp_path, {"O-raw": 0.04}, seeds=(12, 13), pilot=True)
+    assert agg.pilot_report(tmp_path)["stop"] is True
+    assert rep["x_far"] == pytest.approx(agg.STOP_BAR - 0.05)
+    assert rep["seconds_per_update"]["O-Xt"][12] == pytest.approx(100.0 / 4000)
