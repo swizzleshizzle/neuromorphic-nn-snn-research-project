@@ -734,3 +734,35 @@ def test_pilot_report_states_the_stop_rule(tmp_path):
     assert agg.pilot_report(tmp_path)["stop"] is True
     assert rep["x_far"] == pytest.approx(agg.STOP_BAR - 0.05)
     assert rep["seconds_per_update"]["O-Xt"][12] == pytest.approx(100.0 / 4000)
+
+
+def test_launcher_phases_guard_and_memory_sampling():
+    """Catches a launcher that can run a full-run phase before the amendment, samples memory
+    from the venv redirector instead of every python process (EXP-079's 2 MB reading), lifts
+    the worker cap, or does not check the laptop-only pilot inputs."""
+    text = (EXP / "launch080.ps1").read_text()
+    assert ('ValidateSet("check","pilot-mint","pilot-train","pilot-time","mint","gate0","train",'
+            '"search")') in text
+    assert "a.AMENDMENT" in text and '-match "None"' in text
+    assert "-gt 6" in text and "$null = $proc.Handle" in text
+    assert 'Where-Object { $_.ProcessName -match "^python" }' in text
+    assert "PrivateMemorySize64" in text and "max peak commit MB per python process" in text
+    assert "max total commit MB across python processes" in text
+    assert "judge_X_s" in text and "enc_X_s" in text and "exp079_train_S_s" in text
+    assert '"--n-updates", $Updates' in text and "$Updates = 4000" in text
+    assert '"--time"' in text and '"--gate0"' in text and '"--search"' in text
+    assert "--pilot" in text
+
+
+def test_chain_order_and_gate_regexes_match_the_aggregator():
+    """Catches a chain that trains before Gate 0, runs the search when Claim 1 is not CONFIRMED,
+    or whose regex no longer matches what the aggregator prints."""
+    text = (EXP / "chain080.ps1").read_text()
+    assert '@("mint","gate0","gate0check","train","gates","search")' in text
+    assert CHAIN_GATE0 in text and CHAIN_SEARCH in text and CHAIN_NO_SEARCH in text
+    assert "$code = $LASTEXITCODE" in text and "if ($code -ne 0)" in text
+    assert "--stage gate0" in text and "--stage gates" in text
+    for k in ("mint_workers", "train_workers", "eval_workers"):
+        assert k in text
+    assert re.search(CHAIN_GATE0, agg.format_gate0("PASS"), re.I)
+    assert not re.search(CHAIN_GATE0, agg.format_gate0("FAIL"), re.I)
