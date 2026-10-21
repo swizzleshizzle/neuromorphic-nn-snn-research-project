@@ -1310,7 +1310,7 @@ Expected: 25 passed.
 - [ ] **Step 5: Mutation check**
 
 Apply each, confirm the named test FAILS, revert:
-1. In `cells.make_oxf`, delete the freeze loop: `test_oxt_trains_its_region_and_oxf_does_not` fails (O-Xf drift > 0).
+1. The freeze is enforced twice (`make_oxf`'s loop, and `make_optimizer(judge, "B")` re-freezing), so break both: delete the loop in `cells.make_oxf` AND return `vi.make_optimizer(judge, "W")` for O-Xf in `cells.optimizer_for`: `test_oxt_trains_its_region_and_oxf_does_not` fails (O-Xf drift > 0). Deleting only one site does not, by design.
 2. In `cells.optimizer_for`, return `vi.make_optimizer(judge, "B")` for O-Xt (head only, region frozen): `test_oxt_trains_its_region_and_oxf_does_not` fails (O-Xt drift 0).
 3. In `train_x_arm`, delete the `mint_sha` comparison: `test_resume_refuses_a_checkpoint_from_a_different_mint` fails.
 4. In `train_x_arm`, drop the `gen.set_state(...)` line: `test_resume_equals_a_straight_run` fails.
@@ -1837,7 +1837,7 @@ def test_stage_gates_reads_the_registered_contrasts(tmp_path, monkeypatch):
     assert re.search(CHAIN_SEARCH, lines, re.I)
     _write_train(tmp_path, {"O-Xt": 0.02})
     lines = "\n".join(agg.format_stage_gates(agg.stage_gates(tmp_path)))
-    assert not re.search(CHAIN_SEARCH, lines, re.I)
+    assert not re.search(CHAIN_SEARCH, lines, re.I) and re.search(CHAIN_NO_SEARCH, lines, re.I)
     monkeypatch.setattr(agg, "AMENDMENT", None)
     with pytest.raises(SystemExit, match="AMENDMENT"):
         agg.stage_gates(tmp_path)
@@ -1871,6 +1871,7 @@ Add these constants near the top of the test file, after `cells = ...` (Task 6's
 # case-insensitive). Kept here verbatim so a change to either side fails a test.
 CHAIN_GATE0 = r"GATE 0 \(X seed 0 re-measured through the mint\): PASS"
 CHAIN_SEARCH = r"SEARCH: RUN"
+CHAIN_NO_SEARCH = r"SEARCH: NOT RUN"
 ```
 
 - [ ] **Step 2: Run the new tests to verify they fail**
@@ -2290,7 +2291,8 @@ def test_chain_order_and_gate_regexes_match_the_aggregator():
     or whose regex no longer matches what the aggregator prints."""
     text = (EXP / "chain080.ps1").read_text()
     assert '@("mint","gate0","gate0check","train","gates","search")' in text
-    assert CHAIN_GATE0 in text and CHAIN_SEARCH in text
+    assert CHAIN_GATE0 in text and CHAIN_SEARCH in text and CHAIN_NO_SEARCH in text
+    assert "$code = $LASTEXITCODE" in text and "if ($code -ne 0)" in text
     assert "--stage gate0" in text and "--stage gates" in text
     for k in ("mint_workers", "train_workers", "eval_workers"):
         assert k in text
@@ -2466,9 +2468,14 @@ foreach ($p in $order) {
         continue
     }
     if ($p -eq "gates") {
+        # Fail closed: a refused record or a missing file raises SystemExit, prints neither
+        # search line, and must stop the chain, not read as "search not run".
         $g = & $py $agg --stage gates 2>&1 | Out-String
+        $code = $LASTEXITCODE
         Say ("gates: " + $g.Trim())
-        if ($g -notmatch "SEARCH: RUN") { Say "chain done: the search is not read (see the gates line); aggregate and report"; exit 0 }
+        if ($code -ne 0) { Say "STOP: the gates stage exited $code; fix the records before going on"; exit 1 }
+        if ($g -match "SEARCH: NOT RUN") { Say "chain done: the search is not read (see the gates line); aggregate and report"; exit 0 }
+        if ($g -notmatch "SEARCH: RUN") { Say "STOP: the gates stage printed no search line"; exit 2 }
         continue
     }
     $n = $evalW
@@ -2490,7 +2497,7 @@ Expected: 44 passed.
 
 - [ ] **Step 6: Mutation check**
 
-1. In `chain080.ps1`, change the order to `@("mint","train","gate0","gate0check","gates","search")`: `test_chain_order_and_gate_regexes_match_the_aggregator` fails.
+1. In `chain080.ps1`, delete the `if ($code -ne 0)` line: `test_chain_order_and_gate_regexes_match_the_aggregator` fails. Then change the order to `@("mint","train","gate0","gate0check","gates","search")`: `test_chain_order_and_gate_regexes_match_the_aggregator` fails.
 2. In `aggregate.format_gate0`, change the text to `GATE 0 (X re-measured): ...`: the same test fails.
 3. In `launch080.ps1`, replace the `Where-Object { $_.ProcessName -match "^python" }` sampler with `$proc.PrivateMemorySize64`: `test_launcher_phases_guard_and_memory_sampling` fails.
 Revert each.
