@@ -173,3 +173,126 @@ def test_load_trained_refuses_a_missing_or_unfinished_judge(tmp_path):
     (ck / "state.json").write_text(json.dumps({"update": 4000}))
     got = cells.load_trained("O-Xt", 12, tmp_path)
     assert torch.equal(got.sensory.fc1.weight, x.sensory.fc1.weight)
+
+
+mint = _load("exp080_mint", EXP / "mint.py")
+
+
+class FakeDistance:
+    """A deterministic stand-in for the BFS table. Mint plumbing does not care whether a label
+    is physically right, only that it is the provider's answer for that state."""
+
+    def distance(self, s):
+        return sum(i * int(v) for i, v in enumerate(s)) % 15
+
+
+def _probe(n=5, seed=99):
+    states = vi.random_walk_states(n, 6, random.Random(seed), N_ACTIONS, set())
+    return [(s, 7 + i % 5) for i, s in enumerate(states)]
+
+
+def _fake_mint(root, seed, n_blocks=4, block=8, max_len=6, probe=None):
+    fd = FakeDistance()
+    probe = _probe() if probe is None else probe
+    states, labels = mint.draw_blocks(n_blocks, block, max_len, seed, set(), fd.distance)
+    ls, ld = mint.leaf_table(probe, fd.distance)
+    mint.write_mint(root, seed, states, labels, probe, ls, ld,
+                    {"seed": seed, "n_blocks": n_blocks, "block": block, "max_len": max_len})
+    return mint.read_mint(root, seed)
+
+
+def test_draw_blocks_is_random_walk_states_called_once_per_block():
+    """Catches draws that are not the library's walks in update order (one call per block from
+    one random.Random(seed)), or labels that are not the provider's."""
+    fd = FakeDistance()
+    states, labels = mint.draw_blocks(3, 5, 7, 4, set(), fd.distance)
+    rng = random.Random(4)
+    want = [s for _ in range(3) for s in vi.random_walk_states(5, 7, rng, N_ACTIONS, set())]
+    assert states.dtype == np.uint8 and states.shape == (15, 24)
+    assert [tuple(int(x) for x in r) for r in states] == want
+    assert labels.dtype == np.uint8 and labels.tolist() == [fd.distance(s) for s in want]
+
+
+def test_draw_blocks_never_returns_an_excluded_state():
+    """Catches an exclusion that is ignored. The control draw proves the excluded states are ones
+    the walks actually reach, so the assertion can fail."""
+    fd = FakeDistance()
+    probe = [(apply_move(SOLVED, a), 7) for a in range(N_ACTIONS)]
+    leaves = cells.leaf_exclusion(probe)
+    control, _ = mint.draw_blocks(20, 50, 4, 0, set(), fd.distance)
+    assert sum(tuple(int(x) for x in r) in leaves for r in control) > 50
+    states, _ = mint.draw_blocks(20, 50, 4, 0, leaves, fd.distance)
+    assert not any(tuple(int(x) for x in r) in leaves for r in states)
+
+
+def test_draw_blocks_refuses_an_unlabelled_state():
+    """Catches a bounded provider silently minting None (stored as 0) for a far state."""
+    with pytest.raises(SystemExit, match="no distance"):
+        mint.draw_blocks(1, 4, 5, 0, set(), lambda s: None)
+
+
+def test_mint_round_trips_probe_and_leaf_distances(tmp_path):
+    """Catches a probe whose order or labels change on disk (leaf_rank_margin consumes its
+    generator in probe order), or leaf keys that do not match what tree_levels produces."""
+    probe = _probe()
+    m = _fake_mint(tmp_path, 12, probe=probe)
+    assert m.probe == probe
+    assert all(type(x) is int for x in m.probe[0][0]) and type(m.probe[0][1]) is int
+    leaf = tree_levels(probe[0][0], 3, N_ACTIONS)[3][17]
+    assert m.leaf_dist[leaf] == FakeDistance().distance(leaf)
+    assert len(m.leaf_dist) == len(cells.leaf_exclusion(probe))
+    assert m.meta["sha256"] == m.sha and m.seed == 12
+
+
+def test_read_mint_refuses_a_tampered_file(tmp_path):
+    """Catches training on a mint whose arrays are not the ones its sidecar describes (a partial
+    write, or a file swapped after a re-mint)."""
+    _fake_mint(tmp_path, 12)
+    npz = mint.mint_dir(tmp_path) / mint.npz_name(12)
+    z = dict(np.load(npz))
+    z["labels"] = z["labels"].copy()
+    z["labels"][0] = (int(z["labels"][0]) + 1) % 15
+    np.savez(npz, **z)
+    with pytest.raises(SystemExit, match="sha256"):
+        mint.read_mint(tmp_path, 12)
+
+
+def test_read_mint_refuses_a_missing_mint_or_a_wrong_seed(tmp_path):
+    """Catches training a seed on another seed's labels, or on nothing."""
+    with pytest.raises(SystemExit, match="mint.py"):
+        mint.read_mint(tmp_path, 12)
+    _fake_mint(tmp_path, 12)
+    d = mint.mint_dir(tmp_path)
+    (d / mint.npz_name(13)).write_bytes((d / mint.npz_name(12)).read_bytes())
+    (d / mint.meta_name(13)).write_text((d / mint.meta_name(12)).read_text())
+    with pytest.raises(SystemExit, match="seed 12"):
+        mint.read_mint(tmp_path, 13)
+
+
+def test_mint_is_pending_until_its_sidecar_exists(tmp_path):
+    """Catches a relaunch that skips a seed whose mint was killed after the arrays and before
+    the sidecar (the 03:31 restart)."""
+    _fake_mint(tmp_path, 12)
+    d = mint.mint_dir(tmp_path)
+    (d / mint.npz_name(13)).write_bytes(b"partial")
+    assert mint.pending_seeds([12, 13], tmp_path) == [13]
+    assert not list(d.glob("*.tmp*"))
+
+
+def test_mint_seed_excludes_probe_leaves_and_records_its_settings(tmp_path, monkeypatch):
+    """Catches the glue dropping the probe leaves from the exclusion, or a sidecar that does not
+    state the draw it holds."""
+    probe = [(apply_move(SOLVED, a), 7) for a in range(N_ACTIONS)]
+    leaves = cells.leaf_exclusion(probe)
+    # mint.py loads its own copy of cells.py, so patch that copy.
+    monkeypatch.setattr(mint.cells, "probe_set", lambda seed, provider: list(probe))
+    monkeypatch.setattr(mint.cells, "exclusion_set", lambda seed, provider: set())
+    meta = mint.mint_seed(12, tmp_path, n_blocks=20, block=50, max_len=4, provider=FakeDistance())
+    m = mint.read_mint(tmp_path, 12)
+    assert not any(tuple(int(x) for x in r) in leaves for r in m.states)
+    assert m.probe == probe and set(m.leaf_dist) == leaves
+    for k, v in {"seed": 12, "n_blocks": 20, "block": 50, "max_len": 4,
+                 "rng": "random.Random(seed)", "n_probe": 6, "n_leaves": len(leaves)}.items():
+        assert meta[k] == v and m.meta[k] == v
+    assert meta["n_exclude"] == len(leaves | {s for s, _ in probe})
+    assert sum(meta["label_hist"].values()) == 1000
