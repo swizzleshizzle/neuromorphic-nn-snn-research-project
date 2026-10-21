@@ -440,3 +440,95 @@ def test_pending_jobs_skips_finished_runs_and_keeps_train_order(tmp_path):
         ("O-Xt", 12), ("O-Xt", 13), ("O-Xf", 13), ("O-raw", 12), ("O-raw", 13)]
     args = train.build_parser().parse_args(["--n-updates", "4000"])
     assert args.arms == list(cells.TRAIN_ORDER)
+
+
+ev = _load("exp080_evaluate", EXP / "evaluate.py")
+
+
+def test_gate0_cell_is_xs_gate_l_through_the_mint(tmp_path):
+    """Catches a Gate 0 that measures X some other way than the arms are measured (other probe,
+    other leaf distances, other generator), so equality with EXP-075 would not license the X
+    side of the claims."""
+    _fake_x(tmp_path / "x", 12)
+    m = _fake_mint(tmp_path / "m", 12)
+    rec = ev.gate0_cell(12, tmp_path / "m", tmp_path / "out", x_root=tmp_path / "x")
+    x = cells.e75.load_judge("X", 12, tmp_path / "x")
+    want = gate_l.leaf_rank_margin(x, m.probe, m.leaf_dist.__getitem__, 12, N_ACTIONS)
+    on_disk = json.loads((tmp_path / "out" / ev.gate0_record_name(12)).read_text())
+    assert on_disk["gate_l"] == json.loads(json.dumps(want))
+    assert (on_disk["kind"], on_disk["seed"], on_disk["mint_sha"], on_disk["judge_updates"]) == (
+        "gate0-X", 12, m.sha, 4000)
+    assert rec["gate_l"] == want
+
+
+def _spy_search(monkeypatch, n_states=7):
+    calls = {}
+
+    def fake_cell(depth, seed):
+        calls["cell"] = (depth, seed)
+        return "agent", "head", [SOLVED] * n_states, 5 + seed
+
+    def fake_eval(agent, head, states, **kw):
+        calls["eval"] = dict(kw, n=len(states), agent=agent, head=head)
+        return {"success_rate": 0.5, "solved": 1, "n": len(states), "mode": kw["mode"],
+                "k": kw["k"], "k_goal": kw["k_goal"], "no_revisit": kw["no_revisit"],
+                "first_fire_len": {"4": 2}, "mean_steps": 3.0, "optimality": 0.9}
+
+    monkeypatch.setattr(ev.e75, "load_cell", fake_cell)
+    monkeypatch.setattr(ev, "evaluate_lookahead", fake_eval)
+    return calls
+
+
+def _trained_oxt(tmp_path, seed=12, update=4000):
+    x = _fake_x(tmp_path / "x", seed)
+    ck = cells.ckpt_dir("O-Xt", seed, tmp_path / "j")
+    ck.mkdir(parents=True)
+    torch.save(x.state_dict(), ck / "judge.pt")
+    (ck / "state.json").write_text(json.dumps({"update": update}))
+    return x
+
+
+def test_search_cell_is_j4v_with_the_oxt_judge(tmp_path, monkeypatch):
+    """Catches a search arm that is not EXP-076's J4V (mode C, k 4, goal check at 4,
+    no-revisit, depth 11), runs another judge, or seeds its streams differently."""
+    x = _trained_oxt(tmp_path)
+    calls = _spy_search(monkeypatch)
+    rec = ev.run_cell(12, tmp_path / "out", judge_dir=tmp_path / "j")
+    kw = calls["eval"]
+    assert calls["cell"] == (11, 12)
+    assert (kw["depth"], kw["mode"], kw["k"], kw["k_goal"], kw["no_revisit"]) == (
+        11, "C", 4, 4, True)
+    assert (kw["rng_seed"], kw["imag_seed"], kw["n"]) == (17, 17, 7)
+    assert torch.equal(kw["critic"].judge.sensory.fc1.weight, x.sensory.fc1.weight)
+    on_disk = json.loads((tmp_path / "out" / ev.record_name(12)).read_text())
+    assert (on_disk["arm"], on_disk["judge"], on_disk["depth"], on_disk["seed"],
+            on_disk["judge_seed"], on_disk["judge_updates"], on_disk["fired4"],
+            on_disk["limit_states"]) == ("J4V-O-Xt", "O-Xt", 11, 12, 12, 4000, 2, None)
+    assert rec["success_rate"] == 0.5
+
+
+def test_timing_cell_runs_a_pilot_judge_on_another_seeds_cell_and_is_marked(tmp_path, monkeypatch):
+    """Catches a timing record that could pass for a claim record: it must name both seeds and
+    carry limit_states, which the aggregator refuses."""
+    _trained_oxt(tmp_path, seed=12)
+    calls = _spy_search(monkeypatch, n_states=30)
+    rec = ev.run_cell(0, tmp_path / "out", judge_dir=tmp_path / "j", judge_seed=12,
+                      limit_states=20, name=ev.time_record_name(12, 0))
+    assert calls["cell"] == (11, 0) and calls["eval"]["n"] == 20
+    assert (rec["seed"], rec["judge_seed"], rec["limit_states"]) == (0, 12, 20)
+    assert (tmp_path / "out" / "exp080_time_J4V-O-Xt_j12_c0.json").exists()
+    assert not (tmp_path / "out" / ev.record_name(0)).exists()
+
+
+def test_search_refuses_an_unfinished_oxt_judge(tmp_path, monkeypatch):
+    """Catches a search cell evaluated from a partly trained judge."""
+    _trained_oxt(tmp_path, update=250)
+    _spy_search(monkeypatch)
+    with pytest.raises(SystemExit, match="update 250"):
+        ev.run_cell(12, tmp_path / "out", judge_dir=tmp_path / "j")
+
+
+def test_pending_search_skips_finished_cells(tmp_path):
+    """Catches a relaunch that re-runs finished search cells."""
+    (tmp_path / ev.record_name(3)).write_text("{}")
+    assert ev.pending_search([2, 3, 4], tmp_path) == [2, 4]
