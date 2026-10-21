@@ -112,6 +112,7 @@ Get-Content $log
 if (Test-Path $errLog) { Get-Content $errLog }
 "max peak commit MB per python process = $maxEach"
 "max total commit MB across python processes = $maxTotal"
+if ($Phase -eq "pilot-train" -and $maxEach -lt 500) { "WARN: peak commit per python process $maxEach MB is under 500; the memory reading is not the worker" }
 if ($proc.ExitCode -ne 0) { Write-Error "driver exited $($proc.ExitCode); do not aggregate."; exit 1 }
 "PHASE OK"
 exit 0

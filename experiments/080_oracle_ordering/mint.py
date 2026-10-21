@@ -164,11 +164,23 @@ def _git_commit() -> str:
         return "unknown"
 
 
+_PROVIDER = None
+
+
+def _unbounded_provider():
+    """The unbounded BFS table, built on first use and held for the life of the process, so a
+    mint worker builds it once and not once per seed."""
+    global _PROVIDER
+    if _PROVIDER is None:
+        _PROVIDER = ExactBFSDistance(max_depth=None)
+    return _PROVIDER
+
+
 def mint_seed(seed, out_dir, n_blocks=cells.N_UPDATES, block=cells.BATCH, max_len=cells.MAX_LEN,
               provider=None) -> dict:
     t0 = time.time()
     if provider is None:
-        provider = ExactBFSDistance(max_depth=None)
+        provider = _unbounded_provider()
     probe = cells.probe_set(seed, provider)
     excl = cells.oracle_exclusion(seed, provider, probe)
     states, labels = draw_blocks(n_blocks, block, max_len, seed, excl, provider.distance)

@@ -208,8 +208,9 @@ def _fake_mint(root, seed, n_blocks=4, block=8, max_len=6, probe=None):
 
 
 def test_draw_blocks_is_random_walk_states_called_once_per_block():
-    """Catches draws that are not the library's walks in update order (one call per block from
-    one random.Random(seed)), or labels that are not the provider's."""
+    """Catches draws that are not the library's walks taken in order from one random.Random(seed),
+    or labels that are not the provider's. It cannot tell one call of n_blocks*block from
+    n_blocks calls of block: the two consume the generator identically."""
     fd = FakeDistance()
     states, labels = mint.draw_blocks(3, 5, 7, 4, set(), fd.distance)
     rng = random.Random(4)
@@ -217,6 +218,20 @@ def test_draw_blocks_is_random_walk_states_called_once_per_block():
     assert states.dtype == np.uint8 and states.shape == (15, 24)
     assert [tuple(int(x) for x in r) for r in states] == want
     assert labels.dtype == np.uint8 and labels.tolist() == [fd.distance(s) for s in want]
+
+
+def test_unbounded_provider_is_built_once_per_process(monkeypatch):
+    """Catches a mint worker rebuilding the 97 s BFS table for every seed it mints."""
+    built = []
+
+    class Fake:
+        def __init__(self, max_depth):
+            built.append(max_depth)
+
+    monkeypatch.setattr(mint, "ExactBFSDistance", Fake)
+    monkeypatch.setattr(mint, "_PROVIDER", None)
+    a, b = mint._unbounded_provider(), mint._unbounded_provider()
+    assert a is b and built == [None]
 
 
 def test_draw_blocks_never_returns_an_excluded_state():
@@ -438,6 +453,26 @@ def test_training_never_builds_a_bfs_table(tmp_path, monkeypatch):
     _small("O-raw", tmp_path)
 
 
+def test_a_run_resumed_after_its_final_checkpoint_keeps_its_loss(tmp_path):
+    """Catches a record that loses loss_last (None) when the restart lands between the last
+    checkpoint and the record write."""
+    first = _small("O-Xt", tmp_path, n_updates=3, probe_every=2)
+    (tmp_path / "out" / cells.record_name("O-Xt", 12)).unlink()
+    second = _small("O-Xt", tmp_path, n_updates=3, probe_every=2)
+    assert second["resumed_from"] == 3
+    assert first["loss_last"] is not None and second["loss_last"] == first["loss_last"]
+
+
+def test_checkpoints_leave_no_tmp_files(tmp_path):
+    """Catches the checkpoint writes going back to in-place torch.save (a kill mid-write would
+    leave a truncated judge.pt)."""
+    _small("O-Xt", tmp_path)
+    _small("O-raw", tmp_path)
+    assert not list((tmp_path / "out").rglob("*.tmp"))
+    src = (EXP / "train.py").read_text()
+    assert "torch.save(judge" not in src and "torch.save(opt" not in src
+
+
 def test_pending_jobs_skips_finished_runs_and_keeps_train_order(tmp_path):
     """Catches a relaunch that retrains finished runs or puts the long arm last."""
     (tmp_path / cells.record_name("O-Xf", 12)).write_text("{}")
@@ -581,6 +616,39 @@ def _write_train(out, shifts, seeds=range(12), pilot=False):
             (out / cells.record_name(arm, s)).write_text(json.dumps(rec))
 
 
+def _shift_by(gl, deltas):
+    """A copy of a gate_l dict with the hit at each distance in `deltas` moved by its delta; the
+    overall margin moves by the n-weighted mean, so far-band and overall margins can differ."""
+    out = json.loads(json.dumps(gl))
+    total = sum(v["n"] for v in out["by_distance"].values())
+    for d, delta in deltas.items():
+        out["by_distance"][str(d)]["hit"] += delta
+        out["hit"] += delta * out["by_distance"][str(d)]["n"] / total
+        out["margin"] += delta * out["by_distance"][str(d)]["n"] / total
+    return out
+
+
+def _write_train_by(out, spec, seeds=range(12)):
+    """spec: {arm: {distance: delta}}."""
+    out.mkdir(parents=True, exist_ok=True)
+    for arm, deltas in spec.items():
+        for s in seeds:
+            rec = _train_rec(arm, s, _shift_by(_x75(s)["gate_l"], deltas))
+            (out / cells.record_name(arm, s)).write_text(json.dumps(rec))
+
+
+def _write_gate0(out, sha="s0"):
+    (out / ev.gate0_record_name(0)).write_text(
+        json.dumps({"gate_l": _x75(0)["gate_l"], "mint_sha": sha}))
+
+
+FAR, NEAR = (9, 10, 11), (7, 8)
+
+
+def _by(far_delta, near_delta):
+    return {**{d: far_delta for d in FAR}, **{d: near_delta for d in NEAR}}
+
+
 def test_bars_are_the_committed_x_records():
     """Catches a bar retyped wrong or computed from other records: Gate T is half X's 12-seed
     mean overall margin, the stop bar is X's pilot far-band mean plus 0.05 (spec sections 5, 6)."""
@@ -698,7 +766,7 @@ def test_stage_gates_reads_the_registered_contrasts(tmp_path, monkeypatch):
     """Catches claims paired against the wrong arm, Gate V built from the wrong arm, or a chain
     signal that would run the search when Claim 1 is not CONFIRMED."""
     monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
-    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": _x75(0)["gate_l"]}))
+    _write_gate0(tmp_path)
     _write_train(tmp_path, {"O-raw": 0.30, "O-Xf": 0.01, "O-Xt": 0.08})
     res = agg.stage_gates(tmp_path)
     assert res["g0"] == "PASS" and res["v"]["pass"]
@@ -718,10 +786,90 @@ def test_stage_gates_reads_the_registered_contrasts(tmp_path, monkeypatch):
 def test_stage_gates_voids_the_claims_when_gate_v_fails(tmp_path, monkeypatch):
     """Catches claims read when the protocol could not show a gain."""
     monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
-    (tmp_path / ev.gate0_record_name(0)).write_text(json.dumps({"gate_l": _x75(0)["gate_l"]}))
+    _write_gate0(tmp_path)
     _write_train(tmp_path, {"O-raw": 0.01, "O-Xf": 0.2, "O-Xt": 0.2})
     res = agg.stage_gates(tmp_path)
     assert not res["v"]["pass"] and res["c1"][0] == "VOID" and res["c2"][0] == "VOID"
+
+
+def test_untrained_oxt_voids_claim_1_and_prints_its_own_verdict(tmp_path, monkeypatch):
+    """Catches Gate T that cannot fail: O-Xt's overall margin (about 0.02) is under the bar, so
+    Claim 1 must be VOID, the search not run, and the verdict the spec's own row."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    _write_gate0(tmp_path)
+    _write_train(tmp_path, {"O-raw": 0.30, "O-Xf": 0.08, "O-Xt": -0.25})
+    res = agg.stage_gates(tmp_path)
+    assert res["t"] == {"O-raw": True, "O-Xf": True, "O-Xt": False}
+    assert res["g0"] == "PASS" and res["v"]["pass"]
+    assert res["c1"][0] == "VOID" and res["c2"][0] == "CONFIRMED"
+    assert res["run_search"] is False
+    lines = "\n".join(agg.format_stage_gates(res))
+    assert re.search(CHAIN_NO_SEARCH, lines, re.I) and "GATE T (trained) O-Xt: FAIL" in lines
+    assert agg.verdict(res["g0"] == "PASS", res["v"]["pass"], res["t"], res["c1"][0],
+                       None) == "UNRESOLVED (O-Xt UNTRAINED)"
+
+
+def test_untrained_oraw_stops_the_search_even_when_claim_1_is_confirmed(tmp_path, monkeypatch):
+    """Catches a search run on a verdict that will print UNRESOLVED: O-raw is far-band strong
+    (Gate V passes) but overall weak (Gate T fails), and Claim 1 itself reads CONFIRMED."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    _write_gate0(tmp_path)
+    _write_train_by(tmp_path, {"O-raw": _by(0.15, -0.60), "O-Xf": _by(0.08, 0.08),
+                               "O-Xt": _by(0.08, 0.08)})
+    res = agg.stage_gates(tmp_path)
+    assert res["v"]["pass"] and res["t"] == {"O-raw": False, "O-Xf": True, "O-Xt": True}
+    assert res["c1"][0] == "CONFIRMED"
+    assert res["run_search"] is False
+    assert agg.verdict(True, True, res["t"], res["c1"][0], None) == "UNRESOLVED"
+
+
+def test_claims_and_gate_v_read_the_far_band_not_the_overall_margin(tmp_path, monkeypatch):
+    """Catches far and overall swapped inside claim() or the Gate V wiring, which a uniform shift
+    cannot see. O-Xt has no far-band gain but a big overall one (Claim 1 must be REFUTED); in the
+    second case O-raw has the reverse (Gate V must fail, the claims VOID)."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    _write_gate0(tmp_path)
+    _write_train_by(tmp_path, {"O-raw": _by(0.30, 0.30), "O-Xf": _by(0.0, 0.0),
+                               "O-Xt": _by(0.0, 0.30)})
+    res = agg.stage_gates(tmp_path)
+    assert res["t"]["O-Xt"] and res["c1"][0] == "REFUTED" and res["c1"][2] == pytest.approx(0.0)
+    _write_train_by(tmp_path, {"O-raw": _by(0.01, 0.70)})
+    res = agg.stage_gates(tmp_path)
+    assert res["t"]["O-raw"] and not res["v"]["pass"]
+    assert res["v"]["mean"] == pytest.approx(0.01)
+    assert res["c1"][0] == "VOID" and res["c2"][0] == "VOID"
+
+
+def test_stage_gates_refuses_a_gate0_certified_on_another_mint(tmp_path, monkeypatch):
+    """Catches Gate 0 passing for a mint that seed 0's arms did not train on."""
+    monkeypatch.setattr(agg, "AMENDMENT", {"date": "2026-10-22"})
+    _write_gate0(tmp_path, sha="remint")
+    _write_train(tmp_path, {"O-raw": 0.30, "O-Xf": 0.08, "O-Xt": 0.08})
+    with pytest.raises(SystemExit, match="gate0 record's mint_sha"):
+        agg.stage_gates(tmp_path)
+    _write_gate0(tmp_path)
+    assert agg.stage_gates(tmp_path)["g0"] == "PASS"
+
+
+def test_train_record_refuses_a_probe_of_another_size_than_xs():
+    """Catches a truncated or mis-sized minted probe on a seed Gate 0 never sees: n per distance
+    must equal X's committed record for that seed."""
+    gl = _x75(0)["gate_l"]
+    agg.check_train_record(_train_rec("O-Xt", 0, gl), "t", "O-Xt", 0)
+    bad = json.loads(json.dumps(gl))
+    bad["by_distance"]["10"]["n"] -= 1
+    with pytest.raises(SystemExit, match="differs from X's committed"):
+        agg.check_train_record(_train_rec("O-Xt", 0, bad), "t", "O-Xt", 0)
+    pgl = _x75(12, True)["gate_l"]
+    agg.check_train_record(_train_rec("O-Xt", 12, pgl), "p", "O-Xt", 12)
+    with pytest.raises(SystemExit, match="differs from X's committed"):
+        agg.check_train_record(_train_rec("O-Xt", 12, bad), "p", "O-Xt", 12)
+
+
+def test_report_prints_none_for_a_resumed_runs_missing_loss():
+    """Catches the Reported section formatting a None loss_last."""
+    assert agg._fmt(None) == "None" and agg._fmt(0.5) == "0.5000"
+    assert agg.a75._mean_or_none(r["loss_last"] for r in ({"loss_last": None},)) is None
 
 
 def test_pilot_report_states_the_stop_rule(tmp_path):
@@ -752,6 +900,8 @@ def test_launcher_phases_guard_and_memory_sampling():
     assert '"--n-updates", $Updates' in text and "$Updates = 4000" in text
     assert '"--time"' in text and '"--gate0"' in text and '"--search"' in text
     assert "--pilot" in text
+    assert ('if ($Phase -eq "pilot-train" -and $maxEach -lt 500)' in text
+            and "under 500; the memory reading is not the worker" in text)
 
 
 def test_chain_order_and_gate_regexes_match_the_aggregator():
@@ -762,6 +912,10 @@ def test_chain_order_and_gate_regexes_match_the_aggregator():
     assert CHAIN_GATE0 in text and CHAIN_SEARCH in text and CHAIN_NO_SEARCH in text
     assert "$code = $LASTEXITCODE" in text and "if ($code -ne 0)" in text
     assert "--stage gate0" in text and "--stage gates" in text
+    assert ('[ValidateSet("mint","gate0","gate0check","train","gates","search")]'
+            '[string]$From') in text
+    assert "$gcode = $LASTEXITCODE" in text and "if ($gcode -ne 0)" in text
+    assert text.index("if ($gcode -ne 0)") < text.index('-notmatch "GATE 0')
     for k in ("mint_workers", "train_workers", "eval_workers"):
         assert k in text
     assert re.search(CHAIN_GATE0, agg.format_gate0("PASS"), re.I)

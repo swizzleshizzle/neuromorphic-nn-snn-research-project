@@ -3,7 +3,7 @@
 # CONFIRMED). Re-runnable with -From: every phase skips finished work and training resumes.
 # Launch it with OS-level redirection (playbook section 3):
 #   ssh -n laptop 'cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\experiments\080_oracle_ordering\chain080.ps1 > C:\Users\mlgbr\chain080.out 2>&1"'
-param([string]$From = "mint")
+param([ValidateSet("mint","gate0","gate0check","train","gates","search")][string]$From = "mint")
 $repo = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project"
 $py = Join-Path $repo ".venv\Scripts\python.exe"
 $l = Join-Path $repo "experiments\080_oracle_ordering\launch080.ps1"
@@ -27,7 +27,9 @@ foreach ($p in $order) {
     if (-not $go) { continue }
     if ($p -eq "gate0check") {
         $g = & $py $agg --stage gate0 2>&1 | Out-String
+        $gcode = $LASTEXITCODE
         Say ("gate0: " + $g.Trim())
+        if ($gcode -ne 0) { Say "STOP: the gate0 stage exited $gcode"; exit 1 }
         if ($g -notmatch "GATE 0 \(X seed 0 re-measured through the mint\): PASS") { Say "STOP: Gate 0 did not pass, the verdict is UNRESOLVED"; exit 2 }
         continue
     }

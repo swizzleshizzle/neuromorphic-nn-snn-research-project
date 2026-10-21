@@ -101,6 +101,12 @@ def check_train_record(rec, name, arm, seed) -> None:
     for k, v in (RAW_SETTINGS if arm == "O-raw" else X_SETTINGS).items():
         if rec.get(k) != v:
             raise SystemExit(f"{name}: {k} is {rec.get(k)!r}, spec says {v!r}")
+    got_n = {k: v["n"] for k, v in rec["gate_l"]["by_distance"].items()}
+    want_n = {k: v["n"] for k, v in _x_train(seed, seed in cells.PILOT_SEEDS)["gate_l"]
+              ["by_distance"].items()}
+    if got_n != want_n:
+        raise SystemExit(f"{name}: gate_l n per distance {got_n} differs from X's committed "
+                         f"{want_n}; the minted probe is not X's")
     drift = rec.get("encoder_drift")
     if arm == "O-Xf" and drift != 0.0:
         raise SystemExit(f"{name}: O-Xf's region moved (encoder_drift {drift!r}); the freeze "
@@ -187,6 +193,15 @@ def gate0(out) -> str:
     return "PASS" if got == _x_train(0)["gate_l"] else "FAIL"
 
 
+def check_gate0_mint(out, recs) -> None:
+    """Gate 0 certified the mint that seed 0's arms trained on (a re-mint after Gate 0 would
+    leave it certifying another file)."""
+    g = json.loads((Path(out) / ev.gate0_record_name(0)).read_text()).get("mint_sha")
+    shas = {a: recs[a][0]["mint_sha"] for a in recs}
+    if any(g != v for v in shas.values()):
+        raise SystemExit(f"gate0 record's mint_sha {g!r} is not seed 0's training mint {shas}")
+
+
 def format_gate0(v: str) -> str:
     return f"GATE 0 (X seed 0 re-measured through the mint): {v}"
 
@@ -197,6 +212,7 @@ def stage_gates(out) -> dict:
     g0 = gate0(out)
     recs = {a: {s: read_train(out, a, s) for s in SEEDS} for a in ARMS}
     check_mint_pairing(recs)
+    check_gate0_mint(out, recs)
     x_far = [far(_x_train(s)) for s in SEEDS]
     v = gate_v([far(recs["O-raw"][s]) for s in SEEDS], x_far)
     t = {a: gate_t([overall(recs[a][s]) for s in SEEDS]) for a in ARMS}
@@ -209,7 +225,7 @@ def stage_gates(out) -> dict:
 
     c1, c2 = claim("O-Xt"), claim("O-Xf")
     return {"g0": g0, "v": v, "t": t, "t_mean": t_mean, "c1": c1, "c2": c2,
-            "run_search": c1[0] == "CONFIRMED", "recs": recs, "x_far": x_far}
+            "run_search": c1[0] == "CONFIRMED" and t["O-raw"], "recs": recs, "x_far": x_far}
 
 
 def format_stage_gates(res) -> list[str]:
@@ -265,6 +281,10 @@ def pilot_report(pilot_dir=cells.PILOT_OUT) -> dict:
 
 def _mean(recs, field):
     return st.mean(r[field] for r in recs.values())
+
+
+def _fmt(v) -> str:
+    return "None" if v is None else f"{v:.4f}"
 
 
 def main() -> None:
@@ -328,7 +348,7 @@ def main() -> None:
             f"J@{dd} {st.mean(res['recs'][a][s]['final_probe']['mean_j_by_distance'][dd] for s in SEEDS):.3f}"
             for dd in ("9", "10", "11"))
         print(f"  {a}: spearman_7_11 {sp:.4f}  {mj}  loss_last "
-              f"{_mean(res['recs'][a], 'loss_last'):.4f}")
+              f"{_fmt(a75._mean_or_none(r['loss_last'] for r in res['recs'][a].values()))}")
     if srecs is not None:
         s79e = {s: json.loads((cells.E79_OUT / f"exp079_J4V-S_d11_s{s}.json").read_text())
                 for s in SEEDS}

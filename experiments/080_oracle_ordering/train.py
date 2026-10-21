@@ -62,6 +62,13 @@ def _write_json(path: Path, obj) -> None:
     os.replace(tmp, path)
 
 
+def _save_atomic(obj, path: Path) -> None:
+    """torch.save to a tmp name then os.replace, so a kill never leaves a half-written file."""
+    tmp = path.with_name(path.name + ".tmp")
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
 def _block(m, u, batch):
     """Update u's states and labels: rows u*batch to (u+1)*batch of the mint."""
     lo, hi = u * batch, (u + 1) * batch
@@ -82,7 +89,7 @@ def train_x_arm(arm, judge, m, *, n_updates, batch, probe_every, seed, ckpt_dir,
     state_path = ck / "state.json"
     opt = cells.optimizer_for(arm, judge)
     gen = torch.Generator().manual_seed(seed)
-    start, probes, losses = 0, [], []
+    start, probes, losses, stored_loss = 0, [], [], None
     if state_path.exists():
         state = json.loads(state_path.read_text())
         if state.get("mint_sha") != m.sha:
@@ -93,8 +100,10 @@ def train_x_arm(arm, judge, m, *, n_updates, batch, probe_every, seed, ckpt_dir,
         opt.load_state_dict(torch.load(ck / "opt.pt"))
         gen.set_state(torch.tensor(state["generator_state"], dtype=torch.uint8))
         start, probes, losses = state["update"], state["probes"], state["losses"]
+        stored_loss = state.get("loss_last")
     t0 = time.time()
-    loss_last = None
+    # A run resumed at its final checkpoint trains nothing and returns the stored last loss.
+    loss_last = stored_loss if start >= n_updates else None
     for u in range(start, n_updates):
         xs, y = _block(m, u, batch)
         loss = F.mse_loss(judge(xs, gen), y)
@@ -106,9 +115,10 @@ def train_x_arm(arm, judge, m, *, n_updates, batch, probe_every, seed, ckpt_dir,
             pr = _probe(judge, m, seed)
             probes.append(pr)
             losses.append([u, loss_last])
-            torch.save(judge.state_dict(), ck / "judge.pt")
-            torch.save(opt.state_dict(), ck / "opt.pt")
+            _save_atomic(judge.state_dict(), ck / "judge.pt")
+            _save_atomic(opt.state_dict(), ck / "opt.pt")
             _write_json(state_path, {"arm": arm, "update": u + 1, "mint_sha": m.sha,
+                                     "loss_last": loss_last,
                                      "generator_state": gen.get_state().tolist(),
                                      "probes": probes, "losses": losses})
             log(f"{arm} s{seed} update {u}: loss {loss_last:.6f} "
@@ -144,7 +154,7 @@ def train_oraw(judge, m, *, n_states, epochs, batch, seed, ckpt_dir, log=print):
         losses.append([ep, loss_last])
         log(f"O-raw s{seed} epoch {ep}: loss {loss_last:.6f}")
     pr = _probe(judge, m, seed)
-    torch.save(judge.state_dict(), ck / "judge.pt")
+    _save_atomic(judge.state_dict(), ck / "judge.pt")
     _write_json(ck / "state.json", {"arm": "O-raw", "epochs": epochs, "mint_sha": m.sha})
     return {"updates": steps, "epochs": epochs, "resumed_from": 0, "wall_s": time.time() - t0,
             "loss_last": loss_last, "probes": [pr], "losses": losses, "final_probe": pr}
