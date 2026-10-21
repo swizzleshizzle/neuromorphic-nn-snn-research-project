@@ -296,3 +296,147 @@ def test_mint_seed_excludes_probe_leaves_and_records_its_settings(tmp_path, monk
         assert meta[k] == v and m.meta[k] == v
     assert meta["n_exclude"] == len(leaves | {s for s, _ in probe})
     assert sum(meta["label_hist"].values()) == 1000
+
+
+train = _load("exp080_train", EXP / "train.py")
+gate_l = _load("exp074_gate_l", REPO / "experiments" / "074_wide_judge" / "gate_l.py")
+
+
+def _small(arm, tmp_path, n_updates=2, mint_root=None, **kw):
+    """One tiny training run on seed 12: fake X layout, fake mint of 4 blocks of 8."""
+    if not (tmp_path / "x").exists():
+        _fake_x(tmp_path / "x", 12)
+    if mint_root is None:
+        mint_root = tmp_path / "m"
+        if not (mint.mint_dir(mint_root) / mint.meta_name(12)).exists():
+            _fake_mint(mint_root, 12)
+    args = dict(n_updates=n_updates, batch=8, probe_every=1, raw_states=32, raw_epochs=2,
+                raw_batch=8, mint_root=mint_root, x_root=tmp_path / "x", enc_root=tmp_path / "x")
+    args.update(kw)
+    return train.run(arm, 12, tmp_path / "out", **args)
+
+
+def test_oxt_trains_its_region_and_oxf_does_not(tmp_path):
+    """Catches a freeze that does not hold (O-Xf's region moves) and a gradient that never
+    arrives (O-Xt's region does not), CLAUDE.md's MemoryReadout lesson; and a head that never
+    trains."""
+    rf = _small("O-Xf", tmp_path)
+    rt = _small("O-Xt", tmp_path)
+    assert rf["encoder_drift"] == 0.0
+    assert rt["encoder_drift"] > 0.0
+    f = cells.load_trained("O-Xf", 12, tmp_path / "out", required=2)
+    t = cells.load_trained("O-Xt", 12, tmp_path / "out", required=2)
+    fresh = cells.make_oxt(12, tmp_path / "x")
+    assert not torch.equal(f.head[0].weight, fresh.head[0].weight)
+    assert not torch.equal(t.head[0].weight, fresh.head[0].weight)
+    x = c75.ckpt_dir("X", 12, tmp_path / "x") / "judge.pt"
+    assert torch.equal(f.sensory.fc1.weight, torch.load(x)["sensory.fc1.weight"])
+
+
+def test_record_carries_the_mint_and_a_gate_l_from_minted_distances(tmp_path):
+    """Catches a record that cannot be paired across arms (no mint sha), or a Gate L that is not
+    leaf_rank_margin on the minted probe and leaf distances."""
+    rec = _small("O-Xt", tmp_path)
+    m = mint.read_mint(tmp_path / "m", 12)
+    on_disk = json.loads((tmp_path / "out" / cells.record_name("O-Xt", 12)).read_text())
+    assert on_disk["mint_sha"] == m.sha and on_disk["mint_meta"]["n_blocks"] == 4
+    assert (on_disk["arm"], on_disk["seed"], on_disk["n_updates"], on_disk["batch"]) == (
+        "O-Xt", 12, 2, 8)
+    j = cells.load_trained("O-Xt", 12, tmp_path / "out", required=2)
+    want = gate_l.leaf_rank_margin(j, m.probe, m.leaf_dist.__getitem__, 12, N_ACTIONS)
+    assert on_disk["gate_l"] == json.loads(json.dumps(want))
+    assert on_disk["gate_l"]["n"] == 5 and rec["gate_l"] == want
+
+
+def test_training_uses_block_u_at_update_u(tmp_path, monkeypatch):
+    """Catches O-Xf and O-Xt reading different states at the same update (they must be paired on
+    identical draws), or blocks read out of order."""
+    seen = []
+    real = train._block
+
+    def spy(m, u, batch):
+        xs, y = real(m, u, batch)
+        seen.append((u, xs[0].tolist()))
+        return xs, y
+
+    monkeypatch.setattr(train, "_block", spy)
+    _small("O-Xf", tmp_path, n_updates=3)
+    m = mint.read_mint(tmp_path / "m", 12)
+    assert seen == [(u, m.states[u * 8].tolist()) for u in range(3)]
+
+
+def test_resume_equals_a_straight_run(tmp_path):
+    """Catches a resume that restarts the data, the optimizer or the encoding generator, so a
+    run interrupted by the 03:31 restart is not the run it would have been."""
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    for d in (a, b):
+        _fake_x(d / "x", 12)
+        _fake_mint(d / "m", 12)
+    _small("O-Xt", a, n_updates=4, probe_every=2)
+    _small("O-Xt", b, n_updates=2, probe_every=2)
+    rb = _small("O-Xt", b, n_updates=4, probe_every=2)
+    assert rb["resumed_from"] == 2
+    ja = torch.load(cells.ckpt_dir("O-Xt", 12, a / "out") / "judge.pt")
+    jb = torch.load(cells.ckpt_dir("O-Xt", 12, b / "out") / "judge.pt")
+    assert all(torch.equal(ja[k], jb[k]) for k in ja)
+
+
+def test_resume_refuses_a_checkpoint_from_a_different_mint(tmp_path):
+    """Catches splicing two training sets into one judge after a seed is re-minted."""
+    _small("O-Xt", tmp_path, n_updates=1)
+    (tmp_path / "out" / cells.record_name("O-Xt", 12)).unlink()
+    other = tmp_path / "m2"
+    fd = FakeDistance()
+    states, labels = mint.draw_blocks(4, 8, 6, 777, set(), fd.distance)
+    probe = _probe()
+    ls, ld = mint.leaf_table(probe, fd.distance)
+    mint.write_mint(other, 12, states, labels, probe, ls, ld,
+                    {"seed": 12, "n_blocks": 4, "block": 8, "max_len": 6})
+    with pytest.raises(SystemExit, match="different mint"):
+        _small("O-Xt", tmp_path, n_updates=2, mint_root=other)
+
+
+def test_short_mint_is_refused_before_training(tmp_path):
+    """Catches a run that would index past its mint and train on a truncated last block."""
+    with pytest.raises(SystemExit, match="needs 40"):
+        _small("O-Xt", tmp_path, n_updates=5)
+    with pytest.raises(SystemExit, match="needs 64"):
+        _small("O-raw", tmp_path, raw_states=64)
+
+
+def test_oraw_trains_its_epochs_and_records_them(tmp_path):
+    """Catches O-raw training a different number of states or epochs than its record says, or a
+    record that a margin reader would mistake for a spiking arm."""
+    rec = _small("O-raw", tmp_path)
+    on_disk = json.loads((tmp_path / "out" / cells.record_name("O-raw", 12)).read_text())
+    assert (on_disk["raw_states"], on_disk["raw_epochs"], on_disk["raw_batch"],
+            on_disk["raw_hidden"]) == (32, 2, 8, 512)
+    assert on_disk["updates"] == 8 and len(on_disk["losses"]) == 2
+    assert "encoder_drift" not in on_disk and "n_updates" not in on_disk
+    j = cells.load_trained("O-raw", 12, tmp_path / "out", required=2)
+    assert not torch.equal(j.net[0].weight, cells.make_oraw(12).net[0].weight)
+    assert rec["gate_l"]["n"] == 5
+
+
+def test_training_never_builds_a_bfs_table(tmp_path, monkeypatch):
+    """Catches a training worker that loads the 1.9 GB table (spec section 3: the worker count is
+    set by the encoder alone)."""
+    from neuromorphic.envs import cube_distance
+
+    def boom(self, *a, **k):
+        raise AssertionError("training built a BFS table")
+
+    monkeypatch.setattr(cube_distance.ExactBFSDistance, "__init__", boom)
+    _small("O-Xt", tmp_path)
+    _small("O-raw", tmp_path)
+
+
+def test_pending_jobs_skips_finished_runs_and_keeps_train_order(tmp_path):
+    """Catches a relaunch that retrains finished runs or puts the long arm last."""
+    (tmp_path / cells.record_name("O-Xf", 12)).write_text("{}")
+    jobs = [(a, s) for a in cells.TRAIN_ORDER for s in (12, 13)]
+    assert train.pending_jobs(jobs, tmp_path) == [
+        ("O-Xt", 12), ("O-Xt", 13), ("O-Xf", 13), ("O-raw", 12), ("O-raw", 13)]
+    args = train.build_parser().parse_args(["--n-updates", "4000"])
+    assert args.arms == list(cells.TRAIN_ORDER)
