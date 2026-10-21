@@ -661,7 +661,8 @@ def test_bars_are_the_committed_x_records():
     assert round(agg.STOP_BAR, 5) == 0.14532
     assert (agg.CLAIM_ALPHA, agg.CLAIM_MIN, agg.GATE_V_ALPHA, agg.GATE_V_MIN, agg.SEARCH_ALPHA,
             agg.SEARCH_MIN) == (0.025, 0.05, 0.05, 0.05, 0.05, 0.03)
-    assert agg.AMENDMENT is None
+    assert agg.AMENDMENT == {"date": "2026-10-21", "mint_workers": 6, "train_workers": 6,
+                             "eval_workers": 6, "spec_section": 13}
 
 
 def test_claim_verdict_bands():

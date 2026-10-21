@@ -67,7 +67,8 @@ RAW_SETTINGS = {"raw_states": cells.RAW_STATES, "raw_epochs": cells.RAW_EPOCHS,
 
 # Set by the dated post-pilot amendment (spec section 6), before any seed 0-11 is minted: the
 # worker counts. The launcher refuses every phase but check and the pilot phases while it is None.
-AMENDMENT: dict | None = None
+AMENDMENT: dict | None = {"date": "2026-10-21", "mint_workers": 6, "train_workers": 6,
+                          "eval_workers": 6, "spec_section": 13}
 
 
 def require_amendment() -> None:

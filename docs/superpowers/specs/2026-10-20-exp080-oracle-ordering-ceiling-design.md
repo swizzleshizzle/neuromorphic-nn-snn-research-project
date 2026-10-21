@@ -214,3 +214,70 @@ J4V-S's (EXP-079).
   points there).
 - Searches other than J4V, depths other than 11 for the search arm.
 - Wider or different encoders.
+
+## 13. Amendment 2026-10-21: pilot results, worker counts and schedule (before any seed 0-11 is minted)
+
+The pilot (section 6: all three arms on seeds 12 and 13, laptop, checkout `005773e`, 2 mint
+workers and 3 training workers) ran 2026-10-21 01:14 to 03:04 laptop time with no restart.
+Records: `experiments/080_oracle_ordering/outputs_pilot/`. Numbers are from
+`aggregate.py --pilot-report`; X is EXP-075's pilot records on the same seeds and probe states.
+
+**The stop rule did not fire.** O-raw's mean pilot far-band margin is **0.3420**, above the
+0.14532 bar (0.3108 and 0.3732). The calibration's +0.18 reproduced: O-raw minus X far is
++0.200 and +0.293.
+
+Margin (hit minus chance) by probe distance, 50 states each:
+
+| arm | seed | 7 | 8 | 9 | 10 | 11 | far (9 to 11) | overall | spearman_7_11 | loss_last |
+|---|---|---|---|---|---|---|---|---|---|---|
+| X | 12 | +0.696 | +0.332 | +0.155 | +0.054 | +0.123 | 0.1108 | 0.2719 | | |
+| O-raw | 12 | +0.836 | +0.672 | +0.495 | +0.274 | +0.163 | 0.3108 | 0.4879 | 0.427 | 1.375 |
+| O-Xf | 12 | +0.416 | +0.392 | +0.075 | +0.014 | +0.083 | 0.0575 | 0.1959 | 0.274 | 3.333 |
+| O-Xt | 12 | +0.396 | +0.312 | +0.155 | +0.094 | +0.263 | 0.1708 | 0.2439 | 0.332 | 2.870 |
+| X | 13 | +0.579 | +0.418 | +0.085 | +0.102 | +0.052 | 0.0798 | 0.2474 | | |
+| O-raw | 13 | +0.759 | +0.678 | +0.445 | +0.422 | +0.252 | 0.3732 | 0.5114 | 0.401 | 1.439 |
+| O-Xf | 13 | +0.339 | +0.258 | +0.165 | +0.122 | +0.032 | 0.1065 | 0.1834 | 0.221 | 3.399 |
+| O-Xt | 13 | +0.359 | +0.378 | +0.205 | +0.062 | +0.052 | 0.1065 | 0.2114 | 0.321 | 2.950 |
+
+**The pilot preview of Claim 1 is small.** O-Xt minus X far is +0.060 and +0.027, mean
+**+0.043**, under Claim 1's 0.05. O-Xf minus X far is -0.053 and +0.027, mean -0.013. Both
+X-encoder oracle arms rank well below X at distances 7 and 8 and below X overall on both seeds,
+and their training loss flattens near 3 (RMS about 1.8 moves) from update 1000 on. Two seeds
+decide nothing; SMALL and ENCODER-LIMITED are both live outcomes. O-Xf and O-Xt seed 13 share the
+far value 0.10651 by coincidence: both hit 65 of the 150 far-band states (0.34, 0.38, 0.58
+against 0.38, 0.32, 0.60) on the same chance terms.
+
+**Gate T on the pilot** (threshold 0.13564): every arm passes, overall margins 0.183 to 0.511.
+**Encoder drift:** O-Xf 0.0 and 0.0, O-Xt 13.35 and 12.44.
+
+**Throughput** (3 training workers): O-Xt 1.305 and 1.304 s per update (87 min per run), O-Xf
+0.70 and 0.65 s per update (44 and 47 min), O-raw 475 and 477 s per run. Mint 533 s per seed at
+2 workers (n_exclude 32514 and 32569). The timing cell (seed 12's pilot O-Xt judge on seed 0's
+depth-11 cell, 20 states, a smoke record) took 240 s, so a 200-state cell is about 40 min. It
+solved 8 of 20; it enters no verdict.
+
+**Memory** (peak committed, every python process, sampled every 10 s; section 6's check passes):
+mint **1960 MB** per process (4768 MB across all), training **2208 MB** per process (6388 MB
+across 3 workers and the parent), the timing cell **1713 MB** per process. The cell's peak covers
+its whole `evaluate_lookahead` call, so it includes the BFS tables it builds.
+
+**Workers: mint 6, train 6, eval 6** (the launcher's cap). Committed: mint 6 x 1960 = 11.8 GB,
+train 6 x 2208 = 13.2 GB, eval 6 x 1713 = 10.3 GB, each under 24 GB. Section 10's 4.2 GB per O-Xt
+worker and 2.1 h per search cell were estimates and are superseded. Six training workers make
+the 12 O-Xt runs two waves instead of three at 4; if contention stretches an update by 1.5x, the
+wall time matches 4 workers, so 6 costs nothing.
+
+**Schedule** (`chain080.ps1`; section 10's estimate is superseded; the pilot's 1.3 s per update
+is the floor):
+- mint, 12 seeds: about 20 to 30 min;
+- Gate 0: about a minute;
+- train, O-Xt first: at 1.6 to 2.0 s per update under 6-worker contention, about 5.5 to 7 h for
+  all 36 runs;
+- Gates V, T and 1: seconds;
+- search, only if Claim 1 is CONFIRMED and O-raw passes Gate T: 12 cells at about 40 to 60 min,
+  two waves, about 1.5 to 2 h.
+
+**About 6 to 9 h in all**, and it can cross one 03:31 restart. Training resumes from its
+250-update checkpoints and every driver skips finished work, so the chain is relaunched with
+`-From` at the phase in flight. `aggregate.AMENDMENT` records the date and the three worker
+counts.
