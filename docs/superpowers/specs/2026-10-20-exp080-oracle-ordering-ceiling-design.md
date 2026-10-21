@@ -61,7 +61,10 @@ states with `random_walk_states` from a recorded RNG seed, looks up their true d
 unbounded BFS table, and writes states and labels to an untracked file under the experiment's
 output folder. Training workers read that file and never load the BFS table (1.9 GB resident),
 so the worker count is set by the encoder alone. Sampling is the same function S used; only the
-draws are made ahead of time.
+draws are made ahead of time. One draw per seed serves all three arms: 4000 blocks of 1000 states,
+drawn as `random_walk_states(1000, 40, random.Random(seed), ...)` in update order. O-Xf and O-Xt
+train on block u at update u, so the two are paired on identical states, and O-raw trains on the
+first 600,000.
 
 | arm | judge | trained | budget |
 |---|---|---|---|
@@ -89,8 +92,10 @@ New experiment folder `experiments/080_oracle_ordering/`: a training driver for 
 a margin cell (`leaf_rank_margin` on the seed's probe for a trained judge), the J4V-O-Xt
 evaluation cell (EXP-079's `evaluate.run_cell` path with a judge passed in), an aggregator, and a
 laptop launcher and chain in EXP-079's form. Nothing under `src/` changes. Distance labels are
-looked up in the training worker from the unbounded BFS table; the judge's forward never sees
-them.
+looked up once per seed by the mint phase (section 3), which also writes the seed's probe set and
+the true distance of every probe leaf, so neither training nor any margin cell loads the BFS
+table. The judge's forward never sees a label. Gate 0 re-measures X through those minted
+distances, so it also checks the mint.
 
 ## 5. Gates
 
@@ -116,13 +121,17 @@ them.
   committed memory per worker (the `python3.13` child, sampled correctly: EXP-079's per-cell
   sampler read the redirector outside training, so this launcher samples the child in every
   phase and the pilot checks the reading is above 500 MB).
-- Time one J4V-O-Xt depth-11 cell on the first 20 held-out states of seed 12.
+- Time one J4V-O-Xt depth-11 cell on 20 held-out states. Seed 12 has no depth-9 policy cell
+  (EXP-062 published seeds 0 to 11 only), so the timing cell runs seed 12's pilot O-Xt judge on
+  seed 0's cell, first 20 held-out states. It measures time only; its record is marked as a
+  smoke record and may not enter a verdict.
 - **Stop rule (the protocol, before any seed 0-11 run):** if O-raw's mean pilot far-band margin
   is below **0.14532** (X's mean pilot far-band margin on seeds 12 and 13, 0.09532 from EXP-075's
   pilot records, plus 0.05), stop and report. The calibration's
   +0.18 would then not have reproduced, and Gate V would be likely to fail.
 - **A dated amendment then fixes**, and goes to Michael with `pm ask`: the worker counts (total
-  committed memory under 24 GB; the BFS table alone is about 2 GB per worker) and the schedule.
+  committed memory under 24 GB; the BFS table, about 2 GB, is held by mint workers only) and the
+schedule.
 
 ## 7. Pre-registered claims (one-sided exact sign-flip, 4096 flips)
 
@@ -148,11 +157,21 @@ CONFIRMED (not SMALL).
 
 | condition | verdict | what it points the next run at |
 |---|---|---|
-| Gate 0 or Gate V fails | **UNRESOLVED** | nothing; report and ask |
+| Gate 0 or Gate V fails, or O-raw fails Gate T | **UNRESOLVED** | nothing; report and ask |
+| O-Xt fails Gate T (Claim 1 VOID) | **UNRESOLVED (O-Xt UNTRAINED)** | nothing; report and ask |
 | Claim 1 CONFIRMED and the search PAYS | **ORDERING LEARNABLE, PAYS** | a judge trained to order states, without true labels |
 | Claim 1 CONFIRMED and the search DOES NOT PAY | **ORDERING LEARNABLE, DOES NOT PAY AT DEPTH 11** | not the judge's ordering alone |
+| Claim 1 CONFIRMED and the search fails Gate 1 | **ORDERING LEARNABLE, SEARCH UNRESOLVED** | nothing; report and ask |
 | Claim 1 CONFIRMED (SMALL) | **ORDERING LEARNABLE BUT SMALL** | nothing with confidence; the search is not read |
 | Claim 1 REFUTED | **ENCODER-LIMITED** (Claim 2 reported beside it) | the encoder or region |
+
+The search cells run only when Claim 1 is CONFIRMED (not SMALL), the one case where they are
+read; the chain stops before them otherwise and saves about 4 h.
+
+**Clarification, 2026-10-21, before any code or number:** section 3's shared draw, section 4's label lookup, section 6's
+timing cell and memory line, and the three verdict rows for Gate T and Gate 1 were added while
+writing the plan. They make the spec agree with section 3 and give every gate outcome a verdict
+line of its own; no threshold changed.
 
 The next stage is still Michael's call. The verdict states what the measurement supports, not
 the choice.
