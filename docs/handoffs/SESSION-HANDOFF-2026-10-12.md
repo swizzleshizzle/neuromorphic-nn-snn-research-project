@@ -3,8 +3,8 @@
 > **2026-10-20: EXP-079 DONE, both claims REFUTED, every gate passed** (`18cd4f5`,
 > `experiments/079_judge_trained_deep/RESULTS.md`). Depth 11 J4V-S 0.1713 vs J4V-X 0.1950 (-0.0238,
 > 3 of 12), depth 9 0.3454 vs 0.4004 (-0.0550, 1 of 12). Gate M not above 0 (+0.0117, p 0.231): the
-> walks-to-40 judge does not rank far states better. Chain 30.8 h, no restart. README and roadmap
-> not yet updated. **Next stage is Michael's call** (pm ask on neuromorphic, "EXP-079 done").
+> walks-to-40 judge does not rank far states better. Chain 30.8 h, no restart. README, report and
+> roadmap updated (`f585596`); week 28 closed (section 3 item 6). **Next stage is Michael's call** (pm ask on neuromorphic, "EXP-079 done").
 >
 > **2026-10-19 (later): EXP-079 PILOTED AND AMENDED, waits on Michael's go on neuromorphic#24.**
 > The stop rule did not fire (S mean Gate L margin 0.2237 vs 0.1298), but S ranks below X overall on
@@ -211,6 +211,10 @@ RESULTS.md (`04ac845`); no claim changed. **Next: Michael's review of the spec, 
 5. **Next stage chosen 2026-10-18: EXP-079, retrain the judge (section 2d).** The older menu, for reference. The menu, from handoff 2026-10-06 section 2c plus
    EXP-076: a cheaper deeper search (beam or pruned 5-move), since depth pays off; wider still or a supervised-then-VI region; a learned no-revisit rule;
    using J to train the policy; a learned world model (stage B). Ask before building any.
+6. **Week 28 closed 2026-10-20.** EXP-079 ran as its wrap-up (Mon 19 to Tue 20) and is written up:
+   RESULTS.md `18cd4f5`, report sections 1, 9 and Appendix A, README and roadmap `f585596`. Vault:
+   weekly note `week-28-more-search-stopped-helping`, tracker row 28 done, row 29 opened. Week 29's
+   next stage waits on neuromorphic#25.
 
 ## 4. What NOT to do
 
