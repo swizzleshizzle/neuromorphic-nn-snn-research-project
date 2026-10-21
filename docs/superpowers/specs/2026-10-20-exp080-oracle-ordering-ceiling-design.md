@@ -165,8 +165,10 @@ CONFIRMED (not SMALL).
 | Claim 1 CONFIRMED (SMALL) | **ORDERING LEARNABLE BUT SMALL** | nothing with confidence; the search is not read |
 | Claim 1 REFUTED | **ENCODER-LIMITED** (Claim 2 reported beside it) | the encoder or region |
 
-The search cells run only when Claim 1 is CONFIRMED (not SMALL), the one case where they are
-read; the chain stops before them otherwise and saves about 4 h.
+The search cells run only when Claim 1 is CONFIRMED (not SMALL) and O-raw passed Gate T, the
+one case where they are read; the chain stops before them otherwise and saves about 4 h. (The
+O-raw condition was added 2026-10-21 at the final code review, before any number: an untrained
+O-raw makes the verdict UNRESOLVED, so the search would not be read.)
 
 **Clarification, 2026-10-21, before any code or number:** section 3's shared draw, section 4's label lookup, section 6's
 timing cell and memory line, and the three verdict rows for Gate T and Gate 1 were added while
