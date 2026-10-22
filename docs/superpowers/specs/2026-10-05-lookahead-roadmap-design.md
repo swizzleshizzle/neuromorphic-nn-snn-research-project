@@ -349,6 +349,15 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   probe distances 9 to 11) is +0.0117, p 0.231: S's values far out are nearer the truth and its
 >   ordering there is no better. One lever on the judge, refuted; the next stage is Michael's call
 >   (neuromorphic#25).
+>   EXP-080 (the ceiling check) was Michael's pick.
+> - **2026-10-21, EXP-080 (oracle ordering ceiling: judges trained on true BFS distance as a
+>   diagnostic upper bound):** VERDICT ENCODER-LIMITED, every gate passes. Far band (probe
+>   distances 9 to 11): O-Xt (fresh head, X encoder fine-tuned) 0.1423 vs X 0.1195, +0.0228, p
+>   0.0547, Claim 1 REFUTED; O-Xf (X encoder frozen) +0.0106, p 0.2407, Claim 2 REFUTED. Gate V:
+>   O-raw (MLP on raw facelets, same labels) +0.1778, 12 of 12, p 0.0002. Both X-encoder oracle
+>   arms also rank below X at distance 7. The ordering is in the input and not reachable through
+>   X's encoder at this budget; the search arm was not run (it is read only on Claim 1). The
+>   spec points the next stage at the encoder or region; Michael's call (neuromorphic#27).
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank

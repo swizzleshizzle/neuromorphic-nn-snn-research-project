@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 4. 79 numbered experiments, 63 with a committed results file.
+**Status:** Phase 4. 80 numbered experiments, 64 with a committed results file.
 **Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
 **The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
@@ -80,6 +80,12 @@ training states sit 11 moves from solved rather than about 1%. Searched with the
 is worse at both depths: 0.1713 against 0.1950 at depth 11 (ahead on 3 of 12 seeds) and 0.3454
 against 0.4004 at depth 9 (1 of 12), both **refuted**. Its values far from the goal moved nearer the
 truth, but it ranks those states no better than before (p 0.231), and the search uses only the ranking.
+EXP-080 asked whether any judge on that spiking encoder could rank far states better, by training
+it directly on the true distances as a diagnostic ceiling. It barely can: a fresh head on the
+fine-tuned encoder ranks states 9 to 11 moves out +0.0228 better than the wider judge (p 0.055,
+**refuted**), and on the frozen encoder +0.0106 (**refuted**). A plain MLP on the raw facelets, given
+the same labels, ranks them +0.1778 better (12 of 12 seeds). The ordering is in the cube's state and
+is lost in the encoder, so the verdict is **encoder-limited**, and no search was run on it.
 
 The learned judge reads all 192 sensory neurons and was trained by value iteration from its own
 look-ahead, never from the true distances, with the spiking encoder trained beneath it. The search
@@ -251,7 +257,7 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
 | 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and two 5-move searches (the EXP-077 beam and the EXP-078 full tree) confirmed at depth 9 and refuted at depth 11, then a judge retrained on longer walks (EXP-079) refuted at both depths |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and two 5-move searches (the EXP-077 beam and the EXP-078 full tree) confirmed at depth 9 and refuted at depth 11, then a judge retrained on longer walks (EXP-079) refuted at both depths, and a judge trained on true distances (EXP-080) showing the encoder is the limit |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 
