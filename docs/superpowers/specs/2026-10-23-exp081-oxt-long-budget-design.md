@@ -53,7 +53,9 @@ the experiment is VOID.
   seed.
 - **(b) Starting point.** EXP-080's checkpoint is at update 4000, and its judge, re-measured by
   `leaf_rank_margin` on the new mint's probe and leaf distances, equals EXP-080's committed
-  `gate_l` for that seed exactly.
+  `gate_l` for that seed exactly; and its optimizer state is the one the continuation depends
+  on: every Adam parameter state in `opt.pt` has `step` 4000 and the shape of the judge
+  parameter it belongs to.
 
 Only then is the checkpoint copied into EXP-081's directory and its `mint_sha` re-stamped with
 the new mint's sha (EXP-080's resume path refuses a checkpoint from another mint, correctly; the
@@ -77,8 +79,11 @@ plus about 0.3 GB for the larger mint).
 - **Gate C** (section 4), voiding.
 - **Gate T** (trained), EXP-080's unchanged: mean overall margin of O-Xt16k above **0.13564**
   (half X's 12-seed mean overall margin) by `gate_l_verdict`. Fails: UNRESOLVED (O-Xt16k
-  UNTRAINED).
-- Record checks: `n_updates` 16000, `resumed_from` at least 4000 on the first session, `mint_meta`
+  UNTRAINED). Its line prints far-band and overall margin at 4000 and 16,000 side by side,
+  because EXP-080 showed oracle training trades overall margin for far band (O-Xt 0.2499
+  against X's 0.2713), so a fall in overall margin with a rise in far band is a trade, not an
+  untrained judge, and the reader must be able to see which happened.
+- Record checks: `n_updates` 16000, `resumed_from` at least 4000 (0 would mean a fresh run, not a continuation), `mint_meta`
   n_blocks 16000, encoder drift above 0, the probe's per-distance n equal to X's.
 
 ## 7. Claims
@@ -140,7 +145,8 @@ tests. The schedule is fixed here, not by a later amendment: mint 6 workers, tra
   waves, about 8.7 h.
 - Search, only if Claim 1 confirms: about 1.5 h at 6 workers.
 - Total about 9.5 h without the search. Launched Friday 2026-10-23 night, so it crosses 03:31; a
-  restart costs at most 250 updates per run and the chain is re-run to resume.
+  restart costs at most 250 updates per run. Every chain stage skips finished work, and a VPS
+  watcher polls the laptop and re-runs the chain if it died, until the verdict file exists.
 
 ## 13. What this does not answer
 
