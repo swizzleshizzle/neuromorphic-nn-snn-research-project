@@ -26,10 +26,13 @@ eight (section 9). A 4-move tree with the same judges raises depth 11 to **0.195
 (EXP-076). A width-64 beam searched five moves deep reaches **0.5571** at depth 9 (EXP-077) but does
 worse than the 4-move tree at depth 11. The full 5-move tree matches the beam at depth 9 (0.5558) and
 is level with the 4-move tree at depth 11 (0.1854, EXP-078). Retraining the judge on longer walks
-made the 4-move tree worse at both depths (0.1713 at depth 11, EXP-079).
+made the 4-move tree worse at both depths (0.1713 at depth 11, EXP-079), and a judge given the
+true distances as labels ranks far states barely better than the original, while a plain MLP on
+the raw facelets ranks them far better: the spiking encoder, not the judge, is the limit there
+(EXP-080).
 
-**It mostly did not work for the reasons the architecture was built to test.** Across 79 numbered
-experiments, 63 of them with a committed results file (Appendix A), almost every architectural
+**It mostly did not work for the reasons the architecture was built to test.** Across 80 numbered
+experiments, 64 of them with a committed results file (Appendix A), almost every architectural
 idea lost to a training idea:
 
 | idea | kind | verdict |
@@ -890,7 +893,8 @@ significant). A 4-move tree with the same judges then reaches 0.1950 at depth 11
 (EXP-076, confirmed). A width-64 beam searched five moves deep raises depth 9 to 0.5571 but lowers
 depth 11 to 0.1475 (EXP-077), and the full 5-move tree reaches 0.5558 and 0.1854 (EXP-078), and a judge retrained on longer walks
 lowers both (0.3454 and 0.1713, EXP-079), so the
-best depth-11 number stays the 4-move tree's 0.1950. The plan's target, a cube
+best depth-11 number stays the 4-move tree's 0.1950. EXP-080 then located the limit far from the
+goal in the spiking encoder rather than the judge (section 9). The plan's target, a cube
 solved *"from any scramble"*, is still not met (section 6.2).
 
 **What the solver is.** With `recall=False`, the policy is the 192-neuron sensory region and a
@@ -1197,6 +1201,28 @@ original judge's, nearer the truth, but its ranking margin there is level (+0.01
 is its rank correlation over distances 7 to 11 (0.293 against 0.298). A search only compares leaves,
 so better-calibrated values with the same order buy nothing, and the longer walks cost accuracy
 nearer the goal. This refutes one lever on the judge. It does not show that search is the limit.
+
+**Even the true distances cannot make a judge on that encoder rank far states well.** EXP-080 is a
+diagnostic ceiling, not a solver: it trains judges directly on true BFS distance (labels the system
+itself never sees) to ask whether the encoder carries the ordering at all. Three arms, the same
+minted states and labels per seed, scored by ranking margin (hit rate minus chance) on probe states
+9 to 11 moves from solved, 12 seeds, every gate passed (EXP-080):
+
+| arm | far-band margin | against the original judge | ahead | p | verdict |
+|---|---|---|---|---|---|
+| the original wide judge (EXP-075) | 0.1195 | | | | reference |
+| 1: a fresh head on its encoder, encoder fine-tuned | 0.1423 | +0.0228 | 7 of 12 | 0.0547 | **refuted** |
+| 2: a fresh head on its encoder, encoder frozen | 0.1301 | +0.0106 | 7 of 12 | 0.2407 | **refuted** |
+| validity gate: a plain MLP on the raw facelets | 0.2973 | +0.1778 | 12 of 12 | 0.0002 | **passes** |
+
+Given the answer key, the encoder-based judges gain about 0.02; a non-spiking MLP given the same
+labels gains 0.18, 2.5 times the original's margin. Both encoder arms also rank *worse* than the
+original near the goal (0.50 against 0.69 at distance 7), and their training loss plateaus near 3
+moves squared against the MLP's 1.5. The ordering is in the cube's state and is lost in the spiking
+encoder's representation, at this budget of 4000 updates. That also explains EXP-079: if the true
+labels buy 0.02, a better-placed training mass could not buy more. The search arm was not run,
+because it is read only when Claim 1 confirms. The verdict, **encoder-limited**, points the next
+stage at the encoder or region rather than at the judge's objective.
 
 None of this changes the learning rule. Training remains surrogate-gradient backpropagation, and
 the roadmap does not claim that search makes the network neuromorphic in how it learns, or that
