@@ -358,6 +358,15 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   arms also rank below X at distance 7. The ordering is in the input and not reachable through
 >   X's encoder at this budget; the search arm was not run (it is read only on Claim 1). The
 >   spec points the next stage at the encoder or region; Michael's call (neuromorphic#27).
+>   The longer-budget O-Xt (EXP-081) was Michael's pick.
+> - **2026-10-24, EXP-081 (O-Xt continued from 4000 to 16,000 updates on an extended mint):**
+>   VERDICT BUDGET-LIMITED, PAYS, every gate passes (Gate C continuity 12 of 12, Gate T 0.3356).
+>   Far band: O-Xt16k 0.1873 vs X 0.1195, +0.0678, 10 of 12, p 0.0012, Claim 1 CONFIRMED; vs
+>   O-Xt4k +0.0450, 11 of 12, p 0.0007, Claim 2 CONFIRMED. Depth-11 search (J4V, mode C, k 4)
+>   with the O-Xt16k judge: 0.4088 vs J4V-X 0.1950, 12 of 12, p 0.0002, PAYS. EXP-080's
+>   ENCODER-LIMITED was a 4000-update reading. The judge is trained on true distance, so 0.41 is
+>   a ceiling, not a solver number; loss was still falling at 16,000 and O-raw's far band (0.2973)
+>   is still higher. Next stage is Michael's call.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
