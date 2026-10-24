@@ -1,0 +1,21 @@
+{
+ "continuation": "seeded",
+ "continued_from": {
+  "experiment": "EXP-080",
+  "mint_sha": "965c43becc4737ba884ae0051b479783dae8e2616168fb84e398b614ebcc50ad",
+  "update": 4000
+ },
+ "e80_mint_sha": "965c43becc4737ba884ae0051b479783dae8e2616168fb84e398b614ebcc50ad",
+ "e80_n_states": 4000000,
+ "git_commit": "9d2390a56da0438c1de3a386af47e978d30cced0",
+ "new_mint_sha": "3caa1c0b5df43f39e303e968f2300b67eb2e622a2b6743272cadc3d173cef02e",
+ "new_n_states": 16000000,
+ "opt_bad": [],
+ "pass": true,
+ "prefix_bad": [],
+ "seed": 3,
+ "start_gate_l_equal": true,
+ "start_margin": 0.24794444444444444,
+ "start_update": 4000,
+ "wall_s": 37.7
+}

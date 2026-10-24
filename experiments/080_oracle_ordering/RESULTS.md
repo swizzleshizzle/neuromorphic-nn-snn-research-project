@@ -1,5 +1,10 @@
 # EXP-080 results: the oracle ordering ceiling
 
+> **Superseded on the budget question by EXP-081 (2026-10-24).** Continued from this run's
+> checkpoints to 16,000 updates, O-Xt beats X's far band by +0.0678 (p 0.0012) and as the depth-11
+> judge solves 0.4088 against J4V-X's 0.1950 (12 of 12): BUDGET-LIMITED, PAYS. The ENCODER-LIMITED
+> reading below is a 4000-update reading. See `experiments/081_oxt_long_budget/RESULTS.md`.
+
 **Verdict: ENCODER-LIMITED. Both claims REFUTED, every gate passed.** The question was whether a
 judge built on EXP-075's X encoder could order states far from the goal (true distances 9 to 11)
 better than X itself, if it were trained directly on true BFS distance. It cannot, by enough to
