@@ -228,3 +228,147 @@ def test_training_refuses_a_seed_without_a_passing_gate_c(tmp_path, monkeypatch)
     x, e80, out = _world(tmp_path, monkeypatch)
     with pytest.raises(SystemExit, match="no passing Gate C"):
         train.run(SEED, out, legs=(3, 4), batch=BLOCK, probe_every=1, x_root=x, enc_root=x)
+
+
+ev = _load("exp081_evaluate", EXP / "evaluate.py")
+agg = _load("exp081_aggregate", EXP / "aggregate.py")
+FAR, NEAR = (9, 10, 11), (7, 8)
+
+
+def _by(far_delta, near_delta=0.0):
+    return {**{d: far_delta for d in FAR}, **{d: near_delta for d in NEAR}}
+
+
+def _leg_rec(u, s, gl, **over):
+    rec = {"arm": "O-Xt", "seed": s, "gate_l": gl, "n_updates": u, "batch": 1000,
+           "probe_every": 250, "mint_sha": f"new{s}",
+           "mint_meta": {"n_blocks": 16000, "block": 1000, "max_len": 40},
+           "resumed_from": u // 2, "continued_from": {"experiment": "EXP-080"},
+           "encoder_drift": 13.0, "loss_last": 2.5, "wall_s": 100.0, "limit_states": None,
+           "updates": u, "final_probe": {"spearman_7_11": 0.3, "mean_j_by_distance":
+                                         {"9": 9.0, "10": 10.0, "11": 11.0}}}
+    rec.update(over)
+    return rec
+
+
+def _agg_world(tmp_path, d4, d16, d8=None, gc_fail=(), **over16):
+    """EXP-080's O-Xt records at X's committed gate_l shifted by `d4`; EXP-081's legs at `d8`
+    (default `d4`) and `d16`, all per distance; and the 12 Gate C records."""
+    e80, out = tmp_path / "e80", tmp_path / "out"
+    e80.mkdir(parents=True)
+    out.mkdir()
+    for s in range(12):
+        gl = t80tests._x75(s)["gate_l"]
+        rec4 = t80tests._train_rec("O-Xt", s, t80tests._shift_by(gl, d4))
+        (e80 / c80.record_name("O-Xt", s)).write_text(json.dumps(rec4))
+        for u, d, o in ((8000, d4 if d8 is None else d8, {}), (16000, d16, over16)):
+            (out / cells.record_name(u, s)).write_text(
+                json.dumps(_leg_rec(u, s, t80tests._shift_by(gl, d), **o)))
+        (out / cells.gatec_name(s)).write_text(
+            json.dumps({"seed": s, "pass": s not in gc_fail, "new_mint_sha": f"new{s}"}))
+    return e80, out
+
+
+def test_verdict_has_a_line_for_every_row_of_spec_section_8():
+    v = agg.verdict
+    assert v(False, True, "CONFIRMED", "CONFIRMED", "PAYS") == "VOID"
+    assert v(True, False, "VOID", "VOID", None) == "UNRESOLVED (O-Xt16k UNTRAINED)"
+    assert v(True, True, "CONFIRMED", "REFUTED", "PAYS") == "BUDGET-LIMITED, PAYS"
+    assert v(True, True, "CONFIRMED", "CONFIRMED", "DOES NOT PAY") == (
+        "BUDGET-LIMITED, DOES NOT PAY AT DEPTH 11")
+    assert v(True, True, "CONFIRMED", "CONFIRMED", "UNRESOLVED") == (
+        "BUDGET-LIMITED, SEARCH UNRESOLVED")
+    assert v(True, True, "CONFIRMED (SMALL)", "CONFIRMED", None) == "BUDGET HELPS BUT FALLS SHORT"
+    assert v(True, True, "REFUTED", "CONFIRMED", None) == "BUDGET HELPS BUT FALLS SHORT"
+    assert v(True, True, "CONFIRMED (SMALL)", "REFUTED", None) == "ENCODER-LIMITED AT 4X BUDGET"
+    assert v(True, True, "REFUTED", "REFUTED", None) == "ENCODER-LIMITED AT 4X BUDGET"
+    with pytest.raises(SystemExit, match="run the search"):
+        v(True, True, "CONFIRMED", "REFUTED", None)
+
+
+def test_bars_are_exp080s():
+    assert agg.CLAIM_ALPHA == 0.025 and agg.GATE_T_THRESHOLD == t80tests.agg.GATE_T_THRESHOLD
+    assert agg.a80.CLAIM_MIN == 0.05
+
+
+def test_a_large_gain_confirms_claim_1_and_asks_for_the_search(tmp_path):
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(0.10))
+    res = agg.stage_gates(out, e80)
+    assert res["c1"][0] == "CONFIRMED" and res["c2"][0] == "CONFIRMED" and res["run_search"]
+    assert abs(res["c1"][2] - 0.10) < 1e-9 and abs(res["c2"][2] - 0.08) < 1e-9
+    assert "SEARCH: RUN" in agg.format_stage_gates(res)[-1]
+
+
+def test_a_small_gain_over_exp080_reads_budget_helps_but_falls_short(tmp_path):
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(0.03))
+    res = agg.stage_gates(out, e80)
+    assert res["c1"][0] == "CONFIRMED (SMALL)" and res["c2"][0] == "CONFIRMED"
+    assert not res["run_search"]
+    assert agg.verdict(True, res["t"], res["c1"][0], res["c2"][0], None) == (
+        "BUDGET HELPS BUT FALLS SHORT")
+
+
+def test_claims_read_the_far_band_not_the_near_goal(tmp_path):
+    """Catches claims computed on the overall margin: a near-goal gain with the far band
+    unchanged since EXP-080 is ENCODER-LIMITED AT 4X BUDGET."""
+    e80, out = _agg_world(tmp_path, _by(0.0), _by(0.0, near_delta=0.3))
+    res = agg.stage_gates(out, e80)
+    assert res["c2"][0] == "REFUTED" and res["c1"][0] == "REFUTED"
+    assert agg.verdict(True, res["t"], res["c1"][0], res["c2"][0], None) == (
+        "ENCODER-LIMITED AT 4X BUDGET")
+
+
+def test_untrained_16k_voids_both_claims_and_shows_both_points(tmp_path):
+    """Catches a Gate T line that hides whether overall margin fell because far band rose (a
+    trade) or because the judge is untrained (spec section 6)."""
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(-0.25, near_delta=-0.25))
+    res = agg.stage_gates(out, e80)
+    assert res["t"] is False and res["c1"][0] == "VOID" and res["c2"][0] == "VOID"
+    line = agg.format_stage_gates(res)[1]
+    assert re.search(r"GATE T .*FAIL.*u4000 far [-0-9.]+ overall [-0-9.]+  u16000 far "
+                     r"[-0-9.]+ overall [-0-9.]+", line), line
+
+
+def test_a_failed_gate_c_is_void(tmp_path):
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(0.10), gc_fail=(4,))
+    res = agg.stage_gates(out, e80)
+    assert res == {"gate_c": False, "gate_c_fail": [4]}
+    assert agg.format_stage_gates(res)[0] == "GATE C (continuity): FAIL on seeds [4]"
+    (out / cells.gatec_name(5)).unlink()
+    with pytest.raises(SystemExit, match="missing exp081_gatec_s5"):
+        agg.stage_gates(out, e80)
+
+
+@pytest.mark.parametrize("over, msg", [
+    ({"resumed_from": 0}, "fresh run"),
+    ({"mint_meta": {"n_blocks": 4000, "block": 1000, "max_len": 40}}, "mint n_blocks"),
+    ({"mint_sha": "other"}, "Gate C certified"),
+    ({"encoder_drift": 0.0}, "did not move"),
+    ({"continued_from": None}, "continued_from"),
+    ({"n_updates": 12000}, "n_updates"),
+    ({"limit_states": 20}, "smoke record"),
+])
+def test_a_record_that_is_not_the_continuation_is_refused(tmp_path, over, msg):
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(0.10), **over)
+    with pytest.raises(SystemExit, match=msg):
+        agg.stage_gates(out, e80)
+
+
+def test_search_cell_refuses_a_judge_short_of_16000(tmp_path, monkeypatch):
+    x, e80, out = _world(tmp_path, monkeypatch)
+    gatec.gate_c(SEED, out, e80_root=e80)
+    with pytest.raises(SystemExit, match="needs 16000"):
+        ev.run_cell(SEED, out)
+
+
+def test_chain_reads_the_search_lines_the_aggregator_prints(tmp_path):
+    """Catches the chain and the aggregator drifting apart: the chain must find SEARCH: NOT RUN
+    on an unconfirmed Claim 1, SEARCH: RUN on a confirmed one, and neither on a VOID."""
+    chain = (EXP / "chain081.ps1").read_text()
+    assert '-match "SEARCH: NOT RUN"' in chain and '-notmatch "SEARCH: RUN"' in chain
+    e80, out = _agg_world(tmp_path, _by(0.02), _by(0.10))
+    yes = "\n".join(agg.format_stage_gates(agg.stage_gates(out, e80)))
+    assert re.search("SEARCH: RUN", yes) and not re.search("SEARCH: NOT RUN", yes)
+    e80b, outb = _agg_world(tmp_path / "b", _by(0.02), _by(0.02))
+    no = "\n".join(agg.format_stage_gates(agg.stage_gates(outb, e80b)))
+    assert re.search("SEARCH: NOT RUN", no)
