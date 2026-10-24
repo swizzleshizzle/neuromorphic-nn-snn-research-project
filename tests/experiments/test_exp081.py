@@ -213,6 +213,11 @@ def test_leg_1_record_survives_a_rerun_of_leg_2(tmp_path, monkeypatch):
     recs = train.run(SEED, out, legs=(3, 4), batch=BLOCK, probe_every=1, x_root=x, enc_root=x)
     assert p1.read_text() == before and [r["n_updates"] for r in recs] == [4]
     assert recs[0]["resumed_from"] == 4
+    # A fresh process after a restart: state.json no longer carries continued_from.
+    assert "continued_from" not in json.loads(
+        (cells.ckpt_dir(SEED, out) / "state.json").read_text())
+    assert recs[0]["continued_from"] == {"experiment": "EXP-080", "update": OLD_BLOCKS,
+                                         "mint_sha": m80.read_mint(e80, SEED).sha}
 
 
 def test_a_checkpoint_past_leg_1_is_never_recorded_as_leg_1(tmp_path, monkeypatch):

@@ -4,7 +4,8 @@
 # training resumes its checkpoints. Workers are spec section 10's: 6, 6, 6.
 # Launch it with OS-level redirection (playbook section 3):
 #   ssh -n laptop 'cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\experiments\081_oxt_long_budget\chain081.ps1 > C:\Users\mlgbr\chain081.out 2>&1"'
-param([ValidateSet("mint","gatec","train","gates","search","aggregate")][string]$From = "mint")
+# No -From search or aggregate: the search decision is the gates stage's, so it always runs.
+param([ValidateSet("mint","gatec","train","gates")][string]$From = "mint")
 $repo = "C:\Users\mlgbr\Desktop\Projects\neuromorphic-nn-snn-research-project"
 $py = Join-Path $repo ".venv\Scripts\python.exe"
 $l = Join-Path $repo "experiments\081_oxt_long_budget\launch081.ps1"
@@ -37,10 +38,11 @@ foreach ($p in $order) {
     if ($p -eq "aggregate") {
         $a = & $py $agg 2>&1 | Out-String
         $code = $LASTEXITCODE
+        Say ("aggregate exit " + $code)
+        # Written only on success, so the watcher never mistakes an error for a verdict.
+        if ($code -ne 0) { Say ("STOP: the aggregate exited " + $code + ": " + $a.Trim()); exit 1 }
         Set-Content -Path ($verdictFile + ".tmp") -Value $a
         Move-Item -Force ($verdictFile + ".tmp") $verdictFile
-        Say ("aggregate exit " + $code)
-        if ($code -ne 0) { Say "STOP: the aggregate exited $code"; exit 1 }
         continue
     }
     Say "phase $p workers $workers"

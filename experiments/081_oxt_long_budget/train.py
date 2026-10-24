@@ -55,7 +55,9 @@ def run(seed, out=cells.OUT, *, legs=cells.LEGS, batch=cells.BATCH,
     state_path = ck / "state.json"
     if not state_path.exists():
         raise SystemExit(f"{state_path} missing: Gate C passed but seeded no continuation")
-    continued_from = json.loads(state_path.read_text()).get("continued_from")
+    # From the Gate C record, never state.json: train_x_arm rewrites state.json at every
+    # checkpoint with its own keys, so a restarted process would read None there.
+    continued_from = json.loads((out / cells.gatec_name(seed)).read_text())["continued_from"]
     written = []
     for n in legs:
         path = out / cells.record_name(n, seed)

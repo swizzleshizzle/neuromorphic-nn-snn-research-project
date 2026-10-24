@@ -157,6 +157,7 @@ def gate_c(seed, out=cells.OUT, e80_root=cells.E80_OUT, new_root=None) -> dict:
            "start_gate_l_equal": start_ok, "start_margin": None if gl is None else gl["margin"],
            "opt_bad": opt_bad, "new_mint_sha": new.sha, "new_n_states": int(len(new.labels)),
            "e80_mint_sha": old.sha, "e80_n_states": int(len(old.labels)),
+           "continued_from": {"experiment": "EXP-080", "update": update, "mint_sha": old.sha},
            "git_commit": _git_commit()}
     if ok:
         rec["continuation"] = seed_continuation(seed, new, e80_root, out)
