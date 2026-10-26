@@ -333,3 +333,170 @@ def test_a_16k_judge_drives_a_real_j4v_cell_at_both_depths(tmp_path):
 def test_search_pending_runs_depth_11_first_and_skips_finished(tmp_path):
     (tmp_path / evaluate.record_name(11, 1)).write_text("{}")
     assert evaluate.pending([9, 11], [1, 2], tmp_path) == [(11, 2), (9, 1), (9, 2)]
+
+
+agg = _load("exp082_aggregate", EXP / "aggregate.py")
+acells = agg.cells
+
+
+def _gl(far, overall=0.3):
+    by = {str(d): {"hit": 0.2 + (far if d >= 9 else 0.5), "chance": 0.2, "n": 50}
+          for d in range(7, 12)}
+    return {"by_distance": by, "margin": overall, "chance": 0.2, "hit": 0.2 + overall, "n": 250}
+
+
+def _final_probe():
+    return {"spearman_7_11": 0.3, "mean_j_by_distance": {str(d): float(d) for d in range(7, 12)}}
+
+
+def _x_rec(seed, far):
+    return {"arm": "X", "seed": seed, "n_probe": 483, "gate_l": _gl(far),
+            "final_probe": _final_probe(), "loss_last": 0.2}
+
+
+def _leg(seed, u, far, overall=0.3, **over):
+    r = {"arm": "X16k", "seed": seed, "n_updates": u, "batch": 1000, "sync_every": 100,
+         "probe_every": 250, "draws": 1, "max_len": 14, "readout": "wide", "hidden": 512,
+         "resumed_from": 4000 if u == 8000 else 8000,
+         "continued_from": {"experiment": "EXP-075", "update": 4000}, "encoder_drift": 13.0,
+         "n_probe": 483, "gate_l": _gl(far, overall), "final_probe": _final_probe(),
+         "loss_last": 0.2, "wall_s": 100.0, "git_commit": "abc"}
+    r.update(over)
+    return r
+
+
+def _search(seed, depth, rate, arm="J4V-X16k", **over):
+    r = {"arm": arm, "judge": "X16k", "depth": depth, "seed": seed, "judge_seed": seed, "k": 4,
+         "k_goal": 4, "mode": "C", "no_revisit": True, "judge_updates": 16000,
+         "limit_states": None, "success_rate": rate, "optimality": 0.8, "mean_steps": 10.0,
+         "goal_fired_frac": 0.1, "n": 200}
+    r.update(over)
+    return r
+
+
+def _jit(s):
+    """Per-seed noise of mean -0.00033 and mixed sign: a zero gain must not confirm."""
+    return ((s * 7) % 5 - 2) * 0.002
+
+
+def _agg_world(tmp, *, far16=0.12, rate11=0.195, rate9=0.40, overall16=0.30, gc=True,
+               **leg_over):
+    roots = [tmp / n for n in ("out", "e75", "e76", "e81")]
+    out, e75, e76, e81 = roots
+    for d in roots:
+        d.mkdir(parents=True)
+    for s in range(12):
+        j, lvl = _jit(s), 0.01 * (s % 4)
+        (out / acells.gatec_name(s)).write_text(json.dumps({"seed": s, "pass": gc or s != 3}))
+        (e75 / acells.c75.record_name("X", s)).write_text(json.dumps(_x_rec(s, 0.12 + lvl)))
+        (out / acells.record_name(8000, s)).write_text(json.dumps(_leg(s, 8000, 0.12 + lvl)))
+        (out / acells.record_name(16000, s)).write_text(json.dumps(
+            _leg(s, 16000, far16 + lvl + j, overall16, **leg_over)))
+        for d, rate, base in ((9, rate9, 0.40), (11, rate11, 0.195)):
+            lv = 0.01 * (s % 3)
+            (e76 / f"exp076_J4V-X_d{d}_s{s}.json").write_text(json.dumps(
+                _search(s, d, base + lv, arm="J4V-X")))
+            (out / acells.search_name(d, s)).write_text(json.dumps(_search(s, d, rate + lv + j)))
+        (e81 / f"exp081_J4V-O-Xt16k_d11_s{s}.json").write_text(json.dumps(
+            _search(s, 11, 0.41, arm="J4V-O-Xt16k")))
+    return roots
+
+
+def test_verdict_has_a_line_for_every_row_of_spec_section_8():
+    v = agg.verdict
+    assert v(False, True, "CONFIRMED", "CONFIRMED") == "VOID"
+    assert v(True, False, "CONFIRMED", "CONFIRMED") == "UNRESOLVED (X16k UNTRAINED)"
+    assert v(True, True, "CONFIRMED", "REFUTED") == "BUDGET-LIMITED, PAYS"
+    assert v(True, True, "CONFIRMED (SMALL)", "CONFIRMED") == \
+        "ORDERING IMPROVES, SEARCH DOES NOT PAY"
+    assert v(True, True, "REFUTED", "CONFIRMED (SMALL)") == \
+        "VALUE ITERATION SATURATED AT 4X BUDGET"
+
+
+def test_bars_are_the_spec_values():
+    assert agg.CLAIM_ALPHA == 0.025 and agg.C1_MIN == 0.03
+    assert agg.a80.CLAIM_MIN == 0.05
+    assert agg.GATE_T_THRESHOLD == pytest.approx(0.13564, abs=1e-5)
+
+
+def test_a_large_search_gain_pays(tmp_path):
+    res = agg.run_all(*_agg_world(tmp_path, rate11=0.295))
+    assert res["verdict"] == "BUDGET-LIMITED, PAYS"
+
+
+def test_a_small_search_gain_with_a_far_band_gain_reads_ordering_improves(tmp_path):
+    """Catches Claim 1's 0.03 minimum missing: +0.02 on every seed is CONFIRMED (SMALL) and
+    falls through to Claim 2."""
+    res = agg.run_all(*_agg_world(tmp_path, rate11=0.215, far16=0.22))
+    assert any("CLAIM 1" in ln and "CONFIRMED (SMALL)" in ln for ln in res["lines"])
+    assert res["verdict"] == "ORDERING IMPROVES, SEARCH DOES NOT PAY"
+
+
+def test_nothing_moving_reads_saturated(tmp_path):
+    res = agg.run_all(*_agg_world(tmp_path))
+    assert res["verdict"] == "VALUE ITERATION SATURATED AT 4X BUDGET"
+
+
+def test_claim_1_reads_depth_11_not_depth_9(tmp_path):
+    """Catches the depths swapped: a depth-9 gain alone is reported, never the primary."""
+    res = agg.run_all(*_agg_world(tmp_path, rate9=0.60))
+    assert res["verdict"] == "VALUE ITERATION SATURATED AT 4X BUDGET"
+    assert any(ln.startswith("depth 9") and "+0.19" in ln for ln in res["reported"])
+
+
+def test_untrained_16k_is_unresolved_whatever_the_search(tmp_path):
+    res = agg.run_all(*_agg_world(tmp_path, rate11=0.295, overall16=0.10))
+    assert res["verdict"] == "UNRESOLVED (X16k UNTRAINED)"
+
+
+def test_a_failed_gate_c_is_void(tmp_path):
+    res = agg.run_all(*_agg_world(tmp_path, rate11=0.295, gc=False))
+    assert res["verdict"] == "VOID"
+    assert "GATE C (continuity): FAIL on seeds [3]" in res["lines"]
+
+
+@pytest.mark.parametrize("over,msg", [
+    ({"resumed_from": 0}, "fresh run"),
+    ({"continued_from": {"experiment": "EXP-080", "update": 4000}}, "continued_from"),
+    ({"encoder_drift": 0.0}, "did not move"),
+    ({"n_probe": 250}, "n_probe"),
+    ({"sync_every": 1}, "sync_every"),
+    ({"limit_states": 2}, "smoke record"),
+])
+def test_a_record_that_is_not_the_continuation_is_refused(tmp_path, over, msg):
+    """REVIEW FOCUS 4."""
+    with pytest.raises(SystemExit, match=msg):
+        agg.run_all(*_agg_world(tmp_path, **over))
+
+
+def test_mixed_checkouts_are_refused(tmp_path):
+    """REVIEW FOCUS 4. Spec section 6: one git_commit across the 16,000-update records."""
+    roots = _agg_world(tmp_path)
+    p = roots[0] / acells.record_name(16000, 5)
+    r = json.loads(p.read_text())
+    r["git_commit"] = "def"
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match="checkouts"):
+        agg.run_all(*roots)
+
+
+@pytest.mark.parametrize("over,msg", [
+    ({"judge_updates": 8000}, "judge_updates"),
+    ({"limit_states": 1}, "smoke record"),
+    ({"k": 3}, "k is 3"),
+])
+def test_a_search_record_that_is_not_the_registered_cell_is_refused(tmp_path, over, msg):
+    """REVIEW FOCUS 4."""
+    roots = _agg_world(tmp_path)
+    p = roots[0] / acells.search_name(11, 4)
+    p.write_text(json.dumps(_search(4, 11, 0.2, **over)))
+    with pytest.raises(SystemExit, match=msg):
+        agg.run_all(*roots)
+
+
+def test_gates_stage_prints_exactly_one_search_line(tmp_path):
+    ok = agg.format_stage_gates(agg.stage_gates(*_agg_world(tmp_path / "a")[:2]))
+    bad = agg.format_stage_gates(agg.stage_gates(*_agg_world(tmp_path / "b", gc=False)[:2]))
+    assert sum(ln.startswith("SEARCH: RUN") for ln in ok) == 1
+    assert not any(ln.startswith("SEARCH: NOT RUN") for ln in ok)
+    assert sum(ln.startswith("SEARCH: NOT RUN") for ln in bad) == 1
