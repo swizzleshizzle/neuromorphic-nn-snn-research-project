@@ -500,3 +500,31 @@ def test_gates_stage_prints_exactly_one_search_line(tmp_path):
     assert sum(ln.startswith("SEARCH: RUN") for ln in ok) == 1
     assert not any(ln.startswith("SEARCH: NOT RUN") for ln in ok)
     assert sum(ln.startswith("SEARCH: NOT RUN") for ln in bad) == 1
+
+
+def test_chain_reads_the_search_lines_the_aggregator_prints(tmp_path):
+    """REVIEW FOCUS 5. Catches the chain and the aggregator drifting apart, and a chain that
+    reads a crashed gates stage as 'search not run'."""
+    chain = (EXP / "chain082.ps1").read_text()
+    assert '-match "SEARCH: NOT RUN"' in chain and '-notmatch "SEARCH: RUN"' in chain
+    assert "STOP: the gates stage exited" in chain
+    yes = "\n".join(agg.format_stage_gates(agg.stage_gates(*_agg_world(tmp_path / "a")[:2])))
+    assert re.search("SEARCH: RUN", yes) and not re.search("SEARCH: NOT RUN", yes)
+    no = "\n".join(agg.format_stage_gates(
+        agg.stage_gates(*_agg_world(tmp_path / "b", gc=False)[:2])))
+    assert re.search("SEARCH: NOT RUN", no)
+
+
+def test_drivers_use_the_spec_worker_counts():
+    """REVIEW FOCUS 5. Spec sections 5 and 10: Gate C 4, train 4 (X commits 3.6 GB per worker
+    and throughput does not rise above 4), search 12."""
+    spec = '@{ "gatec" = 4; "train" = 4; "search" = 12 }'
+    assert spec in (EXP / "chain082.ps1").read_text()
+    assert spec in (EXP / "launch082.ps1").read_text()
+
+
+def test_drivers_have_no_em_dashes_or_backticks_in_strings():
+    for f in ("chain082.ps1", "launch082.ps1"):
+        text = (EXP / f).read_text()
+        assert "—" not in text, f
+        assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
