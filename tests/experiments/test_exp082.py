@@ -211,3 +211,85 @@ def test_pending_rechecks_failed_seeds(tmp_path):
     (tmp_path / gatec.cells.gatec_name(1)).write_text(json.dumps({"pass": True}))
     (tmp_path / gatec.cells.gatec_name(2)).write_text(json.dumps({"pass": False}))
     assert gatec.pending([1, 2, 3], tmp_path) == [2, 3]
+
+
+train = _load("exp082_train", EXP / "train.py")
+
+
+def _run(out, src, legs=LEGS):
+    return train.run(SEED, out, legs=legs, batch=BATCH, sync_every=1, probe_every=1, src_root=src)
+
+
+@pytest.fixture
+def tworld(world, monkeypatch):
+    """`world`, with train's own gatec module patched the same way."""
+    monkeypatch.setattr(train.gatec.cells, "START", START)
+    monkeypatch.setattr(train.gatec, "sets", lambda seed: (set(), _probe(), None))
+    monkeypatch.setattr(train.gatec, "measure", fake_measure)
+    src, out = world
+    train.gatec.gate_c(SEED, out, src_root=src, tracked=lambda p: "b", blob=lambda p: "b")
+    return src, out
+
+
+def test_continuation_equals_a_straight_run(tworld, tmp_path):
+    """The spec's section 2 premise: catches a continuation that restarts the optimizer, skips
+    the target net, or trains on other settings. Compared weight for weight."""
+    src, out = tworld
+    _run(out, src)
+    straight = tmp_path / "straight"
+    shutil.copytree(src / "encoders", straight / "encoders")
+    want = _train_straight(straight, LEGS[-1]).state_dict()
+    got = torch.load(train.cells.ckpt_dir(SEED, out) / "judge.pt")
+    assert got.keys() == want.keys()
+    assert all(torch.equal(got[k], want[k]) for k in want)
+
+
+def test_leg_records_carry_what_the_aggregator_checks(tworld):
+    src, out = tworld
+    r3, r4 = _run(out, src)
+    assert (r3["n_updates"], r4["n_updates"]) == LEGS
+    assert (r3["resumed_from"], r4["resumed_from"]) == (START, LEGS[0])
+    assert r4["continued_from"] == {"experiment": "EXP-075", "update": START}
+    assert (r4["arm"], r4["hidden"], r4["readout"], r4["max_len"]) == ("X16k", 512, "wide", 14)
+    assert (r4["sync_every"], r4["batch"], r4["n_probe"]) == (1, BATCH, 2)
+    assert r4["encoder_drift"] > 0.0
+    assert len(r4["probes"]) > len(r3["probes"]) > START
+    on_disk = json.loads((out / train.cells.record_name(LEGS[1], SEED)).read_text())
+    assert on_disk["gate_l"] == json.loads(json.dumps(r4["gate_l"]))
+    snap = torch.load(train.cells.ckpt_dir(SEED, out) / train.cells.snapshot_name(LEGS[0]))
+    assert any(not torch.equal(snap[k], v) for k, v in
+               torch.load(train.cells.ckpt_dir(SEED, out) / "judge.pt").items())
+
+
+def test_a_rerun_skips_finished_legs_and_resumes_leg_2(tworld):
+    """REVIEW FOCUS 1. The 03:31 restart re-runs the chain: leg 1's record must be untouched."""
+    src, out = tworld
+    _run(out, src)
+    p1 = out / train.cells.record_name(LEGS[0], SEED)
+    before = p1.read_text()
+    (out / train.cells.record_name(LEGS[1], SEED)).unlink()
+    recs = _run(out, src)
+    assert [r["n_updates"] for r in recs] == [LEGS[1]]
+    assert p1.read_text() == before
+
+
+def test_a_checkpoint_past_leg_1_is_never_recorded_as_leg_1(tworld):
+    """REVIEW FOCUS 1. A checkpoint at 16,000 with leg 1's record lost must not become the 8000
+    point."""
+    src, out = tworld
+    _run(out, src)
+    (out / train.cells.record_name(LEGS[0], SEED)).unlink()
+    with pytest.raises(SystemExit, match=f"past leg end {LEGS[0]}"):
+        _run(out, src)
+
+
+def test_training_refuses_a_seed_without_a_passing_gate_c(world, monkeypatch):
+    src, out = world
+    with pytest.raises(SystemExit, match="Gate C"):
+        _run(out, src)
+
+
+def test_pending_is_seeds_without_the_last_leg(tmp_path):
+    (tmp_path / train.cells.record_name(16000, 1)).write_text("{}")
+    (tmp_path / train.cells.record_name(8000, 2)).write_text("{}")
+    assert train.pending([1, 2, 3], tmp_path) == [2, 3]
