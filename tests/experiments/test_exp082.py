@@ -528,3 +528,19 @@ def test_drivers_have_no_em_dashes_or_backticks_in_strings():
         text = (EXP / f).read_text()
         assert "—" not in text, f
         assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
+
+
+def test_a_gate_c_failure_reaches_the_verdict_file_as_void(tmp_path):
+    """Final review, Important 1. gatec.py exits 1 on a failed seed, which stops the chain
+    before the gates stage; without a VOID path the verdict file is never written and the
+    watcher re-runs a dead experiment forever. The chain must aggregate on that failure and
+    write the verdict when the aggregator prints VOID."""
+    import subprocess
+    import sys
+    chain = (EXP / "chain082.ps1").read_text()
+    assert '-match "VERDICT: VOID"' in chain
+    out = _agg_world(tmp_path, gc=False)[0]
+    r = subprocess.run([sys.executable, str(EXP / "aggregate.py"), "--out-dir", str(out)],
+                       capture_output=True, text=True, timeout=120,
+                       env={**__import__("os").environ, "PYTHONPATH": str(REPO / "src")})
+    assert r.returncode == 0 and re.search("VERDICT: VOID", r.stdout), r.stderr

@@ -46,7 +46,20 @@ foreach ($p in $order) {
     }
     Say "phase $p workers $($workers[$p])"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $l -Phase $p -Workers $workers[$p]
-    Say "phase $p exit $LASTEXITCODE"
-    if ($LASTEXITCODE -ne 0) { Say "STOP: phase $p failed"; exit 1 }
+    $code = $LASTEXITCODE
+    Say "phase $p exit $code"
+    if ($code -ne 0 -and $p -eq "gatec") {
+        # A seed that FAILED Gate C still writes its record, so the aggregator can read the
+        # experiment as VOID; write that as the verdict so the watcher stops. A Gate C crash
+        # leaves a record missing, the aggregator exits non-zero, and the chain stops without one.
+        $a = & $py $agg 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0 -and $a -match "VERDICT: VOID") {
+            Set-Content -Path ($verdictFile + ".tmp") -Value $a
+            Move-Item -Force ($verdictFile + ".tmp") $verdictFile
+            Say "VOID: Gate C failed; verdict written"
+            exit 3
+        }
+    }
+    if ($code -ne 0) { Say "STOP: phase $p failed"; exit 1 }
 }
 Say "chain done"
