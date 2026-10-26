@@ -51,3 +51,163 @@ def test_names_and_layout():
     assert cells.snapshot_name(8000) == "judge_u8000.pt"
     assert cells.search_name(11, 3) == "exp082_J4V-X16k_d11_s3.json"
     assert cells.E75_OUT != cells.OUT
+
+
+gatec = _load("exp082_gatec", EXP / "gatec.py")
+t75tests = _load("test_exp075_helpers", REPO / "tests" / "experiments" / "test_exp075.py")
+vi = gatec.t75.vi
+
+SEED = 12
+START, LEGS, BATCH = 2, (3, 4), 4
+
+
+def _probe():
+    return [(apply_move(SOLVED, 0), 1), (apply_move(apply_move(SOLVED, 1), 3), 2)]
+
+
+def fake_measure(judge, probe, distance, seed):
+    """Stands in for Gate L (which needs the full BFS table): a number every weight moves."""
+    return {"margin": sum(float(p.detach().double().sum()) for p in judge.parameters())}
+
+
+def _train_straight(root, n, sync_every=1):
+    """EXP-075's X in miniature: fake pretrained encoder, n updates of value iteration."""
+    judge = gatec.c75.make_judge(SEED, "X", root)
+    vi.train_judge(judge, gatec.t75.VI_ARM, n_updates=n, batch=BATCH, max_len=gatec.t75.MAX_LEN,
+                   n_actions=N_ACTIONS, exclude=set(), probe=_probe(), seed=SEED,
+                   sync_every=sync_every, probe_every=1, draws=1,
+                   ckpt_dir=gatec.c75.ckpt_dir("X", SEED, root), log=lambda m: None)
+    return judge
+
+
+@pytest.fixture
+def world(tmp_path, monkeypatch):
+    """A fake EXP-075 X at update START with its record, and an empty EXP-082 out dir."""
+    monkeypatch.setattr(gatec.cells, "START", START)
+    monkeypatch.setattr(gatec, "sets", lambda seed: (set(), _probe(), None))
+    monkeypatch.setattr(gatec, "measure", fake_measure)
+    src = tmp_path / "e75"
+    t75tests._fake_encoder(src, "X", SEED)
+    judge = _train_straight(src, START)
+    (src / gatec.c75.record_name("X", SEED)).write_text(json.dumps(
+        {"gate_l": fake_measure(judge, None, None, SEED), "n_probe": 2}))
+    return src, tmp_path / "out"
+
+
+def _gc(src, out, tracked=lambda p: "b", blob=lambda p: "b"):
+    return gatec.gate_c(SEED, out, src_root=src, tracked=tracked, blob=blob)
+
+
+def _src_ck(src):
+    return gatec.c75.ckpt_dir("X", SEED, src)
+
+
+def test_gate_c_passes_and_copies_all_four_files(world):
+    """Catches a copy missing the optimizer or the target net (the continuation would crash or,
+    worse, restart Adam), and a Gate C record without the provenance training reads."""
+    src, out = world
+    rec = _gc(src, out)
+    assert rec["pass"] is True and rec["continuation"] == "seeded"
+    dst = gatec.cells.ckpt_dir(SEED, out)
+    for f in ("judge.pt", "jt.pt", "opt.pt", "state.json"):
+        assert (dst / f).read_bytes() == (_src_ck(src) / f).read_bytes(), f
+    assert rec["continued_from"] == {"experiment": "EXP-075", "update": START}
+    assert rec["start_update"] == START and rec["opt_bad"] == [] and rec["jt_ok"] is True
+    assert gatec.passed(SEED, out)
+
+
+@pytest.mark.parametrize("tracked,blob,why", [
+    (lambda p: "b", lambda p: "other", "differs"),
+    (lambda p: None, lambda p: "b", "untracked"),
+])
+def test_gate_c_fails_on_a_source_that_is_not_the_tracked_file(world, tracked, blob, why):
+    src, out = world
+    with pytest.raises(SystemExit, match="GATE C FAILED"):
+        _gc(src, out, tracked, blob)
+    rec = json.loads((out / gatec.cells.gatec_name(SEED)).read_text())
+    assert rec["pass"] is False and any(why in b for b in rec["identity_bad"])
+    assert not gatec.cells.ckpt_dir(SEED, out).exists()
+
+
+def test_gate_c_fails_on_a_start_that_is_not_exp075s(world):
+    """Catches a Gate L comparison that is not exact, or that compares the wrong judge."""
+    src, out = world
+    p = src / gatec.c75.record_name("X", SEED)
+    r = json.loads(p.read_text())
+    r["gate_l"]["margin"] += 1e-9
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match="GATE C FAILED"):
+        _gc(src, out)
+    assert not gatec.passed(SEED, out)
+
+
+def test_gate_c_fails_when_exp075_is_not_at_the_start_update(world, monkeypatch):
+    src, out = world
+    monkeypatch.setattr(gatec.cells, "START", START + 1)
+    with pytest.raises(SystemExit, match="start update"):
+        _gc(src, out)
+
+
+def test_gate_c_fails_on_an_optimizer_at_the_wrong_step(world):
+    """Catches a stale opt.pt (the laptop's opt.pt predates its judge.pt by two days)."""
+    src, out = world
+    p = _src_ck(src) / "opt.pt"
+    sd = torch.load(p)
+    for st in sd["state"].values():
+        st["step"] = torch.tensor(float(START - 1))
+    torch.save(sd, p)
+    with pytest.raises(SystemExit, match="GATE C FAILED"):
+        _gc(src, out)
+    rec = json.loads((out / gatec.cells.gatec_name(SEED)).read_text())
+    assert any("step" in b for b in rec["opt_bad"])
+
+
+def test_gate_c_fails_on_a_target_net_of_another_architecture(world):
+    src, out = world
+    other = gatec.c75.build_judge(SEED, "Y", gatec.c75.fresh_sensory("Y", SEED))
+    torch.save(other.state_dict(), _src_ck(src) / "jt.pt")
+    with pytest.raises(SystemExit, match="GATE C FAILED"):
+        _gc(src, out)
+    assert json.loads((out / gatec.cells.gatec_name(SEED)).read_text())["jt_ok"] is False
+
+
+def test_gate_c_never_overwrites_a_started_continuation(world):
+    """REVIEW FOCUS 2. A re-run after training began must keep the continuation, or training
+    silently restarts from 4000."""
+    src, out = world
+    _gc(src, out)
+    marker = gatec.cells.ckpt_dir(SEED, out) / "judge.pt"
+    marker.write_bytes(b"started")
+    (out / gatec.cells.gatec_name(SEED)).unlink()
+    rec = _gc(src, out)
+    assert rec["continuation"] == "kept" and marker.read_bytes() == b"started"
+
+
+def test_gate_c_never_writes_exp075s_folder(world):
+    src, out = world
+    before = {f.name: f.read_bytes() for f in _src_ck(src).iterdir()}
+    _gc(src, out)
+    assert {f.name: f.read_bytes() for f in _src_ck(src).iterdir()} == before
+
+
+def test_measure_is_exp075s_gate_l_call(monkeypatch):
+    """Catches Gate C re-measuring with other arguments than EXP-075's train.run did."""
+    seen = {}
+    monkeypatch.setattr(gatec.gate_l, "leaf_rank_margin",
+                        lambda *a, **k: seen.update(a=a, k=k) or {"m": 1})
+    assert gatec.measure("J", "P", "D", 5) == {"m": 1}
+    assert seen == {"a": ("J", "P", "D", 5, N_ACTIONS), "k": {}}
+
+
+def test_identity_reads_git_for_a_tracked_file_and_none_for_an_untracked_one(tmp_path):
+    f = gatec.cells.E75_OUT / "judge_X_s0" / "state.json"
+    assert len(gatec.blob_of(f)) == 40 and gatec.tracked_blob(f) == gatec.blob_of(f)
+    p = tmp_path / "x.json"
+    p.write_text("{}")
+    assert gatec.tracked_blob(p) is None
+
+
+def test_pending_rechecks_failed_seeds(tmp_path):
+    (tmp_path / gatec.cells.gatec_name(1)).write_text(json.dumps({"pass": True}))
+    (tmp_path / gatec.cells.gatec_name(2)).write_text(json.dumps({"pass": False}))
+    assert gatec.pending([1, 2, 3], tmp_path) == [2, 3]
