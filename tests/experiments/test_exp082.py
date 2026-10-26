@@ -293,3 +293,43 @@ def test_pending_is_seeds_without_the_last_leg(tmp_path):
     (tmp_path / train.cells.record_name(16000, 1)).write_text("{}")
     (tmp_path / train.cells.record_name(8000, 2)).write_text("{}")
     assert train.pending([1, 2, 3], tmp_path) == [2, 3]
+
+
+evaluate = _load("exp082_evaluate", EXP / "evaluate.py")
+
+
+def test_search_cell_is_exp076s_j4v():
+    e76 = _load("exp076_evaluate", REPO / "experiments" / "076_deeper_tree" / "evaluate.py")
+    assert e76.ARMS["J4V-X"] == (evaluate.K, evaluate.K) == (4, 4)
+    assert evaluate.ARM == "J4V-X16k"
+    assert evaluate.record_name(9, 2) == cells.search_name(9, 2)
+
+
+def test_search_cell_refuses_a_judge_short_of_16000(tmp_path):
+    """REVIEW FOCUS 3. Catches a search run by hand on a judge still training."""
+    t75tests._fake_judge_ckpt(tmp_path, "X", 0, update=8000)
+    with pytest.raises(SystemExit, match="evaluation needs 16000"):
+        evaluate.run_cell(11, 0, tmp_path, limit_states=1)
+    assert not (tmp_path / evaluate.record_name(11, 0)).exists()
+
+
+def test_search_cell_refuses_an_unregistered_depth(tmp_path):
+    with pytest.raises(SystemExit, match="depth 7"):
+        evaluate.run_cell(7, 0, tmp_path, limit_states=1)
+
+
+def test_a_16k_judge_drives_a_real_j4v_cell_at_both_depths(tmp_path):
+    """Catches a record missing a field the aggregator checks, on EXP-075's real cells."""
+    t75tests._fake_judge_ckpt(tmp_path, "X", 0, update=16000)
+    for d in (9, 11):
+        r = evaluate.run_cell(d, 0, tmp_path, limit_states=1)
+        assert (r["arm"], r["judge"], r["depth"], r["seed"], r["judge_seed"]) == (
+            "J4V-X16k", "X16k", d, 0, 0)
+        assert (r["k"], r["k_goal"], r["mode"], r["no_revisit"]) == (4, 4, "C", True)
+        assert r["judge_updates"] == 16000 and r["limit_states"] == 1 and r["n"] == 1
+        assert json.loads((tmp_path / evaluate.record_name(d, 0)).read_text())["depth"] == d
+
+
+def test_search_pending_runs_depth_11_first_and_skips_finished(tmp_path):
+    (tmp_path / evaluate.record_name(11, 1)).write_text("{}")
+    assert evaluate.pending([9, 11], [1, 2], tmp_path) == [(11, 2), (9, 1), (9, 2)]
