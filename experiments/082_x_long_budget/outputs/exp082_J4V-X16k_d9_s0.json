@@ -1,0 +1,29 @@
+{
+ "arm": "J4V-X16k",
+ "depth": 9,
+ "eval_revisit_rate": 0.0,
+ "fallback_frac": 0.0,
+ "fired4": 128,
+ "first_fire_len": {
+  "4": 128
+ },
+ "git_commit": "4e2c17f9c70fda67ba299a9e76cf200513445148",
+ "goal_fired_frac": 0.1862673484295106,
+ "greedy_modal_action_frac": 0.3265287522934582,
+ "judge": "X16k",
+ "judge_evals": 1296.0,
+ "judge_seed": 0,
+ "judge_updates": 16000,
+ "k": 4,
+ "k_goal": 4,
+ "limit_states": null,
+ "mean_steps": 9.488188976377952,
+ "mode": "C",
+ "n": 200,
+ "no_revisit": true,
+ "optimality": 0.9485477178423236,
+ "seed": 0,
+ "solved": 127,
+ "success_rate": 0.635,
+ "wall_s": 6389.6
+}
