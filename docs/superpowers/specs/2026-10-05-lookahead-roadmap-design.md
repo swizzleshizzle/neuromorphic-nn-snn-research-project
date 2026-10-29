@@ -367,6 +367,16 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   ENCODER-LIMITED was a 4000-update reading. The judge is trained on true distance, so 0.41 is
 >   a ceiling, not a solver number; loss was still falling at 16,000 and O-raw's far band (0.2973)
 >   is still higher. Next stage is Michael's call.
+>   Michael picked X continued 4x longer (EXP-082, neuromorphic#28).
+> - **2026-10-29, EXP-082 (X continued from 4000 to 16,000 updates, value iteration unchanged):**
+>   VERDICT VALUE ITERATION SATURATED AT 4X BUDGET. Gate C continuity 12 of 12, Gate T 0.3689.
+>   Depth-11 search (J4V, mode C, k 4) with the X16k judge: 0.2083 vs J4V-X 0.1950, +0.0133,
+>   9 of 12, p 0.1035, Claim 1 not confirmed (inside the band the spec said would not resolve).
+>   Far band +0.0278, 8 of 12, p 0.0112, Claim 2 CONFIRMED (SMALL), which falls through.
+>   Reported: margins at distances 7 and 8 rose 0.69 to 0.84 and 0.31 to 0.57, and depth 9 rose
+>   to 0.6200 vs 0.4004, 12 of 12, p 0.0002, the best depth-9 number recorded. Against EXP-081's
+>   oracle judge at the same budget (0.4088), the limit at depth 11 is the objective. Next stage
+>   is Michael's call.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
