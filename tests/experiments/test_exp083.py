@@ -277,3 +277,147 @@ def test_floor_cell_reads_the_sets_file(tmp_path, monkeypatch):
     assert r["success_rate"] == r["solved"] / 3
     assert json.loads((tmp_path / cells.floor_name(10, 0)).read_text()) == r
     assert floor.pending([0, 1], tmp_path) == [(9, 0), (9, 1), (10, 1)]
+
+
+agg = _load("exp083_aggregate", EXP / "aggregate.py")
+SEEDS = list(range(12))
+
+
+def _srec(arm, d, s, rate, **over):
+    r = {"arm": arm, "judge": "X16k" if arm == "J4V-X16k" else "X", "depth": d, "seed": s,
+         "judge_seed": s, "k": 4, "k_goal": 4, "mode": "C", "no_revisit": True, "n": 200,
+         "limit_states": None, "judge_updates": 16000 if arm == "J4V-X16k" else 4000,
+         "success_rate": rate, "solved": round(rate * 200), "optimality": 0.9,
+         "mean_steps": 10.0, "goal_fired_frac": 0.1, "fallback_frac": 0.0, "git_commit": "c"}
+    r.update(over)
+    return r
+
+
+def _agg_world(tmp, *, gain9=0.20, gain10=0.08, x9=0.40, x10=0.30, floor=0.0, v_ok=True,
+               r_ok=True, short=False, jitter=True):
+    out, e76, e82 = tmp / "out", tmp / "e76", tmp / "e82"
+    for p in (out, e76, e82):
+        p.mkdir(parents=True, exist_ok=True)
+    for s in SEEDS:
+        j = (s % 3 - 1) * 0.01 if jitter else 0.0
+        n = 150 if (short and s == 0) else 200
+        (out / cells.sets_name(s)).write_text(json.dumps(
+            {"seed": s, "pass": v_ok or s != 3, "gate_v": {"u4000": True, "u16000": v_ok or s != 3},
+             "n_seen": 1000, "candidates": {"9": 5000, "10": 9000},
+             "sets": {"9": [[0]] * n, "10": [[0]] * 200}}))
+        for d, x, g in ((9, x9, gain9), (10, x10, gain10)):
+            (out / cells.search_name("J4V-X", d, s)).write_text(json.dumps(
+                _srec("J4V-X", d, s, x)))
+            (out / cells.search_name("J4V-X16k", d, s)).write_text(json.dumps(
+                _srec("J4V-X16k", d, s, x + g + j)))
+            (out / cells.floor_name(d, s)).write_text(json.dumps(
+                {"depth": d, "seed": s, "n": 200, "solved": round(floor * 200),
+                 "success_rate": floor}))
+        (e76 / f"exp076_J4V-X_d9_s{s}.json").write_text(json.dumps({"success_rate": 0.40}))
+        (e82 / f"exp082_J4V-X16k_d9_s{s}.json").write_text(json.dumps({"success_rate": 0.62}))
+    (out / cells.GATE_R_NAME).write_text(json.dumps(
+        {"pass": r_ok, "solved": 127 if r_ok else 120, "expected_solved": 127,
+         "git_commit": "c"}))
+    return dict(out=out, e76_root=e76, e82_root=e82)
+
+
+def _verdict(tmp, **kw):
+    return agg.run_all(**_agg_world(tmp, **kw))["verdict"]
+
+
+def test_bars_are_the_spec_values():
+    assert (agg.C1_MIN, agg.C2_MIN, agg.FLOOR_MARGIN, agg.CLAIM_ALPHA) == (0.10, 0.05, 0.05, 0.025)
+
+
+def test_verdict_has_a_line_for_every_row_of_spec_section_7():
+    assert agg.verdict(False, True, True, True, "CONFIRMED", "CONFIRMED") == "VOID"
+    assert agg.verdict(True, False, True, True, "CONFIRMED", "CONFIRMED") == "VOID"
+    assert agg.verdict(True, True, False, True, "CONFIRMED", "CONFIRMED") == "UNRESOLVED"
+    assert agg.verdict(True, True, True, False, "UNRESOLVED", "CONFIRMED") == "UNRESOLVED"
+    assert agg.verdict(True, True, True, True, "CONFIRMED", "CONFIRMED") == \
+        "DEPTH-9 GAIN CONFIRMED, REACHES DEPTH 10"
+    for c2 in ("CONFIRMED (SMALL)", "NOT CONFIRMED", "UNRESOLVED"):
+        assert agg.verdict(True, True, True, True, "CONFIRMED", c2) == \
+            "DEPTH-9 GAIN CONFIRMED, STOPS SHORT OF DEPTH 10"
+    assert agg.verdict(True, True, True, True, "CONFIRMED (SMALL)", "CONFIRMED") == \
+        "DEPTH-9 GAIN SMALLER THAN REPORTED"
+    assert agg.verdict(True, True, True, True, "NOT CONFIRMED", "CONFIRMED") == \
+        "DEPTH-9 GAIN DOES NOT HOLD ON UNSEEN STATES"
+
+
+def test_a_large_gain_at_both_depths_reaches_depth_10(tmp_path):
+    assert _verdict(tmp_path) == "DEPTH-9 GAIN CONFIRMED, REACHES DEPTH 10"
+
+
+def test_a_small_depth_10_gain_stops_short(tmp_path):
+    assert _verdict(tmp_path, gain10=0.02) == "DEPTH-9 GAIN CONFIRMED, STOPS SHORT OF DEPTH 10"
+
+
+def test_small_significant_depth9_gain_reads_smaller_than_reported(tmp_path):
+    """The EXP-068 rule: the band between significance and the bar is its own verdict."""
+    assert _verdict(tmp_path, gain9=0.05) == "DEPTH-9 GAIN SMALLER THAN REPORTED"
+
+
+def test_no_depth9_gain_does_not_hold(tmp_path):
+    assert _verdict(tmp_path, gain9=0.0) == "DEPTH-9 GAIN DOES NOT HOLD ON UNSEEN STATES"
+
+
+def test_gate_f_failing_at_depth_10_only_reads_stops_short(tmp_path):
+    """REVIEW FOCUS 4."""
+    res = agg.run_all(**_agg_world(tmp_path, x10=0.0, gain10=0.03, floor=0.0, x9=0.40))
+    assert res["c2"][0] == "UNRESOLVED"
+    assert res["verdict"] == "DEPTH-9 GAIN CONFIRMED, STOPS SHORT OF DEPTH 10"
+
+
+def test_gate_f_failing_at_depth_9_is_unresolved(tmp_path):
+    assert _verdict(tmp_path, x9=0.30, gain9=0.20, floor=0.48) == "UNRESOLVED"
+
+
+def test_a_failed_gate_v_or_gate_r_is_void(tmp_path):
+    assert _verdict(tmp_path / "a", v_ok=False) == "VOID"
+    assert _verdict(tmp_path / "b", r_ok=False) == "VOID"
+
+
+def test_a_short_set_is_unresolved(tmp_path):
+    assert _verdict(tmp_path, short=True) == "UNRESOLVED"
+
+
+@pytest.mark.parametrize("arm,over,msg", [
+    ("J4V-X", {"judge_updates": 16000}, "judge_updates"),
+    ("J4V-X16k", {"judge": "X"}, "judge"),
+    ("J4V-X", {"limit_states": 2}, "limit_states"),
+    ("J4V-X16k", {"n": 199}, "n"),
+    ("J4V-X", {"depth": 11}, "depth"),
+])
+def test_a_record_that_is_not_the_registered_cell_is_refused(tmp_path, arm, over, msg):
+    """REVIEW FOCUS 3."""
+    w = _agg_world(tmp_path)
+    p = w["out"] / cells.search_name(arm, 9, 4)
+    p.write_text(json.dumps(_srec(arm, 9, 4, 0.4, **over)))
+    with pytest.raises(SystemExit, match=msg):
+        agg.run_all(**w)
+
+
+def test_mixed_checkouts_are_refused(tmp_path):
+    w = _agg_world(tmp_path)
+    p = w["out"] / cells.search_name("J4V-X", 10, 2)
+    p.write_text(json.dumps(_srec("J4V-X", 10, 2, 0.3, git_commit="other")))
+    with pytest.raises(SystemExit, match="checkout"):
+        agg.run_all(**w)
+
+
+def test_the_report_prints_one_verdict_line_and_the_reported_block(tmp_path):
+    lines = agg.run_all(**_agg_world(tmp_path))["lines"]
+    assert sum(ln.startswith("VERDICT: ") for ln in lines) == 1
+    text = "\n".join(lines)
+    for key in ("CLAIM 1", "CLAIM 2", "GATE V", "GATE R", "GATE S", "GATE F", "old held-out",
+                "optimality", "floor", "n_seen"):
+        assert key in text, key
+
+
+def test_sets_stage_lines(tmp_path):
+    assert agg.stage_sets_lines(_agg_world(tmp_path / "a")["out"])[-1] == "SETS: OK"
+    assert agg.stage_sets_lines(_agg_world(tmp_path / "b", v_ok=False)["out"])[-1] == \
+        "VERDICT: VOID"
+    assert agg.stage_sets_lines(_agg_world(tmp_path / "c", short=True)["out"])[-1] == \
+        "VERDICT: UNRESOLVED"
