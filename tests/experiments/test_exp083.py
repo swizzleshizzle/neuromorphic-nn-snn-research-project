@@ -105,7 +105,10 @@ def _sets_world(tmp_path, n=3):
     _train(e75, 1)
     e82 = tmp_path / "e82"
     _train(e82, n)
-    shells = {9: list(range(1000, 1600)), 10: list(range(2000, 2600))}
+    # Each shell mixes 30 states the replay trains on with unreached ones, so a build that
+    # forgot `seen` would pick trained-on states (final review, Important 1).
+    seen = sorted(sets.replay(SEED, {1000, 1001}, (n,), batch=4)[0])
+    shells = {9: list(range(1000, 1600)) + seen[:30], 10: list(range(2000, 2600)) + seen[30:60]}
     kw = dict(exclude_fn=lambda seed, prov: {1000, 1001}, shells_fn=lambda prov: shells,
               provider_fn=lambda: None, e75_root=e75, e82_root=e82, ends=(1, n), batch=4)
     return tmp_path / "out", kw
@@ -117,6 +120,9 @@ def test_build_writes_sets_when_gate_v_passes(tmp_path):
     assert rec["gate_v"] == {"u4000": True, "u16000": True} and rec["pass"] is True
     assert {k: len(v) for k, v in rec["sets"].items()} == {"9": 200, "10": 200}
     assert 1000 not in rec["sets"]["9"] and 1001 not in rec["sets"]["9"]
+    seen = sets.replay(SEED, {1000, 1001}, (3,), batch=4)[0]
+    for d in ("9", "10"):
+        assert not any(isinstance(x, list) and tuple(x) in seen for x in rec["sets"][d])
     assert rec["candidates"] == {"9": 598, "10": 600}
     assert json.loads((out / cells.sets_name(SEED)).read_text()) == rec
 
@@ -379,7 +385,13 @@ def test_a_failed_gate_v_or_gate_r_is_void(tmp_path):
 
 
 def test_a_short_set_is_unresolved(tmp_path):
-    assert _verdict(tmp_path, short=True) == "UNRESOLVED"
+    """Final review: a short set's real search records hold n < 200, which read_search
+    refuses; the aggregate must still print the Gate S row, not exit 1."""
+    w = _agg_world(tmp_path, short=True)
+    for a in cells.ARMS:
+        p = w["out"] / cells.search_name(a, 9, 0)
+        p.write_text(json.dumps({**json.loads(p.read_text()), "n": 150}))
+    assert agg.run_all(**w)["verdict"] == "UNRESOLVED"
 
 
 @pytest.mark.parametrize("arm,over,msg", [

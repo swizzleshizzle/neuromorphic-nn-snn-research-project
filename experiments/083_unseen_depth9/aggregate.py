@@ -116,6 +116,10 @@ def run_all(out=cells.OUT, e76_root=cells.E76_OUT, e82_root=cells.E82_OUT) -> di
     if not ss["v_ok"]:
         lines.append("VERDICT: VOID")
         return {"verdict": "VOID", "lines": lines}
+    if not ss["s_ok"]:
+        # A short set's search records hold n < 200, which read_search refuses.
+        lines.append("VERDICT: UNRESOLVED")
+        return {"verdict": "UNRESOLVED", "lines": lines}
     gr = _read(out / cells.GATE_R_NAME)
     r_ok = gr.get("pass") is True
     lines.append(f"GATE R (EXP-082 cell reproduces): {'PASS' if r_ok else 'FAIL'}, solved "
