@@ -242,3 +242,38 @@ def test_search_pending_order_and_skip(tmp_path):
     assert [d for _, d, _ in jobs[1:]] == sorted([d for _, d, _ in jobs[1:]], reverse=True)
     (tmp_path / cells.GATE_R_NAME).write_text("{}")
     assert evaluate.pending([1], tmp_path)[0] != ("gate_r", 9, 0)
+
+
+floor = _load("exp083_floor", EXP / "floor.py")
+
+
+def test_rollout_solves_solved_at_once_and_a_one_move_state_sometimes():
+    assert floor.random_rollout(SOLVED, 1, random.Random(0)) is True
+    one = apply_move(SOLVED, 0)
+    rate = sum(floor.random_rollout(one, 1, random.Random(i)) for i in range(400)) / 400
+    assert 0.15 < rate < 0.6
+
+
+def test_rollout_budget_is_2d_plus_3(monkeypatch):
+    calls = []
+    real = floor.apply_move
+    monkeypatch.setattr(floor, "apply_move", lambda s, a: calls.append(a) or real(s, a))
+    far = SOLVED
+    for m in (0, 2, 4, 1, 3, 5, 0, 2, 4, 1):
+        far = apply_move(far, m)
+    lens = []
+    for i in range(20):
+        calls.clear()
+        floor.random_rollout(far, 10, random.Random(i))
+        lens.append(len(calls))
+    assert max(lens) == 23
+
+
+def test_floor_cell_reads_the_sets_file(tmp_path, monkeypatch):
+    _write_sets(tmp_path, 0)
+    monkeypatch.setattr(floor, "train_seed", lambda seed: 5)
+    r = floor.floor_cell(10, 0, tmp_path)
+    assert (r["depth"], r["seed"], r["n"], r["rng_seed"]) == (10, 0, 3, 5)
+    assert r["success_rate"] == r["solved"] / 3
+    assert json.loads((tmp_path / cells.floor_name(10, 0)).read_text()) == r
+    assert floor.pending([0, 1], tmp_path) == [(9, 0), (9, 1), (10, 1)]
