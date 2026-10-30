@@ -421,3 +421,42 @@ def test_sets_stage_lines(tmp_path):
         "VERDICT: VOID"
     assert agg.stage_sets_lines(_agg_world(tmp_path / "c", short=True)["out"])[-1] == \
         "VERDICT: UNRESOLVED"
+
+
+import re  # noqa: E402
+
+WORKERS = '@{ "sets" = 4; "search" = 6; "floor" = 4 }'
+
+
+def test_drivers_use_the_spec_worker_counts():
+    """Spec section 8: sets 4 (one BFS table each), search 6 (12 was slower per cell in
+    EXP-082 for no throughput), floor 4."""
+    assert WORKERS in (EXP / "chain083.ps1").read_text()
+    assert WORKERS in (EXP / "launch083.ps1").read_text()
+
+
+def test_drivers_have_no_em_dashes_or_backticks_in_strings():
+    for f in ("chain083.ps1", "launch083.ps1"):
+        text = (EXP / f).read_text()
+        assert "\u2014" not in text, f
+        assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
+
+
+def test_chain_reads_the_lines_the_aggregator_prints(tmp_path):
+    """Catches the chain and the aggregator drifting apart on the sets stage, and a chain that
+    would search after a failed Gate V."""
+    chain = (EXP / "chain083.ps1").read_text()
+    assert '-match "SETS: OK"' in chain and '-match "VERDICT: (VOID|UNRESOLVED)"' in chain
+    assert "STOP: the sets stage exited" in chain
+    assert re.search(r'verdictFile\s*=\s*"C:\\Users\\mlgbr\\verdict083\.txt"', chain)
+
+
+def test_a_failed_gate_v_reaches_the_verdict_file_as_void(tmp_path):
+    import os
+    import subprocess
+    import sys
+    out = _agg_world(tmp_path, v_ok=False)["out"]
+    r = subprocess.run([sys.executable, str(EXP / "aggregate.py"), "--stage", "sets",
+                        "--out-dir", str(out)], capture_output=True, text=True, timeout=120,
+                       env={**os.environ, "PYTHONPATH": str(REPO / "src")})
+    assert r.returncode == 0 and r.stdout.strip().splitlines()[-1] == "VERDICT: VOID", r.stderr
