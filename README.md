@@ -2,7 +2,7 @@
 
 > A 12-month self-directed research project building a regionalized spiking neural network from first principles. 
 
-**Status:** Phase 4. 82 numbered experiments, 66 with a committed results file.
+**Status:** Phase 4. 83 numbered experiments, 67 with a committed results file.
 **Goal:** a spiking network that solves a randomly scrambled 2x2 cube.
 **The write-up:** [`docs/writeup/report.md`](docs/writeup/report.md), the full research report, every number cited to the experiment that produced it.
 
@@ -98,6 +98,10 @@ too, continuing it from 4,000 to 16,000 updates. At depth 11 it solves 0.2083 ag
 verdict is **saturated at 4x budget**: the limit there is the objective. The gain went to states
 near the goal instead, and at depth 9 the same 4-move tree solves **0.6200 against 0.4004** (12 of 12
 seeds, p 0.0002, reported rather than pre-registered), the best depth-9 number the project has.
+EXP-083 pre-registered that depth-9 gain and re-tested it on scrambles neither judge ever trained
+on, found by replaying the training walks exactly. It holds: **0.5537 against 0.3279** (+0.2258,
+12 of 12 seeds, p 0.0002), and it reaches depth 10, **0.2904 against 0.1992** (+0.0912, 12 of 12,
+p 0.0002). The gain fades by depth, about +0.22 at 9, +0.09 at 10 and +0.01 at 11.
 
 The learned judge reads all 192 sensory neurons and was trained by value iteration from its own
 look-ahead, never from the true distances, with the spiking encoder trained beneath it. The search
@@ -269,7 +273,7 @@ Also: `npm run build`, `npm test` (Vitest), `npm run e2e` (Playwright smoke). **
 | 1: Single-region SNNs | May 2026 | Spiking MNIST (98.05%), recurrence (+37.3% over feedforward), surrogate gradients, STDP | Complete |
 | 2: Multi-region brain | Jun–Jul 2026 | Five-region architecture, inter-region communication, grid-world task | Complete, tagged `phase-2-complete`. Honest audit: 1 met / 3 partial |
 | 3: Rubik's Cube | Jul–Sep 2026 | 2x2 cube environment, curriculum learning, regional specialization | Graded at `phase-3-checkpoint`: 3 of 4 criteria met or exceeded, 1 partial; the self-imposed Stage 4 is priced out |
-| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and two 5-move searches (the EXP-077 beam and the EXP-078 full tree) confirmed at depth 9 and refuted at depth 11, then a judge retrained on longer walks (EXP-079) refuted at both depths, and a judge trained on true distances (EXP-080) that looked encoder-limited at 4000 updates and, trained 4x longer (EXP-081), doubles depth-11 solves as a ceiling, and the value-iteration judge trained 4x longer (EXP-082), saturated at depth 11 and raising depth 9 to 0.6200 |
+| 4: Capstone | Oct–Dec 2026 | Research report, and look-ahead toward solving a random 2x2 | **In progress.** Report written; look-ahead experiments EXP-070 to 072 run, a learned judge (EXP-074, superseding EXP-073) confirmed at depth 9, a wider region under it (EXP-075) confirmed at depth 9, a 4-move tree over those judges (EXP-076) confirmed at depths 9 and 11, and two 5-move searches (the EXP-077 beam and the EXP-078 full tree) confirmed at depth 9 and refuted at depth 11, then a judge retrained on longer walks (EXP-079) refuted at both depths, and a judge trained on true distances (EXP-080) that looked encoder-limited at 4000 updates and, trained 4x longer (EXP-081), doubles depth-11 solves as a ceiling, and the value-iteration judge trained 4x longer (EXP-082), saturated at depth 11 and raising depth 9 to 0.6200, a gain confirmed on never-trained-on states and reaching depth 10 (EXP-083) |
 
 Future (Year 2+): **Strategy Sentinel**, applying the architecture as a meta-cognitive layer on top of an existing LEAN/QuantConnect quantitative trading stack. Separate repo, not included here.
 

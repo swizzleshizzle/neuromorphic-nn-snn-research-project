@@ -377,6 +377,14 @@ Each stage has a decision point; the next stage starts only on its answer.
 >   to 0.6200 vs 0.4004, 12 of 12, p 0.0002, the best depth-9 number recorded. Against EXP-081's
 >   oracle judge at the same budget (0.4088), the limit at depth 11 is the objective. Next stage
 >   is Michael's call.
+>   Michael picked confirming the depth-9 gain and extending to depth 10 (EXP-083, neuromorphic#29).
+> - **2026-10-30, EXP-083 (J4V-X16k vs J4V-X on states neither judge trained on, depths 9 and 10):**
+>   VERDICT DEPTH-9 GAIN CONFIRMED, REACHES DEPTH 10. Gates V (replayed walk stream equals the
+>   training stream at 4000 and 16,000, 12 of 12), R (EXP-082 d9 s0 reproduces 127), S and F
+>   (random floor 0.0000 at both depths) pass. Depth 9: 0.5537 vs 0.3279, +0.2258, 12 of 12,
+>   p 0.0002. Depth 10: 0.2904 vs 0.1992, +0.0912, 12 of 12, p 0.0002. Both arms lower on the
+>   new states than on the old held-out set (0.6200, 0.4004), gap unchanged. Next stage is
+>   Michael's call.
 
 **Standing rules for every stage:** the random-guided control; a matched node budget; at least 12
 paired seeds; no distance table and no action-count literal inside the system; laptop runs bank
