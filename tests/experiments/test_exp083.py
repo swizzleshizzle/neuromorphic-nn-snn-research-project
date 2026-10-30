@@ -141,3 +141,104 @@ def test_build_fails_gate_v_when_a_checkpoint_is_at_another_update(tmp_path):
 def test_sets_pending_skips_written_files(tmp_path):
     (tmp_path / cells.sets_name(2)).write_text("{}")
     assert sets.pending([1, 2, 3], tmp_path) == [1, 3]
+
+
+evaluate = _load("exp083_evaluate", EXP / "evaluate.py")
+
+
+def _write_sets(out, seed, ok=True, n=3):
+    states = []
+    s = SOLVED
+    for m in (0, 2, 4, 1, 3, 5, 0, 2, 4, 1, 3, 5):
+        s = apply_move(s, m)
+        states.append(list(s))
+    rec = {"seed": seed, "pass": ok, "gate_v": {"u4000": ok, "u16000": ok},
+           "sets": {"9": states[:n] if ok else [], "10": states[-n:] if ok else []}}
+    Path(out).mkdir(parents=True, exist_ok=True)
+    (Path(out) / cells.sets_name(seed)).write_text(json.dumps(rec))
+
+
+def test_cell_refuses_a_missing_or_failed_sets_file(tmp_path):
+    """REVIEW FOCUS 2. A seed whose replay did not match must never be searched."""
+    with pytest.raises(SystemExit, match="no sets file"):
+        evaluate.load_states(0, 9, tmp_path)
+    _write_sets(tmp_path, 0, ok=False)
+    with pytest.raises(SystemExit, match="Gate V"):
+        evaluate.load_states(0, 9, tmp_path)
+    _write_sets(tmp_path, 0)
+    got = evaluate.load_states(0, 10, tmp_path)
+    assert len(got) == 3 and all(isinstance(s, tuple) for s in got)
+
+
+def test_judge_for_reads_each_arm_from_its_own_experiment(monkeypatch):
+    calls = []
+    monkeypatch.setattr(evaluate.e75, "load_judge",
+                        lambda arm, seed, root, required_updates: calls.append(
+                            (arm, seed, root, required_updates)))
+    evaluate.judge_for("J4V-X16k", 3)
+    evaluate.judge_for("J4V-X", 3)
+    assert calls == [("X", 3, cells.E82_OUT, 16000), ("X", 3, cells.E75_OUT, 4000)]
+    with pytest.raises(SystemExit, match="arm"):
+        evaluate.judge_for("J4V-W", 3)
+
+
+def test_a_real_cell_runs_at_depth_10_on_the_sets_file(tmp_path):
+    """Catches a record missing a field the aggregator checks, on the real depth-9 cell's
+    agent and head at depth 10."""
+    e82 = tmp_path / "e82"
+    t75tests._fake_judge_ckpt(e82, "X", 0, update=16000)
+    out = tmp_path / "out"
+    _write_sets(out, 0)
+    r = evaluate.run_cell("J4V-X16k", 10, 0, out, limit_states=2, e82_root=e82)
+    assert (r["arm"], r["judge"], r["depth"], r["seed"], r["judge_seed"]) == (
+        "J4V-X16k", "X16k", 10, 0, 0)
+    assert (r["k"], r["k_goal"], r["mode"], r["no_revisit"]) == (4, 4, "C", True)
+    assert r["judge_updates"] == 16000 and r["n"] == 2 and r["limit_states"] == 2
+    assert r["states_from"] == cells.sets_name(0)
+    assert json.loads((out / cells.search_name("J4V-X16k", 10, 0)).read_text())["depth"] == 10
+
+
+def test_a_cell_refuses_a_judge_at_the_wrong_update(tmp_path):
+    e75 = tmp_path / "e75"
+    t75tests._fake_judge_ckpt(e75, "X", 0, update=3000)
+    _write_sets(tmp_path / "out", 0)
+    with pytest.raises(SystemExit, match="4000"):
+        evaluate.run_cell("J4V-X", 9, 0, tmp_path / "out", limit_states=1, e75_root=e75)
+
+
+def _fake_search(solved, n=200):
+    def f(judge, depth, seed, states):
+        return {"solved": solved, "n": n, "success_rate": solved / n, "first_fire_len": {}}
+    return f
+
+
+def test_gate_r_writes_only_into_exp083(tmp_path, monkeypatch):
+    """REVIEW FOCUS 1. EXP-082's run_cell writes where it reads its judge; Gate R must not."""
+    e82 = tmp_path / "e82"
+    e82.mkdir()
+    (e82 / "exp082_J4V-X16k_d9_s0.json").write_text(json.dumps(
+        {"solved": 127, "success_rate": 0.635}))
+    before = sorted(p.name for p in e82.rglob("*"))
+    monkeypatch.setattr(evaluate, "judge_for", lambda arm, seed, **kw: None)
+    monkeypatch.setattr(evaluate.e75, "load_cell", lambda d, s: (None, None, [1, 2], 7))
+    monkeypatch.setattr(evaluate, "_search", _fake_search(127))
+    r = evaluate.gate_r(tmp_path / "out", e82_root=e82)
+    assert r["pass"] is True and (tmp_path / "out" / cells.GATE_R_NAME).exists()
+    assert sorted(p.name for p in e82.rglob("*")) == before
+    monkeypatch.setattr(evaluate, "_search", _fake_search(126))
+    assert evaluate.gate_r(tmp_path / "out", e82_root=e82)["pass"] is False
+
+
+def test_gate_r_compares_against_exp082s_committed_record():
+    r = json.loads((cells.E82_OUT / "exp082_J4V-X16k_d9_s0.json").read_text())
+    assert (r["solved"], r["success_rate"]) == (127, 0.635)
+
+
+def test_search_pending_order_and_skip(tmp_path):
+    (tmp_path / cells.search_name("J4V-X", 10, 1)).write_text("{}")
+    jobs = evaluate.pending([1, 2], tmp_path)
+    assert jobs[0] == ("gate_r", 9, 0)
+    assert ("J4V-X", 10, 1) not in jobs and len(jobs) == 1 + 2 * 2 * 2 - 1
+    assert [d for _, d, _ in jobs[1:]] == sorted([d for _, d, _ in jobs[1:]], reverse=True)
+    (tmp_path / cells.GATE_R_NAME).write_text("{}")
+    assert evaluate.pending([1], tmp_path)[0] != ("gate_r", 9, 0)
