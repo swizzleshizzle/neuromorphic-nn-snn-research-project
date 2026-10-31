@@ -159,3 +159,87 @@ def test_train_writes_only_under_084(tmp_path, monkeypatch):
     assert guarded.read_bytes() == before
     assert {"gate_l", "wall_s", "s_per_update", "loss_last", "probes", "device", "device_name",
             "torch_version", "git_commit"} <= set(rec)
+
+
+agg = _load("exp084_aggregate", EXP / "aggregate.py")
+
+
+def test_within_boundary():
+    assert agg.within(129, 127) and agg.within(125, 127)
+    assert not agg.within(130, 127) and not agg.within(124, 127)
+
+
+@pytest.mark.parametrize("flags,want", [
+    ((False, True, True, True), "VOID"),
+    ((False, False, False, False), "VOID"),
+    ((True, False, False, True), "DESKTOP DIFFERS FROM LAPTOP ON CPU TOO"),
+    ((True, False, True, True), "GPU PORT DOES NOT REPRODUCE"),
+    ((True, True, True, False), "GPU SEARCH REPRODUCES, TRAINING DOES NOT LEARN"),
+    ((True, True, False, False), "GPU SEARCH REPRODUCES, TRAINING DOES NOT LEARN"),
+    ((True, True, True, True), "GPU PORT REPRODUCES"),
+])
+def test_verdict_rows(flags, want):
+    assert agg.verdict(*flags) == want
+
+
+def _w(path, rec):
+    path.write_text(json.dumps(rec))
+
+
+def _p_records(out, disagree_each):
+    for i, (a, s) in enumerate((a, s) for s in cells.SEEDS for a in cells.ARMS):
+        d = disagree_each[i] if isinstance(disagree_each, list) else disagree_each
+        _w(out / cells.p_name(a, s), {"n": 200, "agree": 200 - d, "disagree": d,
+                                      "near_ties": 0, "max_abs_dj": 1e-6, "goal_fired": 30,
+                                      "limit_states": None, "wall_s": 60.0})
+
+
+def test_run_p_halts(tmp_path):
+    _p_records(tmp_path, [1] * 10 + [0] * 14)
+    res = agg.run("p", tmp_path)
+    assert res["halt"] is True
+    assert any("GATE P: HALT" in line for line in res["lines"])
+    _p_records(tmp_path, [1] * 9 + [0] * 15)
+    assert agg.run("p", tmp_path)["halt"] is False
+
+
+def test_run_all_refuses_missing_cell(tmp_path):
+    _w(tmp_path / cells.GATEC_NAME, {"pass": True, "differences": []})
+    _p_records(tmp_path, 0)
+    pairs = [(a, s) for s in cells.SEEDS for a in cells.ARMS]
+    for a, s in pairs[:-1]:
+        _w(tmp_path / cells.e_name(a, s), {"solved": 100, "published": 100, "n": 200,
+                                           "limit_states": None, "wall_s": 100.0})
+    with pytest.raises(SystemExit, match=cells.e_name(*pairs[-1])):
+        agg.run("all", tmp_path)
+
+
+def _all_records(out, e_off=0):
+    _w(out / cells.GATEC_NAME, {"pass": True, "differences": []})
+    _p_records(out, 0)
+    for i, (a, s) in enumerate((a, s) for s in cells.SEEDS for a in cells.ARMS):
+        _w(out / cells.e_name(a, s), {"solved": 100 + (e_off if i == 5 else 0), "published": 100,
+                                      "n": 200, "limit_states": None, "wall_s": 100.0})
+    _w(out / cells.E_GATER_NAME, {"solved": 127, "published": 127, "n": 200,
+                                  "limit_states": None, "wall_s": 90.0})
+    _w(out / cells.M_NAME, {"solved": 126, "published": 127, "n": 200, "limit_states": None,
+                            "wall_s": 3000.0})
+    for s in cells.SEEDS:
+        cpu = json.loads((cells.E75_OUT / f"exp075_train_X_s{s}.json").read_text())
+        _w(out / cells.train_name(s), {"gate_l": cpu["gate_l"], "n_updates": 4000,
+                                       "s_per_update": 0.11})
+
+
+def test_run_all_reaches_a_verdict(tmp_path):
+    _all_records(tmp_path)
+    res = agg.run("all", tmp_path)
+    assert res["verdict"] == "GPU PORT REPRODUCES"
+    assert any(line.startswith("  device X minus EXP-075 CPU X, overall margin")
+               for line in res["lines"])
+
+
+def test_run_all_three_off_fails_gate_e(tmp_path):
+    _all_records(tmp_path, e_off=3)
+    assert agg.run("all", tmp_path)["verdict"] == "GPU PORT DOES NOT REPRODUCE"
+    _all_records(tmp_path, e_off=-2)
+    assert agg.run("all", tmp_path)["verdict"] == "GPU PORT REPRODUCES"
