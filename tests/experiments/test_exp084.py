@@ -108,3 +108,54 @@ def test_first_move_matches_the_real_search(p_inputs):
                        critic=critic, no_revisit=True, trace=trace)
     got = [decisions.first_move(critic, s, ts, i)[0] for i, s in enumerate(states)]
     assert got == [t[0][0] for t in trace]
+
+
+reeval = _load("exp084_reeval", EXP / "reeval.py")
+train = _load("exp084_train", EXP / "train.py")
+
+
+def test_published_reads_records():
+    assert reeval.published("J4V-X16k", 0) == 124
+    assert reeval.published("J4V-X", 3) == 52
+    assert reeval.published_gate_r() == 127
+
+
+def test_published_refuses_limited_record(tmp_path):
+    src = cells.E83_OUT / "exp083_J4V-X16k_d9_s0.json"
+    rec = json.loads(src.read_text())
+    rec["limit_states"] = 3
+    (tmp_path / src.name).write_text(json.dumps(rec))
+    with pytest.raises(SystemExit):
+        reeval.published("J4V-X16k", 0, root=tmp_path)
+    rec["limit_states"], rec["n"] = None, 199
+    (tmp_path / src.name).write_text(json.dumps(rec))
+    with pytest.raises(SystemExit):
+        reeval.published("J4V-X16k", 0, root=tmp_path)
+
+
+E_FIELDS = {"solved", "published", "diff", "n", "wall_s", "device", "device_name",
+            "torch_version", "limit_states", "git_commit"}
+
+
+def test_e_cell_record_fields(tmp_path):
+    rec = reeval.e_cell("J4V-X16k", 0, "cpu", limit=1, out=tmp_path)
+    assert E_FIELDS <= set(rec)
+    on_disk = json.loads((tmp_path / cells.e_name("J4V-X16k", 0)).read_text())
+    assert on_disk["published"] == 124 and on_disk["n"] == 1 and on_disk["limit_states"] == 1
+
+
+def test_train_writes_only_under_084(tmp_path, monkeypatch):
+    from neuromorphic.envs.cube import SOLVED, apply_move
+    guarded = cells.E75_OUT / "judge_X_s0" / "state.json"
+    before = guarded.read_bytes()
+    walk = [SOLVED]
+    for a in [0, 2, 4, 1, 3, 5, 0, 2]:
+        walk.append(apply_move(walk[-1], a))
+    probe = [(s, 7 + i % 5) for i, s in enumerate(walk[1:])]
+    monkeypatch.setattr(train, "_sets", lambda seed: (set(), probe, lambda s: 5))
+    rec = train.run(0, "cpu", n_updates=2, batch=20, out=tmp_path)
+    assert (tmp_path / "judge_X_s0" / "state.json").exists()
+    assert (tmp_path / cells.train_name(0)).exists()
+    assert guarded.read_bytes() == before
+    assert {"gate_l", "wall_s", "s_per_update", "loss_last", "probes", "device", "device_name",
+            "torch_version", "git_commit"} <= set(rec)
