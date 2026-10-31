@@ -100,3 +100,65 @@ def test_judge_encode_device_stream_on_gpu():
     gpu_j = _judge().eval().to("cuda")
     spikes = gpu_j.encode(_states(), torch.Generator(device="cuda").manual_seed(11))
     assert spikes.device.type == "cuda"
+
+
+def _train(ckpt, n_updates, device="cpu"):
+    from neuromorphic.envs.cube import N_ACTIONS
+    probe = [(s, 1 + i % 11) for i, s in enumerate(_states(10))]
+    return vi.train_judge(_judge(), "W", n_updates=n_updates, batch=20, max_len=14,
+                          n_actions=N_ACTIONS, exclude=set(), probe=probe, seed=4,
+                          sync_every=100, probe_every=1, draws=1, ckpt_dir=ckpt,
+                          log=lambda *_: None, device=device)
+
+
+def test_cpu_state_json_keys_unchanged(tmp_path):
+    """EXP-083's Gate V compares replayed random state to committed state.json files: a CPU run
+    must write exactly the keys it always wrote."""
+    _train(tmp_path, 2)
+    state = json.loads((tmp_path / "state.json").read_text())
+    assert set(state) == {"update", "random_state", "generator_state", "probes"}
+
+
+def test_resume_refuses_device_mismatch(tmp_path):
+    _train(tmp_path, 1)
+    with pytest.raises(ValueError, match="device"):
+        _train(tmp_path, 2, device="cuda")
+    state = json.loads((tmp_path / "state.json").read_text())
+    state["generator_device"] = "cuda"
+    (tmp_path / "state.json").write_text(json.dumps(state))
+    with pytest.raises(ValueError, match="device"):
+        _train(tmp_path, 2, device="cpu")
+
+
+def _tensors(obj):
+    if isinstance(obj, torch.Tensor):
+        yield obj
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            yield from _tensors(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from _tensors(v)
+
+
+@gpu
+def test_device_checkpoint_tensors_on_cpu(tmp_path):
+    setup_device("cuda")
+    _train(tmp_path, 2, device="cuda")
+    for name in ("judge.pt", "jt.pt", "opt.pt"):
+        ts = list(_tensors(torch.load(tmp_path / name, weights_only=False)))
+        assert ts and all(t.device.type == "cpu" for t in ts), name
+    assert json.loads((tmp_path / "state.json").read_text())["generator_device"] == "cuda"
+
+
+@gpu
+def test_device_resume_continues(tmp_path):
+    setup_device("cuda")
+    a, b = tmp_path / "a", tmp_path / "b"
+    straight = _train(a, 4, device="cuda")
+    _train(b, 2, device="cuda")
+    resumed = _train(b, 4, device="cuda")
+    assert abs(straight["loss_last"] - resumed["loss_last"]) < 1e-5
+    ra = json.loads((a / "state.json").read_text())["random_state"]
+    rb = json.loads((b / "state.json").read_text())["random_state"]
+    assert ra == rb
