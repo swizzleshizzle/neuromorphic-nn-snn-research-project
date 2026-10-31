@@ -39,16 +39,26 @@ class Judge(nn.Module):
         n_in = content if readout == "concept" else content + sensory.fc1.out_features
         self.head = nn.Sequential(nn.Linear(n_in, hidden), nn.ReLU(), nn.Linear(hidden, 1))
 
+    def encode(self, states, generator):
+        """Spikes on the judge's device. The generator picks the stream (EXP-084): a CPU generator
+        draws on the CPU, exactly as before, and the spikes are then moved (a no-op on CPU), so
+        evaluation sees the same random stream on every device. A device generator draws on the
+        device, which is faster for training but a different stream."""
+        dev = next(self.head.parameters()).device
+        if generator is None or generator.device.type == "cpu":
+            obs = torch.as_tensor(np.array(states), dtype=torch.long)
+            return self.encoder_fn(obs, T=self.T, generator=generator).to(dev)
+        obs = torch.as_tensor(np.array(states), dtype=torch.long, device=generator.device)
+        return self.encoder_fn(obs, T=self.T, generator=generator)
+
     def concept(self, states, generator):
-        obs = torch.as_tensor(np.array(states), dtype=torch.long)
-        spikes = self.encoder_fn(obs, T=self.T, generator=generator)
+        spikes = self.encode(states, generator)
         return self.sensory(spikes).mean(dim=0)
 
     def _wide(self, states, generator):
         """Concept mean rate then hidden mean rate, from ONE encoding and ONE pass. Mirrors
         SensoryCortex.forward step for step (reset, then fc1 -> lif1 -> fc2 -> lif2 per t)."""
-        obs = torch.as_tensor(np.array(states), dtype=torch.long)
-        spikes = self.encoder_fn(obs, T=self.T, generator=generator)
+        spikes = self.encode(states, generator)
         s = self.sensory
         s.reset()
         mem1, mem2 = s.mem1, s.mem2

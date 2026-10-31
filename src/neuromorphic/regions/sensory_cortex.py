@@ -95,8 +95,8 @@ def encode_cube(
     n_in = n_facelets * n_colors
 
     # one-hot each facelet's color: input index = facelet * n_colors + color
-    idx = torch.arange(n_facelets).unsqueeze(0) * n_colors + obs.long()
-    rate = torch.zeros(B, n_in)
+    idx = torch.arange(n_facelets, device=obs.device).unsqueeze(0) * n_colors + obs.long()
+    rate = torch.zeros(B, n_in, device=obs.device)
     rate.scatter_(1, idx, max_rate)
 
     probs = rate.unsqueeze(0).expand(T, B, n_in).contiguous()
