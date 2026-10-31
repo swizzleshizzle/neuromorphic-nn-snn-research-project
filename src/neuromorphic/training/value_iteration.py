@@ -39,16 +39,26 @@ class Judge(nn.Module):
         n_in = content if readout == "concept" else content + sensory.fc1.out_features
         self.head = nn.Sequential(nn.Linear(n_in, hidden), nn.ReLU(), nn.Linear(hidden, 1))
 
+    def encode(self, states, generator):
+        """Spikes on the judge's device. The generator picks the stream (EXP-084): a CPU generator
+        draws on the CPU, exactly as before, and the spikes are then moved (a no-op on CPU), so
+        evaluation sees the same random stream on every device. A device generator draws on the
+        device, which is faster for training but a different stream."""
+        dev = next(self.head.parameters()).device
+        if generator is None or generator.device.type == "cpu":
+            obs = torch.as_tensor(np.array(states), dtype=torch.long)
+            return self.encoder_fn(obs, T=self.T, generator=generator).to(dev)
+        obs = torch.as_tensor(np.array(states), dtype=torch.long, device=generator.device)
+        return self.encoder_fn(obs, T=self.T, generator=generator)
+
     def concept(self, states, generator):
-        obs = torch.as_tensor(np.array(states), dtype=torch.long)
-        spikes = self.encoder_fn(obs, T=self.T, generator=generator)
+        spikes = self.encode(states, generator)
         return self.sensory(spikes).mean(dim=0)
 
     def _wide(self, states, generator):
         """Concept mean rate then hidden mean rate, from ONE encoding and ONE pass. Mirrors
         SensoryCortex.forward step for step (reset, then fc1 -> lif1 -> fc2 -> lif2 per t)."""
-        obs = torch.as_tensor(np.array(states), dtype=torch.long)
-        spikes = self.encoder_fn(obs, T=self.T, generator=generator)
+        spikes = self.encode(states, generator)
         s = self.sensory
         s.reset()
         mem1, mem2 = s.mem1, s.mem2
@@ -93,11 +103,11 @@ def bellman_targets(states, jt, n_actions, generator, draws=1, *, apply_fn=apply
     with torch.no_grad():
         children = [apply_fn(s, a) for s in states for a in range(n_actions)]
         vals = torch.stack([jt(children, generator) for _ in range(draws)]).mean(dim=0)
-        solved_child = torch.tensor([goal_fn(c) for c in children])
+        solved_child = torch.tensor([goal_fn(c) for c in children], device=vals.device)
         vals = torch.where(solved_child, torch.zeros_like(vals), vals)
         best = vals.view(len(states), n_actions).min(dim=1).values
         y = 1.0 + best
-        solved = torch.tensor([goal_fn(s) for s in states])
+        solved = torch.tensor([goal_fn(s) for s in states], device=y.device)
         return torch.where(solved, torch.zeros_like(y), y)
 
 
@@ -206,10 +216,46 @@ def probe_judge(judge, probe, generator):
     }
 
 
+def _to_cpu(obj):
+    """Every tensor in a (nested) state dict moved to the CPU, so a checkpoint saved on a GPU loads
+    anywhere with no map_location. On CPU tensors `.cpu()` returns the same tensor."""
+    if isinstance(obj, torch.Tensor):
+        return obj.cpu()
+    if isinstance(obj, dict):
+        # Same mapping type and module `_metadata` (an OrderedDict state dict carries version
+        # info), so a CPU checkpoint pickles exactly as before.
+        out = type(obj)((k, _to_cpu(v)) for k, v in obj.items())
+        if hasattr(obj, "_metadata"):
+            out._metadata = obj._metadata
+        return out
+    if isinstance(obj, list):
+        return [_to_cpu(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_to_cpu(v) for v in obj)
+    return obj
+
+
+def _off_cpu(obj) -> bool:
+    if isinstance(obj, torch.Tensor):
+        return obj.device.type != "cpu"
+    if isinstance(obj, dict):
+        return any(_off_cpu(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_off_cpu(v) for v in obj)
+    return False
+
+
+def _checkpoint_payload(sd):
+    """The state dict itself on CPU, so a CPU checkpoint pickles byte for byte as before (the
+    optimizer's dict shares objects between param groups, which any rebuild would split). A CPU
+    copy only when some tensor is on a device."""
+    return _to_cpu(sd) if _off_cpu(sd) else sd
+
+
 def _save_checkpoint(ckpt_dir, judge, jt, opt, next_update, rng, generator, probes):
-    torch.save(judge.state_dict(), ckpt_dir / "judge.pt")
-    torch.save(jt.state_dict(), ckpt_dir / "jt.pt")
-    torch.save(opt.state_dict(), ckpt_dir / "opt.pt")
+    torch.save(_checkpoint_payload(judge.state_dict()), ckpt_dir / "judge.pt")
+    torch.save(_checkpoint_payload(jt.state_dict()), ckpt_dir / "jt.pt")
+    torch.save(_checkpoint_payload(opt.state_dict()), ckpt_dir / "opt.pt")
     rstate = rng.getstate()
     state = {
         "update": next_update,
@@ -217,11 +263,14 @@ def _save_checkpoint(ckpt_dir, judge, jt, opt, next_update, rng, generator, prob
         "generator_state": generator.get_state().tolist(),
         "probes": probes,
     }
+    if generator.device.type != "cpu":
+        # Only off the CPU, so a CPU run's state.json keeps exactly its old keys (EXP-084).
+        state["generator_device"] = generator.device.type
     (ckpt_dir / "state.json").write_text(json.dumps(state))
 
 
 def train_judge(judge, arm, *, n_updates, batch, max_len, n_actions, exclude, probe, seed,
-                sync_every, probe_every, draws, ckpt_dir, log=print):
+                sync_every, probe_every, draws, ckpt_dir, log=print, device="cpu"):
     """Resumable approximate value iteration. Deterministic given `seed`: one
     `random.Random(seed)` drives the walks and one `torch.Generator().manual_seed(seed)` drives
     the stochastic encoding. Each probe pass uses its OWN `torch.Generator().manual_seed(seed)`
@@ -230,13 +279,26 @@ def train_judge(judge, arm, *, n_updates, batch, max_len, n_actions, exclude, pr
     cannot change the training trajectory. It also means every probe in the history is scored
     under identical encoding noise, so a change in spearman_7_11 across checkpoints reflects the
     judge, not encoder randomness.
+
+    `device` (EXP-084): off the CPU, the judge trains there and the training generator lives
+    there too (the fast stream, a different trajectory from a CPU run). Probes keep their CPU
+    generator, the exact stream. A checkpoint is resumed only on the device kind it was saved on,
+    since its generator state belongs to that generator.
     """
     ckpt_dir = Path(ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     state_path = ckpt_dir / "state.json"
+    device = torch.device(device)
+    if state_path.exists():
+        saved = json.loads(state_path.read_text()).get("generator_device", "cpu")
+        if saved != device.type:
+            raise ValueError(f"{state_path}: checkpoint was saved on device {saved!r}, cannot "
+                             f"resume it on device {device.type!r}")
 
+    judge.to(device)
     rng = random.Random(seed)
-    generator = torch.Generator().manual_seed(seed)
+    generator = (torch.Generator() if device.type == "cpu"
+                 else torch.Generator(device=device)).manual_seed(seed)
     opt = make_optimizer(judge, arm)
     probes = []
     start = 0
@@ -244,11 +306,11 @@ def train_judge(judge, arm, *, n_updates, batch, max_len, n_actions, exclude, pr
 
     if state_path.exists():
         state = json.loads(state_path.read_text())
-        judge.load_state_dict(torch.load(ckpt_dir / "judge.pt"))
+        judge.load_state_dict(torch.load(ckpt_dir / "judge.pt", map_location="cpu"))
         jt = sync_target(judge)
-        jt.load_state_dict(torch.load(ckpt_dir / "jt.pt"))
+        jt.load_state_dict(torch.load(ckpt_dir / "jt.pt", map_location="cpu"))
         opt = make_optimizer(judge, arm)
-        opt.load_state_dict(torch.load(ckpt_dir / "opt.pt"))
+        opt.load_state_dict(torch.load(ckpt_dir / "opt.pt", map_location="cpu"))
         rs = state["random_state"]
         rng.setstate((rs[0], tuple(rs[1]), rs[2]))
         generator.set_state(torch.tensor(state["generator_state"], dtype=torch.uint8))

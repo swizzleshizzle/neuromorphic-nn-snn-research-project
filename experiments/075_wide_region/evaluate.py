@@ -74,14 +74,15 @@ def judge_updates(train_arm: str, seed: int, judge_dir=None):
     return int(json.loads(path.read_text())["update"])
 
 
-def load_judge(train_arm: str, seed: int, judge_dir=None, required_updates=cells.N_UPDATES):
+def load_judge(train_arm: str, seed: int, judge_dir=None, required_updates=cells.N_UPDATES,
+               device="cpu"):
     """X and Y: this experiment's checkpoint, loaded into an untrained region of the arm's width
     (the checkpoint holds the region's trained weights, so the pretrained file is not needed).
     The checkpoint is refused unless training reached `required_updates` (judge.pt is written at
     update 0, so its existence proves nothing). W: EXP-074's committed judge, from EXP-074's
     outputs."""
     if train_arm == "W":
-        return e74.load_judge("W", seed, cells.E74_OUT)
+        return e74.load_judge("W", seed, cells.E74_OUT).to(device)
     path = cells.ckpt_dir(train_arm, seed, judge_dir) / "judge.pt"
     if not path.exists():
         raise SystemExit(f"missing judge checkpoint {path} for arm {train_arm} seed {seed}; "
@@ -94,7 +95,7 @@ def load_judge(train_arm: str, seed: int, judge_dir=None, required_updates=cells
     judge = cells.build_judge(seed, train_arm, cells.fresh_sensory(train_arm, seed))
     judge.load_state_dict(torch.load(path, map_location="cpu"))
     judge.eval()
-    return judge
+    return judge.to(device)  # EXP-084; a no-op on CPU
 
 
 def _critic(arm, seed, judge_dir, required_updates=cells.N_UPDATES):
