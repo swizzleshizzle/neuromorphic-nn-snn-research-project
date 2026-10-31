@@ -56,7 +56,9 @@ class JudgeCritic(nn.Module):
         self.judge = judge
 
     def forward(self, states, generator):
-        return -self.judge(states, generator)
+        # CPU scores whatever the judge's device (EXP-084): the search masks them with CPU tensors.
+        # A no-op for a CPU judge.
+        return -self.judge(states, generator).cpu()
 
 
 def _git_commit() -> str:

@@ -162,3 +162,28 @@ def test_device_resume_continues(tmp_path):
     ra = json.loads((a / "state.json").read_text())["random_state"]
     rb = json.loads((b / "state.json").read_text())["random_state"]
     assert ra == rb
+
+
+e75 = _load("exp075_evaluate", REPO / "experiments" / "075_wide_region" / "evaluate.py")
+
+
+def test_load_judge_device_kwarg_cpu():
+    judge = e75.load_judge("X", 0, None, 4000, device="cpu")
+    assert all(p.device.type == "cpu" for p in judge.parameters())
+
+
+def test_judge_critic_output_on_cpu():
+    critic = e75.JudgeCritic(e75.load_judge("X", 0, None, 4000, device="cpu"))
+    out = critic(_states(6), generator=torch.Generator().manual_seed(1))
+    assert out.device.type == "cpu" and out.shape == (6,)
+
+
+@gpu
+def test_search_with_gpu_judge():
+    """The search's no-revisit mask is a CPU tensor: a device judge must hand back CPU scores."""
+    setup_device("cuda")
+    e83 = _load("exp083_evaluate", REPO / "experiments" / "083_unseen_depth9" / "evaluate.py")
+    judge = e75.load_judge("X", 0, e83.cells.E82_OUT, 16000, device="cuda")
+    states = e83.load_states(0, 9, e83.cells.OUT)[:2]
+    rec = e83._search(judge, 9, 0, states)
+    assert rec["n"] == 2
