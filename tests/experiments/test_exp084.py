@@ -56,3 +56,55 @@ def test_files_under_root(tmp_path):
     inside = (tmp_path / "experiments" / "x.py").as_posix()
     assert gatec.files_under({"module_files": [inside]}, tmp_path)
     assert not gatec.files_under({"module_files": [inside, "/elsewhere/y.py"]}, tmp_path)
+
+
+decisions = _load("exp084_decisions", EXP / "decisions.py")
+
+
+def test_stop_boundary():
+    assert decisions.stop(9) is False
+    assert decisions.stop(10) is True
+
+
+@pytest.fixture(scope="module")
+def p_inputs():
+    import copy
+
+    import torch
+    judge = decisions.e75.load_judge("X", 0, cells.E82_OUT, 16000, device="cpu")
+    bumped = copy.deepcopy(judge)
+    with torch.no_grad():
+        bumped.head[0].weight.mul_(1.01)
+    states = decisions.e83.load_states(0, 9, cells.E83_OUT)[:3]
+    return judge, bumped, states
+
+
+def test_compare_cpu_vs_cpu_agrees(p_inputs):
+    judge, _bumped, states = p_inputs
+    c = decisions.e75.JudgeCritic(judge)
+    res = decisions.compare_critics(c, c, states, imag_seed=123)
+    assert res["n"] == 3 and res["agree"] == 3 and res["disagree"] == 0
+    assert res["max_abs_dj"] == 0.0
+
+
+def test_compare_detects_perturbed_judge(p_inputs):
+    judge, bumped, states = p_inputs
+    res = decisions.compare_critics(decisions.e75.JudgeCritic(judge),
+                                    decisions.e75.JudgeCritic(bumped), states, imag_seed=123)
+    assert res["max_abs_dj"] > 0.0
+
+
+def test_first_move_matches_the_real_search(p_inputs):
+    """Gate P claims to compute the cell's own t = 1 move: check it against the search's trace."""
+    import torch
+
+    from neuromorphic.training.lookahead import evaluate_lookahead
+    judge, _bumped, states = p_inputs
+    agent, head, _s, ts = decisions.e75.load_cell(9, 0)
+    critic = decisions.e75.JudgeCritic(judge)
+    trace = []
+    evaluate_lookahead(agent, head, states, depth=9, mode="C", k=4, k_goal=4,
+                       generator=torch.Generator().manual_seed(ts), rng_seed=ts, imag_seed=ts,
+                       critic=critic, no_revisit=True, trace=trace)
+    got = [decisions.first_move(critic, s, ts, i)[0] for i, s in enumerate(states)]
+    assert got == [t[0][0] for t in trace]
