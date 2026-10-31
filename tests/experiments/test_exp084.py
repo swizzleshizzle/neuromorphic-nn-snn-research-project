@@ -209,7 +209,8 @@ def test_run_all_refuses_missing_cell(tmp_path):
     pairs = [(a, s) for s in cells.SEEDS for a in cells.ARMS]
     for a, s in pairs[:-1]:
         _w(tmp_path / cells.e_name(a, s), {"solved": 100, "published": 100, "n": 200,
-                                           "limit_states": None, "wall_s": 100.0})
+                                           "limit_states": None, "wall_s": 100.0,
+                                           "device": "cuda"})
     with pytest.raises(SystemExit, match=cells.e_name(*pairs[-1])):
         agg.run("all", tmp_path)
 
@@ -219,15 +220,16 @@ def _all_records(out, e_off=0):
     _p_records(out, 0)
     for i, (a, s) in enumerate((a, s) for s in cells.SEEDS for a in cells.ARMS):
         _w(out / cells.e_name(a, s), {"solved": 100 + (e_off if i == 5 else 0), "published": 100,
-                                      "n": 200, "limit_states": None, "wall_s": 100.0})
+                                      "n": 200, "limit_states": None, "wall_s": 100.0,
+                                      "device": "cuda"})
     _w(out / cells.E_GATER_NAME, {"solved": 127, "published": 127, "n": 200,
-                                  "limit_states": None, "wall_s": 90.0})
+                                  "limit_states": None, "wall_s": 90.0, "device": "cuda"})
     _w(out / cells.M_NAME, {"solved": 126, "published": 127, "n": 200, "limit_states": None,
-                            "wall_s": 3000.0})
+                            "wall_s": 3000.0, "device": "cpu"})
     for s in cells.SEEDS:
         cpu = json.loads((cells.E75_OUT / f"exp075_train_X_s{s}.json").read_text())
         _w(out / cells.train_name(s), {"gate_l": cpu["gate_l"], "n_updates": 4000,
-                                       "s_per_update": 0.11})
+                                       "s_per_update": 0.11, "device": "cuda"})
 
 
 def test_run_all_reaches_a_verdict(tmp_path):
@@ -243,3 +245,19 @@ def test_run_all_three_off_fails_gate_e(tmp_path):
     assert agg.run("all", tmp_path)["verdict"] == "GPU PORT DOES NOT REPRODUCE"
     _all_records(tmp_path, e_off=-2)
     assert agg.run("all", tmp_path)["verdict"] == "GPU PORT REPRODUCES"
+
+
+@pytest.mark.parametrize("name,dev", [
+    (cells.e_name("J4V-X", 4), "cpu"),
+    (cells.E_GATER_NAME, "cpu"),
+    (cells.M_NAME, "cuda"),
+    (cells.train_name(7), "cpu"),
+])
+def test_run_all_refuses_a_record_from_the_wrong_device(tmp_path, name, dev):
+    """A manual CPU rerun of a GPU cell must not count as a GPU pass, nor the reverse for Gate M."""
+    _all_records(tmp_path)
+    rec = json.loads((tmp_path / name).read_text())
+    rec["device"] = dev
+    _w(tmp_path / name, rec)
+    with pytest.raises(SystemExit, match=name):
+        agg.run("all", tmp_path)

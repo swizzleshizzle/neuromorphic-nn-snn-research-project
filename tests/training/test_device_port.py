@@ -187,3 +187,21 @@ def test_search_with_gpu_judge():
     states = e83.load_states(0, 9, e83.cells.OUT)[:2]
     rec = e83._search(judge, 9, 0, states)
     assert rec["n"] == 2
+
+
+def test_cpu_checkpoint_keeps_state_dict_type(tmp_path):
+    """A CPU checkpoint must be what it always was: an OrderedDict carrying module _metadata."""
+    from collections import OrderedDict
+    _train(tmp_path, 1)
+    for name in ("judge.pt", "jt.pt"):
+        sd = torch.load(tmp_path / name, weights_only=False)
+        assert type(sd) is OrderedDict and hasattr(sd, "_metadata"), name
+
+
+def test_cpu_state_dicts_are_saved_untouched():
+    """A CPU checkpoint pickles the very objects it always did (opt.pt shares tuples between
+    param groups, so even a faithful rebuild changes its bytes): conversion only off the CPU."""
+    judge = _judge()
+    opt = vi.make_optimizer(judge, "W")
+    for sd in (judge.state_dict(), opt.state_dict()):
+        assert vi._checkpoint_payload(sd) is sd

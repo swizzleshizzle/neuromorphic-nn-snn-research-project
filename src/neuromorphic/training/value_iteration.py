@@ -222,7 +222,12 @@ def _to_cpu(obj):
     if isinstance(obj, torch.Tensor):
         return obj.cpu()
     if isinstance(obj, dict):
-        return {k: _to_cpu(v) for k, v in obj.items()}
+        # Same mapping type and module `_metadata` (an OrderedDict state dict carries version
+        # info), so a CPU checkpoint pickles exactly as before.
+        out = type(obj)((k, _to_cpu(v)) for k, v in obj.items())
+        if hasattr(obj, "_metadata"):
+            out._metadata = obj._metadata
+        return out
     if isinstance(obj, list):
         return [_to_cpu(v) for v in obj]
     if isinstance(obj, tuple):
@@ -230,10 +235,27 @@ def _to_cpu(obj):
     return obj
 
 
+def _off_cpu(obj) -> bool:
+    if isinstance(obj, torch.Tensor):
+        return obj.device.type != "cpu"
+    if isinstance(obj, dict):
+        return any(_off_cpu(v) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_off_cpu(v) for v in obj)
+    return False
+
+
+def _checkpoint_payload(sd):
+    """The state dict itself on CPU, so a CPU checkpoint pickles byte for byte as before (the
+    optimizer's dict shares objects between param groups, which any rebuild would split). A CPU
+    copy only when some tensor is on a device."""
+    return _to_cpu(sd) if _off_cpu(sd) else sd
+
+
 def _save_checkpoint(ckpt_dir, judge, jt, opt, next_update, rng, generator, probes):
-    torch.save(_to_cpu(judge.state_dict()), ckpt_dir / "judge.pt")
-    torch.save(_to_cpu(jt.state_dict()), ckpt_dir / "jt.pt")
-    torch.save(_to_cpu(opt.state_dict()), ckpt_dir / "opt.pt")
+    torch.save(_checkpoint_payload(judge.state_dict()), ckpt_dir / "judge.pt")
+    torch.save(_checkpoint_payload(jt.state_dict()), ckpt_dir / "jt.pt")
+    torch.save(_checkpoint_payload(opt.state_dict()), ckpt_dir / "opt.pt")
     rstate = rng.getstate()
     state = {
         "update": next_update,

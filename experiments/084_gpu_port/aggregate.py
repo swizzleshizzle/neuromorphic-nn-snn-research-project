@@ -60,6 +60,15 @@ def _full(rec: dict, name: str) -> dict:
     return rec
 
 
+def _on(rec: dict, name: str, kind: str) -> dict:
+    """Refuse a record computed on the wrong device kind: a CPU rerun of a GPU cell must never
+    count as a GPU pass, nor a GPU run as the CPU control."""
+    got = str(rec.get("device", "")).split(":")[0]
+    if got != kind:
+        raise SystemExit(f"{name}: ran on device {rec.get('device')!r}, this gate needs {kind!r}")
+    return rec
+
+
 def _pairs():
     return [(a, s) for s in cells.SEEDS for a in cells.ARMS]
 
@@ -98,8 +107,10 @@ def run(stage: str, out=cells.OUT) -> dict:
     if p["halt"]:
         return {"halt": True, "verdict": None, "lines": lines}
 
-    e = {(a, s): _full(_read(out / cells.e_name(a, s)), cells.e_name(a, s)) for a, s in _pairs()}
-    gr = _full(_read(out / cells.E_GATER_NAME), cells.E_GATER_NAME)
+    e = {(a, s): _on(_full(_read(out / cells.e_name(a, s)), cells.e_name(a, s)),
+                     cells.e_name(a, s), "cuda") for a, s in _pairs()}
+    gr = _on(_full(_read(out / cells.E_GATER_NAME), cells.E_GATER_NAME), cells.E_GATER_NAME,
+             "cuda")
     e_all = list(e.values()) + [gr]
     e_ok = all(within(r["solved"], r["published"]) for r in e_all)
     lines.append(f"GATE E (re-evaluation on the device, within {cells.TOL}): "
@@ -109,12 +120,12 @@ def run(stage: str, out=cells.OUT) -> dict:
     lines += [_e_line(f"{a} s{s}", e[a, s]) for a, s in _pairs()]
     lines.append(_e_line("EXP-082 gate R cell", gr))
 
-    m = _full(_read(out / cells.M_NAME), cells.M_NAME)
+    m = _on(_full(_read(out / cells.M_NAME), cells.M_NAME), cells.M_NAME, "cpu")
     m_ok = within(m["solved"], m["published"])
     lines.append(f"GATE M (desktop CPU control): {'PASS' if m_ok else 'FAIL'}, "
                  f"{m['solved']} vs {m['published']}")
 
-    t = [_read(out / cells.train_name(s)) for s in cells.SEEDS]
+    t = [_on(_read(out / cells.train_name(s)), cells.train_name(s), "cuda") for s in cells.SEEDS]
     for s, r in zip(cells.SEEDS, t):
         if r.get("n_updates") != cells.N_UPDATES:
             raise SystemExit(f"{cells.train_name(s)}: n_updates {r.get('n_updates')}, "
