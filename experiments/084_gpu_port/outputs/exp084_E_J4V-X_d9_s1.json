@@ -1,0 +1,1 @@
+{"solved": 66, "published": 66, "diff": 0, "n": 200, "success_rate": 0.33, "device": "cuda", "device_name": "AMD Radeon RX 9070 XT", "torch_version": "2.9.1+rocm7.2.1", "limit_states": null, "wall_s": 347.9, "git_commit": "5f595bd65a25e17d619c551131010a7eb85b6cf4", "arm": "J4V-X", "seed": 1}

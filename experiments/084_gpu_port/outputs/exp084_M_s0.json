@@ -1,0 +1,1 @@
+{"solved": 127, "published": 127, "diff": 0, "n": 200, "success_rate": 0.635, "device": "cpu", "device_name": "cpu", "torch_version": "2.9.1+rocm7.2.1", "limit_states": null, "wall_s": 1265.7, "git_commit": "5f595bd65a25e17d619c551131010a7eb85b6cf4", "arm": "J4V-X16k", "seed": 0, "states_from": "EXP-075 held-out (EXP-082's cell)"}
