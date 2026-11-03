@@ -313,3 +313,104 @@ def test_preflight_walks_matches_the_spec_table():
     for got, want in ((rows[("O", 20000)], (0.524, 0.108, 0.149, 0.141, 0.079)),
                       (rows[("C", 16000)], (0.884, 0.051, 0.045, 0.013, 0.007))):
         assert all(abs(g - w) <= 0.02 for g, w in zip(got, want)), (got, want)
+
+
+train = _load("exp085_train", EXP / "train.py")
+
+
+@pytest.fixture
+def tworld(world, monkeypatch):
+    """`world` seen through train's own modules: Gate C passed and both arms rebased, with legs
+    shrunk to (3 recorded, 4 snapshot, 5 recorded) and the ramp to end at update 6."""
+    c = train.cells
+    for k, v in (("START", START), ("RAMP_END", 6), ("LEGS", (3, 4, 5)),
+                 ("RECORD_LEGS", (3, 5)), ("SNAP_UPDATE", 4)):
+        monkeypatch.setattr(c, k, v)
+    monkeypatch.setattr(train.gatec, "sets", lambda seed: (set(), _probe(), None))
+    monkeypatch.setattr(train.gatec, "measure", fake_measure)
+    src, e82, out = world
+    train.gatec.gate_c(SEED, src, out, e82_root=e82, tracked=_tracked_under(e82),
+                       blob=lambda p: "b")
+    for a in c.ARMS:
+        train.rebase.rebase(a, SEED, "cpu", out)
+    return src, out
+
+
+def _trun(tworld, arm="C"):
+    src, out = tworld
+    return train.run(arm, SEED, "cpu", out, batch=BATCH, sync_every=1, probe_every=1,
+                     src_root=src)
+
+
+def test_legs_record_and_snapshot(tworld):
+    """Catches a snapshot leg that writes a record (the aggregator would read it as a leg), a
+    missing snapshot (Gate H (b) has nothing to replay from), or legs at the wrong updates."""
+    recs = _trun(tworld)
+    out = tworld[1]
+    assert [r["n_updates"] for r in recs] == [3, 5]
+    for n in (3, 5):
+        assert (out / train.cells.record_name("C", n, SEED)).exists()
+    assert not (out / train.cells.record_name("C", 4, SEED)).exists()
+    snap = train.cells.snap_dir("C", SEED, out)
+    assert json.loads((snap / "state.json").read_text())["update"] == 4
+    assert all((snap / f).exists() for f in ("judge.pt", "jt.pt", "opt.pt"))
+    r = recs[-1]
+    assert r["arm"] == "C" and r["max_len_schedule"] == "14" and r["device"] == "cpu"
+    assert r["continued_from"] == {"experiment": "EXP-082", "update": START}
+    for k in ("s_per_update", "n_exclude", "n_probe", "encoder_drift", "gate_l", "git_commit",
+              "torch_version", "device_name", "resumed_from"):
+        assert k in r, k
+
+
+def test_a_rerun_skips_finished_legs(tworld):
+    """REVIEW FOCUS 1. A relaunched chain must not retrain or re-record a finished seed."""
+    _trun(tworld)
+    p = tworld[1] / train.cells.record_name("C", 5, SEED)
+    before = p.read_bytes()
+    assert _trun(tworld) == [] and p.read_bytes() == before
+
+
+def test_a_checkpoint_past_a_leg_end_is_never_recorded_as_it(tworld, monkeypatch):
+    _trun(tworld)
+    (tworld[1] / train.cells.record_name("C", 3, SEED)).unlink()
+    with pytest.raises(SystemExit, match="past leg end"):
+        _trun(tworld)
+
+
+def test_arm_o_resumed_mid_ramp_uses_the_absolute_update(tworld, monkeypatch):
+    """REVIEW FOCUS 3. Catches a resumed arm O restarting its ramp from 14."""
+    seen = []
+    real = vi.random_walk_states
+    monkeypatch.setattr(train.vi, "random_walk_states",
+                        lambda n, ml, *a, **k: (seen.append(ml), real(n, ml, *a, **k))[1])
+    monkeypatch.setattr(train.cells, "LEGS", (3,))
+    _trun(tworld, "O")
+    monkeypatch.setattr(train.cells, "LEGS", (3, 4, 5))
+    _trun(tworld, "O")
+    sched = train.cells.max_len_schedule("O")
+    assert seen == [sched(u) for u in (2, 3, 4)] == [14, 18, 22]
+
+
+def test_both_arms_exclude_the_probe(tworld, monkeypatch):
+    """Catches training handed EXP-075's exclusion set without the probe states."""
+    probe_states = {s for s, _ in _probe()}
+    monkeypatch.setattr(train.gatec, "sets",
+                        lambda seed: (set(probe_states), _probe(), None))
+    seen = []
+    real = train.vi.train_judge
+    monkeypatch.setattr(train.vi, "train_judge",
+                        lambda *a, **k: (seen.append(k["exclude"]), real(*a, **k))[1])
+    _trun(tworld, "O")
+    assert seen and all(probe_states <= e for e in seen)
+
+
+def test_run_refuses_an_arm_not_rebased(world, monkeypatch):
+    monkeypatch.setattr(train.cells, "START", START)
+    with pytest.raises(SystemExit, match="not rebased"):
+        train.run("C", SEED, "cpu", world[2])
+
+
+def test_pending_is_seed_major_c_before_o_and_skips_finished(tmp_path):
+    (tmp_path / train.cells.record_name("C", train.cells.END, 0)).write_text("{}")
+    got = train.pending(tmp_path)
+    assert got[:3] == [(0, "O"), (1, "C"), (1, "O")] and len(got) == 23

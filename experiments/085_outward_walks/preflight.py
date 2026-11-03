@@ -52,7 +52,10 @@ BANDS = ((0, 8), (9, 9), (10, 10), (11, 11), (12, 14))
 
 def _default_train(ck: Path, seed: int, device, n: int) -> dict:
     train = _load("exp085_train", HERE / "train.py")
-    return train.train_to(ck, "C", seed, device, cells.START + n)
+    exclude, probe, _ = gatec.sets(seed)
+    judge, _ = train.train_to(ck, "C", seed, device, cells.START + n, exclude=exclude,
+                              probe=probe, log=lambda m: None)
+    return {k: v.detach().cpu() for k, v in judge.state_dict().items()}
 
 
 def gpu(device, out=cells.OUT, *, seed=0, train_fn=None) -> dict:
