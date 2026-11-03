@@ -195,3 +195,33 @@ def test_resume_equals_an_uninterrupted_run(tmp_path):
     resumed, jr = _tiny(tmp_path / "split", 4)
     assert resumed["loss_last"] == full["loss_last"]
     assert all(torch.equal(p, q) for p, q in zip(jf.parameters(), jr.parameters()))
+
+
+def _sched_train(tmp_path, n_updates, max_len):
+    judge = _judge(0)
+    probe = [(apply_move(SOLVED, a), 1) for a in range(3)]
+    return vi.train_judge(judge, "A", n_updates=n_updates, batch=4, max_len=max_len,
+                          n_actions=N_ACTIONS, exclude=set(), probe=probe, seed=0,
+                          sync_every=1, probe_every=1, draws=1, ckpt_dir=tmp_path,
+                          log=lambda *_: None)
+
+
+def test_max_len_schedule_is_called_with_the_absolute_update(tmp_path, monkeypatch):
+    """EXP-085. Catches a schedule indexed by updates-since-resume instead of the absolute update
+    (an arm resumed mid-ramp would restart its ramp), or a schedule never consulted."""
+    seen = []
+    real = vi.random_walk_states
+    monkeypatch.setattr(vi, "random_walk_states",
+                        lambda n, ml, *a, **k: (seen.append(ml), real(n, ml, *a, **k))[1])
+    sched = lambda u: 2 + u  # noqa: E731
+    _sched_train(tmp_path, 3, sched)
+    _sched_train(tmp_path, 5, sched)
+    assert seen == [2, 3, 4, 5, 6]
+
+
+def test_int_max_len_matches_a_constant_schedule(tmp_path):
+    """EXP-085. Catches the schedule path drawing walks differently from the int path. That the int
+    path itself is unchanged is pinned by tests/training/test_device_port.py's golden pins."""
+    _sched_train(tmp_path / "a", 3, 4)
+    _sched_train(tmp_path / "b", 3, lambda u: 4)
+    assert (tmp_path / "a" / "judge.pt").read_bytes() == (tmp_path / "b" / "judge.pt").read_bytes()
