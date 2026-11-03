@@ -713,3 +713,88 @@ def test_mixed_checkouts_are_refused(tmp_path):
     p.write_text(json.dumps(r))
     with pytest.raises(SystemExit, match="checkout"):
         agg.run_all(out, e82_root=e82)
+
+
+import os  # noqa: E402
+import re  # noqa: E402
+import subprocess  # noqa: E402
+
+
+def test_chain_has_every_stage_in_spec_order():
+    text = (EXP / "chain085.ps1").read_text()
+    order = re.search(r'\$order = @\(([^)]*)\)', text).group(1)
+    assert [s.strip().strip('"') for s in order.split(",")] == [
+        "check", "rebase", "preflight", "train", "search", "gateha", "gatehb", "aggregate"]
+    for script in ("rebase.py", "preflight.py", "train.py", "evaluate.py", "gateh.py"):
+        assert script in text
+
+
+def test_chain_checks_the_exp084_verdict():
+    """Spec section 4: the chain must not train on the desktop unless EXP-084 read GPU PORT
+    REPRODUCES."""
+    text = (EXP / "chain085.ps1").read_text()
+    assert "VERDICT: GPU PORT REPRODUCES" in text and "verdict084.txt" in text
+
+
+def test_drivers_have_no_em_dashes_or_backticks_in_strings():
+    for f in ("chain085.ps1", "launch085.ps1", "status085.ps1", "stage_vps.sh", "watch085.sh"):
+        text = (EXP / f).read_text()
+        assert "—" not in text, f
+        if f.endswith(".ps1"):
+            assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
+
+
+def _watch(tmp_path, status, rounds, crashes=0):
+    """Run watch085.sh against a stub ssh that answers `status` (None: unreachable, exit 255)
+    and records every launch, and a stub push that records every message."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir(exist_ok=True)
+    log = tmp_path / "calls.log"
+    (bin_ / "ssh").write_text(
+        "#!/usr/bin/env bash\n"
+        f'case "$*" in *launch085*) echo launch >> "{log}"; exit 0;; esac\n'
+        + ("exit 255\n" if status is None else f"echo '{status}'\n"))
+    (bin_ / "push").write_text(f'#!/usr/bin/env bash\necho "push $1" >> "{log}"\n')
+    for f in ("ssh", "push"):
+        (bin_ / f).chmod(0o755)
+    state = tmp_path / "state"
+    state.mkdir(exist_ok=True)
+    if crashes:
+        (state / "crashes").write_text(str(crashes))
+    env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WATCH085_SLEEP": "0",
+           "WATCH085_ROUNDS": str(rounds), "WATCH085_STATE": str(state),
+           "WATCH085_PUSH": str(bin_ / "push")}
+    r = subprocess.run(["bash", str(EXP / "watch085.sh")], env=env, capture_output=True,
+                       text=True, timeout=60)
+    calls = log.read_text().split("\n") if log.exists() else []
+    return r.returncode, [c for c in calls if c], (state / "crashes").read_text().strip() \
+        if (state / "crashes").exists() else "0"
+
+
+DEAD = "False|py 0|ch 0|T 3|S 0|H 0|2026-11-04 01:00:00 STOP: stage train failed"
+
+
+def test_watcher_relaunches_a_crashed_chain_and_stops_after_three(tmp_path):
+    code, calls, crashes = _watch(tmp_path, DEAD, rounds=5)
+    assert code == 4 and crashes == "3"
+    assert calls.count("launch") == 2 and calls[-1].startswith("push")
+
+
+def test_watcher_never_relaunches_on_an_unreachable_desktop(tmp_path):
+    """Catches an ssh failure read as a dead chain: after a bugcheck the desktop can be offline
+    for hours, and that must never use up the three relaunches."""
+    code, calls, crashes = _watch(tmp_path, None, rounds=4)
+    assert code == 5 and crashes == "0" and "launch" not in calls
+    assert calls == ["push EXP-085: desktop unreachable"]
+
+
+def test_watcher_leaves_a_running_chain_alone(tmp_path):
+    """Catches a relaunch between two stages, when no python is running but the chain is."""
+    code, calls, _ = _watch(tmp_path, "False|py 0|ch 1|T 3|S 0|H 0|stage search", rounds=2)
+    assert code == 5 and calls == []
+
+
+def test_watcher_exits_on_a_deliberate_stop_and_on_a_verdict(tmp_path):
+    stop = "False|py 0|ch 0|T 0|S 0|H 0|2026-11-04 STOP: EXP-084 has not read GPU PORT REPRODUCES"
+    assert _watch(tmp_path, stop, rounds=2)[:2] == (3, [])
+    assert _watch(tmp_path, "True|py 0|ch 0|T 24|S 48|H 8|chain done", rounds=2)[0] == 0
