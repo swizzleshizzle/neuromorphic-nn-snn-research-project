@@ -193,13 +193,13 @@ walks at update 20,000 have the measured distance shares within 0.02 of the tabl
 ## 11. Cost, schedule and the crash plan
 
 - Copy laptop to VPS to desktop, and Gate C: under 1 h.
-- Training: 2 arms x 12 seeds x 8000 updates = 192,000 updates. EXP-084's Gate T log showed about
-  0.15 to 0.2 s/update on the RX 9070 XT, one process at a time (750 updates in about 2.5 min,
-  2026-11-03; its record will give the exact figure), so **8 to 11 h**. Every 250
+- Training: 2 arms x 12 seeds x 8000 updates = 192,000 updates. EXP-084's Gate T seed 0 record
+  measured **0.097 s/update** on the RX 9070 XT, one process at a time (2026-11-03), so about
+  **5 to 6 h**; arm O's longer walks cost a little more per batch to generate. Every 250
   updates is a checkpoint.
 - Search: 48 cells on the GPU (24 per depth). EXP-084 measured 4 to 6 min per depth-9 cell, and
   depth 11 is longer, so about **6 to 8 h**.
-- **Total about 15 to 19 h**, so a verdict about a day after launch, inside this week's slot.
+- **Total about 12 to 15 h**, so a verdict about a day after launch, inside this week's slot.
 - **Crash plan:** a crash costs at most 250 updates, and the chain resumes every stage from its
   records and checkpoints. The watcher relaunches the chain on a crash. After a **third** crash,
   it stops and asks Michael. The laptop fallback is a restart of the whole experiment on the CPU,
