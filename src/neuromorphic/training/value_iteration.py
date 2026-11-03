@@ -284,6 +284,9 @@ def train_judge(judge, arm, *, n_updates, batch, max_len, n_actions, exclude, pr
     there too (the fast stream, a different trajectory from a CPU run). Probes keep their CPU
     generator, the exact stream. A checkpoint is resumed only on the device kind it was saved on,
     since its generator state belongs to that generator.
+
+    `max_len` (EXP-085) is an int, or a callable taking the absolute update index and returning
+    that update's max walk length, so a resumed run continues its schedule where it stopped.
     """
     ckpt_dir = Path(ckpt_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -322,7 +325,8 @@ def train_judge(judge, arm, *, n_updates, batch, max_len, n_actions, exclude, pr
     for update in range(start, n_updates):
         if update % sync_every == 0:
             jt = sync_target(judge)
-        states = random_walk_states(batch, max_len, rng, n_actions, exclude)
+        ml = max_len(update) if callable(max_len) else max_len
+        states = random_walk_states(batch, ml, rng, n_actions, exclude)
         loss_last = train_step(judge, jt, opt, states, n_actions, generator, draws)
         if update % probe_every == 0 or update == n_updates - 1:
             probe_result = probe_judge(judge, probe, torch.Generator().manual_seed(seed))
