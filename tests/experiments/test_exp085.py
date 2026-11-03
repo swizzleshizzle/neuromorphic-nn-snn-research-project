@@ -414,3 +414,121 @@ def test_pending_is_seed_major_c_before_o_and_skips_finished(tmp_path):
     (tmp_path / train.cells.record_name("C", train.cells.END, 0)).write_text("{}")
     got = train.pending(tmp_path)
     assert got[:3] == [(0, "O"), (1, "C"), (1, "O")] and len(got) == 23
+
+
+evaluate = _load("exp085_evaluate", EXP / "evaluate.py")
+gateh = _load("exp085_gateh", EXP / "gateh.py")
+
+
+def test_search_cell_is_exp082s_j4v(tmp_path, monkeypatch):
+    """Catches the cell drifting from EXP-082's J4V (mode, k, goal check, no-revisit, EXP-075's
+    held-out states and streams), or the judge loaded from the wrong arm or update."""
+    seen = {}
+    monkeypatch.setattr(evaluate.e75, "load_judge",
+                        lambda arm, seed, root, required_updates, device: seen.update(
+                            arm=arm, seed=seed, root=root, req=required_updates, dev=device) or "J")
+    monkeypatch.setattr(evaluate.e75, "JudgeCritic", lambda j: ("critic", j))
+    monkeypatch.setattr(evaluate.e75, "load_cell",
+                        lambda d, s: ("agent", "head", ["s1", "s2", "s3"], 77))
+
+    def fake_eval(agent, head, states, **k):
+        seen.update(states=states, **k)
+        return {"solved": 1, "n": len(states), "success_rate": 0.5, "first_fire_len": {"4": 1}}
+    monkeypatch.setattr(evaluate, "evaluate_lookahead", fake_eval)
+    ck = evaluate.cells.ckpt_dir("O", 3, tmp_path)
+    ck.mkdir(parents=True)
+    (ck / "state.json").write_text(json.dumps({"update": 24000}))
+    rec = evaluate.run_cell("O", 11, 3, "cpu", tmp_path)
+    assert seen["arm"] == "X" and seen["root"] == evaluate.cells.arm_root("O", tmp_path)
+    assert seen["req"] == 24000 and seen["dev"] == "cpu" and seen["states"] == ["s1", "s2", "s3"]
+    assert (seen["depth"], seen["mode"], seen["k"], seen["k_goal"]) == (11, "C", 4, 4)
+    assert seen["no_revisit"] is True and seen["rng_seed"] == seen["imag_seed"] == 77
+    assert seen["critic"] == ("critic", "J")
+    assert rec["arm"] == "J4V-O" and rec["judge"] == "O" and rec["judge_updates"] == 24000
+    assert rec["device"] == "cpu" and rec["limit_states"] is None
+    assert (tmp_path / evaluate.cells.search_name("O", 11, 3)).exists()
+
+
+def test_search_refuses_a_judge_short_of_24000(tmp_path):
+    ck = evaluate.cells.ckpt_dir("C", 3, tmp_path)
+    ck.mkdir(parents=True)
+    (ck / "judge.pt").write_bytes(b"x")
+    (ck / "state.json").write_text(json.dumps({"update": 20000}))
+    with pytest.raises(SystemExit, match="24000"):
+        evaluate.run_cell("C", 9, 3, "cpu", tmp_path)
+
+
+def test_search_refuses_an_unregistered_depth(tmp_path):
+    with pytest.raises(SystemExit, match="registered depths"):
+        evaluate.run_cell("C", 10, 3, "cpu", tmp_path)
+
+
+def test_search_pending_runs_depth_11_first_and_skips_finished(tmp_path):
+    (tmp_path / evaluate.cells.search_name("C", 11, 0)).write_text("{}")
+    got = evaluate.pending(tmp_path)
+    assert got[0] == ("O", 11, 0) and len(got) == 47
+    assert all(d == 11 for _, d, _ in got[:23]) and all(d == 9 for _, d, _ in got[23:])
+
+
+def test_picks_are_fixed_and_distinct():
+    a, b = gateh.search_picks(), gateh.search_picks()
+    assert a == b and len(set(a)) == 4
+    assert sorted(d for _, d, _ in a) == [9, 9, 11, 11]
+    t = gateh.train_picks()
+    assert t == gateh.train_picks() and len(set(t)) == 4
+    assert sorted(x for x, _ in t) == ["C", "C", "O", "O"]
+
+
+def test_gate_h_a_compares_everything_but_wall_and_commit():
+    """Catches a replay check that compares only `solved` (a corrupted search can keep the count
+    and change the paths) or that trips on wall time."""
+    r = {"solved": 5, "first_fire_len": {"4": 2}, "wall_s": 1.0, "git_commit": "a", "n": 200}
+    assert gateh.same(r, {**r, "wall_s": 9.0, "git_commit": "b"})
+    assert not gateh.same(r, {**r, "solved": 6})
+    assert not gateh.same(r, {**r, "first_fire_len": {"4": 3}})
+
+
+def test_gate_h_a_replays_into_its_own_records(tmp_path, monkeypatch):
+    calls = []
+    for arm, d, s in gateh.search_picks():
+        (tmp_path / gateh.cells.search_name(arm, d, s)).write_text("{}")
+    monkeypatch.setattr(gateh.evaluate, "run_cell",
+                        lambda arm, d, s, dev, out, name: calls.append((arm, d, s, name)) or {})
+    gateh.run_a("cpu", tmp_path)
+    assert [(a, d, s) for a, d, s, _ in calls] == gateh.search_picks()
+    assert all(n == gateh.cells.h_search_name(a, d, s) for a, d, s, n in calls)
+
+
+def test_gate_h_b_is_unavailable_when_preflight_says_not_deterministic(tmp_path, monkeypatch):
+    (tmp_path / gateh.cells.PREFLIGHT_NAME).write_text(json.dumps({"deterministic": False}))
+    monkeypatch.setattr(gateh.train, "train_to", lambda *a, **k: pytest.fail("replayed"))
+    gateh.run_b("cpu", tmp_path)
+    for arm, s in gateh.train_picks():
+        r = json.loads((tmp_path / gateh.cells.h_train_name(arm, s)).read_text())
+        assert r["available"] is False and "equal" not in r
+
+
+class _J:
+    def __init__(self, sd):
+        self._sd = sd
+
+    def state_dict(self):
+        return self._sd
+
+
+@pytest.mark.parametrize("v,want", [(1.0, True), (1.5, False)])
+def test_gate_h_b_compares_the_replayed_judge_tensor_by_tensor(tmp_path, monkeypatch, v, want):
+    (tmp_path / gateh.cells.PREFLIGHT_NAME).write_text(json.dumps({"deterministic": True}))
+    monkeypatch.setattr(gateh.gatec, "sets", lambda seed: (set(), [], None))
+    for arm, s in gateh.train_picks():
+        snap = gateh.cells.snap_dir(arm, s, tmp_path)
+        snap.mkdir(parents=True)
+        for f in ("judge.pt", "jt.pt", "opt.pt", "state.json"):
+            (snap / f).write_text("{}")
+        torch.save({"w": torch.tensor([1.0])}, gateh.cells.ckpt_dir(arm, s, tmp_path) / "judge.pt")
+    monkeypatch.setattr(gateh.train, "train_to",
+                        lambda ck, arm, seed, dev, n, **k: (_J({"w": torch.tensor([v])}), {}))
+    gateh.run_b("cpu", tmp_path)
+    for arm, s in gateh.train_picks():
+        r = json.loads((tmp_path / gateh.cells.h_train_name(arm, s)).read_text())
+        assert r["available"] is True and r["equal"] is want
