@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import random
+import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -50,17 +53,31 @@ WALK_UPDATES = (16000, 18000, 20000)
 BANDS = ((0, 8), (9, 9), (10, 10), (11, 11), (12, 14))
 
 
-def _default_train(ck: Path, seed: int, device, n: int) -> dict:
+WALL_NAME = "train_wall.json"
+
+
+def train_once(ck: Path, seed: int, device, n: int) -> None:
+    """One pre-flight run, in the calling process: train `ck` n updates and record the training
+    wall (the BFS sets and the judge build are outside it)."""
     train = _load("exp085_train", HERE / "train.py")
     exclude, probe, _ = gatec.sets(seed)
-    judge, _ = train.train_to(ck, "C", seed, device, cells.START + n, exclude=exclude,
-                              probe=probe, log=lambda m: None)
-    return {k: v.detach().cpu() for k, v in judge.state_dict().items()}
+    _, res = train.train_to(ck, "C", seed, device, cells.START + n, exclude=exclude,
+                            probe=probe, log=lambda m: None)
+    (ck / WALL_NAME).write_text(json.dumps({"wall_s": res["wall_s"]}))
+
+
+def _in_subprocess(ck: Path, seed: int, device, n: int) -> dict:
+    """Gate H (b) compares two processes (the leg and the replay), so each pre-flight run gets a
+    fresh process too: in-process determinism would not show cross-process determinism."""
+    subprocess.run([sys.executable, "-u", str(HERE / "preflight.py"), "--part", "train-once",
+                    "--ck", str(ck), "--seed", str(seed), "--device", str(device)], check=True)
+    return torch.load(ck / "judge.pt", map_location="cpu")
 
 
 def gpu(device, out=cells.OUT, *, seed=0, train_fn=None) -> dict:
     out = Path(out)
-    train_fn = train_fn or _default_train
+    processes = 1 if train_fn else 2
+    train_fn = train_fn or _in_subprocess
     sds, walls = [], []
     with tempfile.TemporaryDirectory() as tmp:
         for k in ("a", "b"):
@@ -68,11 +85,13 @@ def gpu(device, out=cells.OUT, *, seed=0, train_fn=None) -> dict:
             rebase.write_rebased(cells.start_dir(seed, out), ck, seed, device)
             t0 = time.time()
             sds.append(train_fn(ck, seed, device, N_PREFLIGHT))
-            walls.append(time.time() - t0)
+            wf = ck / WALL_NAME
+            walls.append(json.loads(wf.read_text())["wall_s"] if wf.exists()
+                         else time.time() - t0)
     a, b = sds
     equal = a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
     rec = {"part": "gpu", "device": str(device), "seed": seed, "arm": "C",
-           "n_updates": N_PREFLIGHT, "deterministic": bool(equal),
+           "n_updates": N_PREFLIGHT, "deterministic": bool(equal), "processes": processes,
            "s_per_update": min(walls) / N_PREFLIGHT, "git_commit": g81._git_commit()}
     g81._write_json(out / cells.PREFLIGHT_NAME, rec)
     return rec
@@ -100,10 +119,16 @@ def walks(out=None, *, exclude=None, seed=0) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--part", choices=("gpu", "walks"), required=True)
+    ap.add_argument("--part", choices=("gpu", "walks", "train-once"), required=True)
+    ap.add_argument("--ck", type=Path)
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()
+    if args.part == "train-once":
+        setup_device(args.device)
+        train_once(args.ck, args.seed, args.device, N_PREFLIGHT)
+        return
     if args.part == "gpu":
         if (args.out_dir / cells.PREFLIGHT_NAME).exists():
             print("pre-flight gpu: already recorded", flush=True)

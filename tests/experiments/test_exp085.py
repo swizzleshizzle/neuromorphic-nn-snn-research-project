@@ -592,8 +592,10 @@ def _agg_world(tmp, *, d11=(0.20, 0.20), d9=(0.55, 0.55), far=(0.15, 0.15), over
     status, equal = h_b
     for arm, s in gateh.train_picks():
         _w(out / cells.h_train_name(arm, s),
-           {"available": status == "ok", **({"equal": equal} if status == "ok" else {})})
-    _w(out / cells.PREFLIGHT_NAME, {"deterministic": status == "ok", "s_per_update": 0.1})
+           {"arm": arm, "seed": s, "device": "cuda", "git_commit": "abc",
+            "available": status == "ok", **({"equal": equal} if status == "ok" else {})})
+    _w(out / cells.PREFLIGHT_NAME, {"deterministic": status == "ok", "s_per_update": 0.1,
+                                    "device": "cuda", "git_commit": "abc"})
     return out, e82
 
 
@@ -717,7 +719,12 @@ def test_mixed_checkouts_are_refused(tmp_path):
 
 import os  # noqa: E402
 import re  # noqa: E402
+import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import sys  # noqa: E402
+
+_NO_BASH = sys.platform == "win32" or shutil.which("bash") is None
+needs_bash = pytest.mark.skipif(_NO_BASH, reason="the watcher is a VPS bash script")
 
 
 def test_chain_has_every_stage_in_spec_order():
@@ -739,7 +746,7 @@ def test_chain_checks_the_exp084_verdict():
 def test_drivers_have_no_em_dashes_or_backticks_in_strings():
     for f in ("chain085.ps1", "launch085.ps1", "status085.ps1", "stage_vps.sh", "watch085.sh"):
         text = (EXP / f).read_text()
-        assert "—" not in text, f
+        assert "\u2014" not in text, f
         if f.endswith(".ps1"):
             assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
 
@@ -774,12 +781,14 @@ def _watch(tmp_path, status, rounds, crashes=0):
 DEAD = "False|py 0|ch 0|T 3|S 0|H 0|2026-11-04 01:00:00 STOP: stage train failed"
 
 
+@needs_bash
 def test_watcher_relaunches_a_crashed_chain_and_stops_after_three(tmp_path):
     code, calls, crashes = _watch(tmp_path, DEAD, rounds=5)
     assert code == 4 and crashes == "3"
     assert calls.count("launch") == 2 and calls[-1].startswith("push")
 
 
+@needs_bash
 def test_watcher_never_relaunches_on_an_unreachable_desktop(tmp_path):
     """Catches an ssh failure read as a dead chain: after a bugcheck the desktop can be offline
     for hours, and that must never use up the three relaunches."""
@@ -788,13 +797,95 @@ def test_watcher_never_relaunches_on_an_unreachable_desktop(tmp_path):
     assert calls == ["push EXP-085: desktop unreachable"]
 
 
+@needs_bash
 def test_watcher_leaves_a_running_chain_alone(tmp_path):
     """Catches a relaunch between two stages, when no python is running but the chain is."""
     code, calls, _ = _watch(tmp_path, "False|py 0|ch 1|T 3|S 0|H 0|stage search", rounds=2)
     assert code == 5 and calls == []
 
 
+@needs_bash
 def test_watcher_exits_on_a_deliberate_stop_and_on_a_verdict(tmp_path):
     stop = "False|py 0|ch 0|T 0|S 0|H 0|2026-11-04 STOP: EXP-084 has not read GPU PORT REPRODUCES"
     assert _watch(tmp_path, stop, rounds=2)[:2] == (3, [])
     assert _watch(tmp_path, "True|py 0|ch 0|T 24|S 48|H 8|chain done", rounds=2)[0] == 0
+
+
+# Final review fixes.
+
+def test_watcher_tests_skip_where_there_is_no_bash():
+    """Final review, Critical 1. chain085.ps1 runs this file on the Windows desktop, where the
+    watcher tests cannot run bash; unskipped they stop the chain at its check stage."""
+    for name in ("test_watcher_relaunches_a_crashed_chain_and_stops_after_three",
+                 "test_watcher_never_relaunches_on_an_unreachable_desktop",
+                 "test_watcher_leaves_a_running_chain_alone",
+                 "test_watcher_exits_on_a_deliberate_stop_and_on_a_verdict"):
+        marks = [m for m in getattr(globals()[name], "pytestmark", []) if m.name == "skipif"]
+        assert marks and marks[0].args[0] == (sys.platform == "win32" or shutil.which("bash") is None), name
+
+
+def test_preflight_trains_each_run_in_its_own_process(rworld, monkeypatch):
+    """Final review, Important 2. Gate H (b) compares two processes (the leg and the replay), so
+    the pre-flight must too: in-process determinism does not imply cross-process."""
+    calls = []
+
+    def fake_run(cmd, **k):
+        if cmd[0] == "git":
+            return subprocess.CompletedProcess(cmd, 0, "abc\n", "")
+        calls.append(cmd)
+        ck = Path(cmd[cmd.index("--ck") + 1])
+        torch.save({"w": torch.tensor([1.0])}, ck / "judge.pt")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(preflight.subprocess, "run", fake_run)
+    rec = preflight.gpu("cpu", rworld, seed=SEED)
+    assert len(calls) == 2 and calls[0][calls[0].index("--ck") + 1] != calls[1][calls[1].index("--ck") + 1]
+    assert all("--part" in c and c[c.index("--part") + 1] == "train-once" for c in calls)
+    assert rec["deterministic"] is True and rec["processes"] == 2
+
+
+@pytest.mark.parametrize("name", ["search", "hsearch", "hb", "preflight"])
+def test_every_record_must_come_from_one_checkout(tmp_path, name):
+    """Final review, Important 3. Spec section 6: the same git_commit on every record."""
+    out, e82 = _agg_world(tmp_path, d11=(0.20, 0.25))
+    arm, d, s = gateh.search_picks()[0]
+    p = {"search": out / cells.search_name("O", 11, 4),
+         "hsearch": out / cells.h_search_name(arm, d, s),
+         "hb": out / cells.h_train_name(*gateh.train_picks()[0]),
+         "preflight": out / cells.PREFLIGHT_NAME}[name]
+    r = json.loads(p.read_text())
+    r["git_commit"] = "def"
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match="checkout"):
+        agg.run_all(out, e82_root=e82)
+
+
+@pytest.mark.parametrize("field,value", [("device", "cpu"), ("arm", "X"), ("seed", 99)])
+def test_a_training_replay_record_that_is_not_the_pick_is_refused(tmp_path, field, value):
+    """Final review, Important 4 (Review Focus 4 names replay records)."""
+    out, e82 = _agg_world(tmp_path)
+    p = out / cells.h_train_name(*gateh.train_picks()[0])
+    r = json.loads(p.read_text())
+    r[field] = value
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match=field):
+        agg.run_all(out, e82_root=e82)
+
+
+def test_a_replay_marked_unavailable_against_a_deterministic_preflight_is_refused(tmp_path):
+    out, e82 = _agg_world(tmp_path)
+    p = out / cells.h_train_name(*gateh.train_picks()[0])
+    r = json.loads(p.read_text())
+    r["available"] = False
+    r.pop("equal")
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match="available"):
+        agg.run_all(out, e82_root=e82)
+
+
+def test_the_verdict_line_says_when_gate_h_b_is_unavailable(tmp_path):
+    """Final review, spec section 6: 'the verdict line says so'."""
+    r = _verdict(tmp_path, d11=(0.20, 0.25), h_b=("unavailable", None))
+    line = next(x for x in r["lines"] if x.startswith("VERDICT:"))
+    assert line == "VERDICT: OUTWARD WALKS PAY AT DEPTH 11 (GATE H (b) UNAVAILABLE)"
+    ok = _verdict(tmp_path / "ok", d11=(0.20, 0.25)) if (tmp_path / "ok").mkdir() is None else None
+    assert next(x for x in ok["lines"] if x.startswith("VERDICT:")) == "VERDICT: OUTWARD WALKS PAY AT DEPTH 11"

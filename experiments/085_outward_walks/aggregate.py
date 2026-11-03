@@ -109,11 +109,17 @@ def gate_h(out) -> dict:
     a_bad = [(arm, d, s) for arm, d, s in gateh.search_picks()
              if not gateh.same(read_search(out, arm, d, s),
                                read_search(out, arm, d, s, cells.h_search_name(arm, d, s)))]
-    b = [_read(out / cells.h_train_name(arm, s)) for arm, s in gateh.train_picks()]
+    pre = _read(out / cells.PREFLIGHT_NAME)
+    b = [_expect(_read(out / cells.h_train_name(arm, s)), cells.h_train_name(arm, s),
+                 (("arm", arm), ("seed", s), ("device", "cuda"),
+                  ("available", pre.get("deterministic") is True)))
+         for arm, s in gateh.train_picks()]
     b_available = all(r.get("available") is True for r in b)
     b_bad = [r for r in b if r.get("available") is True and r.get("equal") is not True]
+    hs = [read_search(out, arm, d, s, cells.h_search_name(arm, d, s))
+          for arm, d, s in gateh.search_picks()]
     return {"ok": not a_bad and not b_bad, "a_bad": a_bad, "b_available": b_available,
-            "b_bad": len(b_bad)}
+            "b_bad": len(b_bad), "records": hs + b + [pre]}
 
 
 def _h_line(h) -> str:
@@ -135,8 +141,11 @@ def run_all(out=cells.OUT, e82_root=cells.E82_OUT) -> dict:
           for a in cells.ARMS}
     sr = {a: {d: {s: read_search(out, a, d, s) for s in SEEDS} for d in cells.DEPTHS}
           for a in cells.ARMS}
-    check_one_checkout([r for a in tr for u in tr[a] for r in tr[a][u].values()])
     h = gate_h(out)
+    # Spec section 6: the same git_commit on every record (training, search, Gate H, pre-flight).
+    check_one_checkout([r for a in tr for u in tr[a] for r in tr[a][u].values()]
+                       + [r for a in sr for d in sr[a] for r in sr[a][d].values()]
+                       + h["records"])
     end = {a: tr[a][cells.END] for a in cells.ARMS}
     t_ok = {a: a80.gate_t([overall(end[a][s]) for s in SEEDS]) for a in cells.ARMS}
     rate = {a: {d: {s: sr[a][d][s]["success_rate"] for s in SEEDS} for d in cells.DEPTHS}
@@ -161,7 +170,7 @@ def run_all(out=cells.OUT, e82_root=cells.E82_OUT) -> dict:
         f"CLAIM 2 O - C far band: diff {m2:+.4f}, ahead on {ahead(d2)} of 12, p {p2:.4f} -> {c2}",
         f"GUARD J4V-O - J4V-C d9: diff {st.mean(d9):+.4f}, drop p "
         f"{one_sided_p([-d for d in d9]):.4f} -> {'TRIPPED' if guard else 'not tripped'}",
-        f"VERDICT: {v}"]
+        f"VERDICT: {v}" + ("" if h["b_available"] else " (GATE H (b) UNAVAILABLE)")]
     return {"verdict": v, "lines": lines, "reported": reported(tr, sr, rate, e82_root, out)}
 
 
