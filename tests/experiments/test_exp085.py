@@ -218,3 +218,98 @@ def test_identity_compares_against_exp082s_tracked_files():
     """Catches identity checked against a path git does not track (it would pass on anything)."""
     f = cells.E82_OUT / "judge_X_s0" / "judge.pt"
     assert gatec.tracked_blob(f) == gatec.blob_of(f) and len(gatec.blob_of(f)) == 40
+
+
+rebase = _load("exp085_rebase", EXP / "rebase.py")
+
+
+@pytest.fixture
+def rworld(world, monkeypatch):
+    """`world` with Gate C passed and the start seeded, seen through rebase's own modules."""
+    monkeypatch.setattr(rebase.cells, "START", START)
+    monkeypatch.setattr(rebase.gatec, "sets", lambda seed: (set(), _probe(), None))
+    monkeypatch.setattr(rebase.gatec, "measure", fake_measure)
+    src, e82, out = world
+    rebase.gatec.gate_c(SEED, src, out, e82_root=e82, tracked=_tracked_under(e82),
+                        blob=lambda p: "b")
+    return out
+
+
+def test_rebase_carries_the_walk_state_and_resets_the_encoding_stream(rworld):
+    """Catches a rebase that restarts the walk stream (the arms would no longer continue X16k's
+    walks) or keeps the CPU generator state (train_judge refuses it on the device)."""
+    rec = rebase.rebase("O", SEED, "cpu", rworld)
+    s0 = json.loads((rebase.cells.start_dir(SEED, rworld) / "state.json").read_text())
+    s1 = json.loads((rebase.cells.ckpt_dir("O", SEED, rworld) / "state.json").read_text())
+    assert s1["random_state"] == s0["random_state"] and s1["update"] == START
+    assert s1["probes"] == s0["probes"]
+    want = torch.Generator().manual_seed(rebase.rebase_seed(SEED)).get_state().tolist()
+    assert s1["generator_state"] == want != s0["generator_state"]
+    for f in ("judge.pt", "jt.pt", "opt.pt"):
+        assert ((rebase.cells.ckpt_dir("O", SEED, rworld) / f).read_bytes()
+                == (rebase.cells.start_dir(SEED, rworld) / f).read_bytes())
+    assert rec["rebase_seed"] == rebase.rebase_seed(SEED) and rec["device"] == "cpu"
+    assert (rworld / rebase.cells.rebase_name("O", SEED)).exists()
+
+
+def test_rebase_seed_differs_by_seed_and_matches_the_formula():
+    assert rebase.rebase_seed(0) == 85_000_000 + 16000
+    assert rebase.rebase_seed(3) == 85_000_000 + 3 * 100_003 + 16000
+
+
+def test_rebase_refuses_without_gate_c(world, monkeypatch):
+    monkeypatch.setattr(rebase.cells, "START", START)
+    with pytest.raises(SystemExit, match="Gate C"):
+        rebase.rebase("C", SEED, "cpu", world[2])
+
+
+def test_rebase_refuses_a_started_arm(rworld):
+    """REVIEW FOCUS 2. A second rebase must never reset an arm that training has advanced."""
+    rebase.rebase("C", SEED, "cpu", rworld)
+    p = rebase.cells.ckpt_dir("C", SEED, rworld) / "state.json"
+    st = json.loads(p.read_text())
+    st["update"] = START + 7
+    p.write_text(json.dumps(st))
+    before = p.read_bytes()
+    with pytest.raises(SystemExit, match="already"):
+        rebase.rebase("C", SEED, "cpu", rworld)
+    assert p.read_bytes() == before
+
+
+def test_rebased_checkpoint_resumes_in_train_judge(rworld):
+    rebase.rebase("C", SEED, "cpu", rworld)
+    judge = rebase.cells.c75.make_judge(SEED, "X", rworld.parent / "laptop")
+    vi.train_judge(judge, rebase.gatec.t75.VI_ARM, n_updates=START + 1, batch=BATCH,
+                   max_len=rebase.cells.max_len_schedule("C"), n_actions=N_ACTIONS,
+                   exclude=set(), probe=_probe(), seed=SEED, sync_every=1, probe_every=1,
+                   draws=1, ckpt_dir=rebase.cells.ckpt_dir("C", SEED, rworld),
+                   log=lambda m: None)
+    st = json.loads((rebase.cells.ckpt_dir("C", SEED, rworld) / "state.json").read_text())
+    assert st["update"] == START + 1
+
+
+preflight = _load("exp085_preflight", EXP / "preflight.py")
+
+
+def _sd(v):
+    return {"w": torch.tensor([1.0, v])}
+
+
+@pytest.mark.parametrize("b,want", [(2.0, True), (2.5, False)])
+def test_preflight_gpu_reports_determinism(rworld, b, want):
+    """Catches a determinism check that compares a run with itself, or that cannot see a change."""
+    runs = iter([_sd(2.0), _sd(b)])
+    rec = preflight.gpu("cpu", rworld, seed=SEED, train_fn=lambda ck, seed, device, n: next(runs))
+    assert rec["deterministic"] is want and rec["n_updates"] == preflight.N_PREFLIGHT
+    assert json.loads((rworld / rebase.cells.PREFLIGHT_NAME).read_text())["deterministic"] is want
+
+
+@pytest.mark.slow
+def test_preflight_walks_matches_the_spec_table():
+    """Spec section 10: arm O's walks at update 20,000 have the measured distance shares within
+    0.02 of spec section 2's table, and arm C's those of max length 14."""
+    rec = preflight.walks(exclude=set())
+    rows = {(r["arm"], r["update"]): r["shares"] for r in rec["rows"]}
+    for got, want in ((rows[("O", 20000)], (0.524, 0.108, 0.149, 0.141, 0.079)),
+                      (rows[("C", 16000)], (0.884, 0.051, 0.045, 0.013, 0.007))):
+        assert all(abs(g - w) <= 0.02 for g, w in zip(got, want)), (got, want)

@@ -51,6 +51,7 @@ E75_OUT = E75 / "outputs"
 E82_OUT = REPO / "experiments" / "082_x_long_budget" / "outputs"
 E84_OUT = REPO / "experiments" / "084_gpu_port" / "outputs"
 PREFLIGHT_NAME = "exp085_preflight.json"
+PREFLIGHT_WALKS_NAME = "exp085_preflight_walks.json"
 
 check_seeds = c75.check_seeds
 
