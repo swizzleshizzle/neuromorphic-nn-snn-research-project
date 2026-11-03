@@ -619,7 +619,7 @@ def test_verdict_has_a_line_for_every_row_of_spec_section_8():
 def test_guard_trips_only_on_a_significant_drop_of_005():
     assert agg.guard_trips([-0.06] * 12)
     assert not agg.guard_trips([-0.04] * 12)
-    assert not agg.guard_trips([-0.5, 0.4] * 6)  # mean -0.05, signs mixed: p well above 0.025
+    assert not agg.guard_trips([-0.9, 0.7] * 6)  # mean -0.10, signs mixed: drop p well above 0.025
 
 
 def test_bars_are_the_spec_values():
