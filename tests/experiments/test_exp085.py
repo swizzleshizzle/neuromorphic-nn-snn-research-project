@@ -532,3 +532,184 @@ def test_gate_h_b_compares_the_replayed_judge_tensor_by_tensor(tmp_path, monkeyp
     for arm, s in gateh.train_picks():
         r = json.loads((tmp_path / gateh.cells.h_train_name(arm, s)).read_text())
         assert r["available"] is True and r["equal"] is want
+
+
+agg = _load("exp085_aggregate", EXP / "aggregate.py")
+S12 = list(range(12))
+
+
+def _per(v):
+    return list(v) if isinstance(v, (list, tuple)) else [v] * 12
+
+
+def _gl(overall, far):
+    bd = {str(d): {"hit": 0.6, "chance": 0.2, "n": 50} for d in (7, 8)}
+    bd.update({str(d): {"hit": far, "chance": 0.0, "n": 50} for d in (9, 10, 11)})
+    return {"margin": overall, "by_distance": bd, "hit": 0.5, "chance": 0.2, "n": 250}
+
+
+def _w(path, obj):
+    path.write_text(json.dumps(obj))
+
+
+def _search_rec(arm, d, s, rate):
+    return {"arm": f"J4V-{arm}", "judge": arm, "depth": d, "seed": s, "judge_seed": s,
+            "k": 4, "k_goal": 4, "mode": "C", "no_revisit": True, "judge_updates": 24000,
+            "device": "cuda", "limit_states": None, "n": 200, "solved": round(rate * 200),
+            "success_rate": rate, "optimality": 0.8, "mean_steps": 11.0,
+            "goal_fired_frac": 0.5, "first_fire_len": {"4": 1}, "wall_s": 300.0,
+            "git_commit": "abc"}
+
+
+def _agg_world(tmp, *, d11=(0.20, 0.20), d9=(0.55, 0.55), far=(0.15, 0.15), overall=0.37,
+               gate_c=True, h_a_same=True, h_b=("ok", True)):
+    out, e82 = tmp / "out", tmp / "e82"
+    out.mkdir()
+    e82.mkdir()
+    rates = {11: dict(zip(cells.ARMS, d11)), 9: dict(zip(cells.ARMS, d9))}
+    for s in S12:
+        _w(out / cells.gatec_name(s), {"pass": gate_c if s != 5 else True if gate_c else False})
+        _w(e82 / f"exp082_X16k_u16000_s{s}.json", {"gate_l": _gl(0.3689, 0.14)})
+        for d in cells.DEPTHS:
+            _w(e82 / f"exp082_J4V-X16k_d{d}_s{s}.json",
+               {"success_rate": 0.2 if d == 11 else 0.6})
+        for i, arm in enumerate(cells.ARMS):
+            f = _per(far[i])[s]
+            for u in cells.RECORD_LEGS:
+                _w(out / cells.record_name(arm, u, s),
+                   {"arm": arm, "seed": s, "n_updates": u, "device": "cuda",
+                    "max_len_schedule": cells.schedule_label(arm), "gate_l": _gl(_per(overall)[s], f),
+                    "git_commit": "abc", "loss_last": 0.2, "encoder_drift": 1.0,
+                    "s_per_update": 0.1, "wall_s": 400.0, "n_probe": 550})
+            for d in cells.DEPTHS:
+                _w(out / cells.search_name(arm, d, s),
+                   _search_rec(arm, d, s, _per(rates[d][arm])[s]))
+    for arm, d, s in gateh.search_picks():
+        r = json.loads((out / cells.search_name(arm, d, s)).read_text())
+        if not h_a_same:
+            r["solved"] += 1
+        _w(out / cells.h_search_name(arm, d, s), {**r, "wall_s": 1.0})
+    status, equal = h_b
+    for arm, s in gateh.train_picks():
+        _w(out / cells.h_train_name(arm, s),
+           {"available": status == "ok", **({"equal": equal} if status == "ok" else {})})
+    _w(out / cells.PREFLIGHT_NAME, {"deterministic": status == "ok", "s_per_update": 0.1})
+    return out, e82
+
+
+def _verdict(tmp, **kw):
+    out, e82 = _agg_world(tmp, **kw)
+    return agg.run_all(out, e82_root=e82)
+
+
+def test_verdict_has_a_line_for_every_row_of_spec_section_8():
+    v = agg.verdict
+    assert v(False, False, False, "REFUTED", "REFUTED", False) == "VOID"
+    assert v(True, False, False, "CONFIRMED", "CONFIRMED", False) == "VOID (DESKTOP NOT REPRODUCIBLE)"
+    assert v(True, True, False, "CONFIRMED", "CONFIRMED", False) == "UNRESOLVED (ARM UNTRAINED)"
+    assert (v(True, True, True, "CONFIRMED", "REFUTED", True)
+            == "OUTWARD WALKS PAY AT DEPTH 11, COST DEPTH 9")
+    assert v(True, True, True, "CONFIRMED", "REFUTED", False) == "OUTWARD WALKS PAY AT DEPTH 11"
+    assert (v(True, True, True, "CONFIRMED (SMALL)", "CONFIRMED", False)
+            == "ORDERING IMPROVES FAR OUT, SEARCH DOES NOT PAY")
+    assert (v(True, True, True, "REFUTED", "CONFIRMED (SMALL)", False)
+            == "OUTWARD WALKS DO NOT MOVE DEPTH 11")
+
+
+def test_guard_trips_only_on_a_significant_drop_of_005():
+    assert agg.guard_trips([-0.06] * 12)
+    assert not agg.guard_trips([-0.04] * 12)
+    assert not agg.guard_trips([-0.5, 0.4] * 6)  # mean -0.05, signs mixed: p well above 0.025
+
+
+def test_bars_are_the_spec_values():
+    assert agg.C1_MIN == 0.03 and agg.a80.CLAIM_MIN == 0.05 and agg.CLAIM_ALPHA == 0.025
+    assert agg.GUARD_DROP == -0.05 and agg.GATE_T_THRESHOLD == 0.1356358024691358
+
+
+def test_claim_1_is_o_minus_c_at_depth_11(tmp_path):
+    """Catches Claim 1 read at depth 9, against X16k, or the arms the wrong way round."""
+    assert _verdict(tmp_path, d11=(0.20, 0.25))["verdict"] == "OUTWARD WALKS PAY AT DEPTH 11"
+
+
+def test_claim_1_reversed_arms_do_not_confirm(tmp_path):
+    assert _verdict(tmp_path, d11=(0.25, 0.20))["verdict"] == "OUTWARD WALKS DO NOT MOVE DEPTH 11"
+
+
+def test_depth_9_alone_does_not_confirm_claim_1(tmp_path):
+    r = _verdict(tmp_path, d9=(0.50, 0.70))
+    assert r["verdict"] == "OUTWARD WALKS DO NOT MOVE DEPTH 11"
+
+
+def test_claim_2_is_o_minus_c_far_band(tmp_path):
+    r = _verdict(tmp_path, far=(0.15, 0.22))
+    assert r["verdict"] == "ORDERING IMPROVES FAR OUT, SEARCH DOES NOT PAY"
+
+
+def test_the_guard_reaches_the_verdict(tmp_path):
+    r = _verdict(tmp_path, d11=(0.20, 0.25), d9=(0.60, 0.53))
+    assert r["verdict"] == "OUTWARD WALKS PAY AT DEPTH 11, COST DEPTH 9"
+
+
+def test_untrained_arm_is_unresolved(tmp_path):
+    r = _verdict(tmp_path, d11=(0.20, 0.25), overall=0.05)
+    assert r["verdict"] == "UNRESOLVED (ARM UNTRAINED)"
+
+
+def test_a_failed_gate_c_is_void(tmp_path):
+    assert _verdict(tmp_path, gate_c=False)["verdict"] == "VOID"
+
+
+def test_a_search_replay_mismatch_is_void(tmp_path):
+    r = _verdict(tmp_path, d11=(0.20, 0.25), h_a_same=False)
+    assert r["verdict"] == "VOID (DESKTOP NOT REPRODUCIBLE)"
+
+
+def test_a_training_replay_mismatch_is_void(tmp_path):
+    r = _verdict(tmp_path, d11=(0.20, 0.25), h_b=("ok", False))
+    assert r["verdict"] == "VOID (DESKTOP NOT REPRODUCIBLE)"
+
+
+def test_gate_h_unavailable_is_said_not_passed(tmp_path):
+    """REVIEW FOCUS 5. With GPU training not deterministic, (b) is unavailable: the line says so
+    and the verdict is read, never VOID and never a silent PASS."""
+    r = _verdict(tmp_path, d11=(0.20, 0.25), h_b=("unavailable", None))
+    assert r["verdict"] == "OUTWARD WALKS PAY AT DEPTH 11"
+    line = next(x for x in r["lines"] if x.startswith("GATE H"))
+    assert "(b) unavailable" in line and "PASS" not in line.split("(b)")[1]
+
+
+@pytest.mark.parametrize("field,value", [("device", "cpu"), ("judge_updates", 20000),
+                                         ("limit_states", 5), ("n", 199), ("judge", "C"),
+                                         ("mode", "B")])
+def test_a_search_record_that_is_not_the_registered_cell_is_refused(tmp_path, field, value):
+    """REVIEW FOCUS 4."""
+    out, e82 = _agg_world(tmp_path)
+    p = out / cells.search_name("O", 11, 4)
+    r = json.loads(p.read_text())
+    r[field] = value
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match=field):
+        agg.run_all(out, e82_root=e82)
+
+
+@pytest.mark.parametrize("field,value", [("device", "cpu"), ("n_updates", 20000),
+                                         ("arm", "C"), ("max_len_schedule", "14")])
+def test_a_training_record_that_is_not_the_arm_at_24000_is_refused(tmp_path, field, value):
+    out, e82 = _agg_world(tmp_path)
+    p = out / cells.record_name("O", 24000, 4)
+    r = json.loads(p.read_text())
+    r[field] = value
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match=field):
+        agg.run_all(out, e82_root=e82)
+
+
+def test_mixed_checkouts_are_refused(tmp_path):
+    out, e82 = _agg_world(tmp_path)
+    p = out / cells.record_name("C", 24000, 7)
+    r = json.loads(p.read_text())
+    r["git_commit"] = "def"
+    p.write_text(json.dumps(r))
+    with pytest.raises(SystemExit, match="checkout"):
+        agg.run_all(out, e82_root=e82)
