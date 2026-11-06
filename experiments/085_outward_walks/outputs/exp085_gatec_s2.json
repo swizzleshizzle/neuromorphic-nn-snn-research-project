@@ -1,0 +1,20 @@
+{
+ "blobs": {
+  "judge.pt": "9a8c9d6f4a8656dd8adea6ed30d19f51ef5e6b71",
+  "state.json": "21e63480d1cfe2fc60ca4076516eb603103b893f"
+ },
+ "continued_from": {
+  "experiment": "EXP-082",
+  "update": 16000
+ },
+ "git_commit": "2a549220c1276e8d32f3d40b559f47c12cba65ce",
+ "identity_bad": [],
+ "opt_bad": [],
+ "pass": true,
+ "seed": 2,
+ "start": "seeded",
+ "start_gate_l_equal": true,
+ "start_margin": 0.34453703703703703,
+ "start_update": 16000,
+ "wall_s": 117.8
+}
