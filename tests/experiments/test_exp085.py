@@ -552,10 +552,13 @@ def _w(path, obj):
     path.write_text(json.dumps(obj))
 
 
+OTHER = "cuda" if cells.DEVICE == "cpu" else "cpu"
+
+
 def _search_rec(arm, d, s, rate):
     return {"arm": f"J4V-{arm}", "judge": arm, "depth": d, "seed": s, "judge_seed": s,
             "k": 4, "k_goal": 4, "mode": "C", "no_revisit": True, "judge_updates": 24000,
-            "device": "cuda", "limit_states": None, "n": 200, "solved": round(rate * 200),
+            "device": cells.DEVICE, "limit_states": None, "n": 200, "solved": round(rate * 200),
             "success_rate": rate, "optimality": 0.8, "mean_steps": 11.0,
             "goal_fired_frac": 0.5, "first_fire_len": {"4": 1}, "wall_s": 300.0,
             "git_commit": "abc"}
@@ -577,7 +580,7 @@ def _agg_world(tmp, *, d11=(0.20, 0.20), d9=(0.55, 0.55), far=(0.15, 0.15), over
             f = _per(far[i])[s]
             for u in cells.RECORD_LEGS:
                 _w(out / cells.record_name(arm, u, s),
-                   {"arm": arm, "seed": s, "n_updates": u, "device": "cuda",
+                   {"arm": arm, "seed": s, "n_updates": u, "device": cells.DEVICE,
                     "max_len_schedule": cells.schedule_label(arm), "gate_l": _gl(_per(overall)[s], f),
                     "git_commit": "abc", "loss_last": 0.2, "encoder_drift": 1.0,
                     "s_per_update": 0.1, "wall_s": 400.0, "n_probe": 550})
@@ -592,10 +595,10 @@ def _agg_world(tmp, *, d11=(0.20, 0.20), d9=(0.55, 0.55), far=(0.15, 0.15), over
     status, equal = h_b
     for arm, s in gateh.train_picks():
         _w(out / cells.h_train_name(arm, s),
-           {"arm": arm, "seed": s, "device": "cuda", "git_commit": "abc",
+           {"arm": arm, "seed": s, "device": cells.DEVICE, "git_commit": "abc",
             "available": status == "ok", **({"equal": equal} if status == "ok" else {})})
     _w(out / cells.PREFLIGHT_NAME, {"deterministic": status == "ok", "s_per_update": 0.1,
-                                    "device": "cuda", "git_commit": "abc"})
+                                    "device": cells.DEVICE, "git_commit": "abc"})
     return out, e82
 
 
@@ -607,7 +610,7 @@ def _verdict(tmp, **kw):
 def test_verdict_has_a_line_for_every_row_of_spec_section_8():
     v = agg.verdict
     assert v(False, False, False, "REFUTED", "REFUTED", False) == "VOID"
-    assert v(True, False, False, "CONFIRMED", "CONFIRMED", False) == "VOID (DESKTOP NOT REPRODUCIBLE)"
+    assert v(True, False, False, "CONFIRMED", "CONFIRMED", False) == "VOID (NOT REPRODUCIBLE)"
     assert v(True, True, False, "CONFIRMED", "CONFIRMED", False) == "UNRESOLVED (ARM UNTRAINED)"
     assert (v(True, True, True, "CONFIRMED", "REFUTED", True)
             == "OUTWARD WALKS PAY AT DEPTH 11, COST DEPTH 9")
@@ -664,12 +667,12 @@ def test_a_failed_gate_c_is_void(tmp_path):
 
 def test_a_search_replay_mismatch_is_void(tmp_path):
     r = _verdict(tmp_path, d11=(0.20, 0.25), h_a_same=False)
-    assert r["verdict"] == "VOID (DESKTOP NOT REPRODUCIBLE)"
+    assert r["verdict"] == "VOID (NOT REPRODUCIBLE)"
 
 
 def test_a_training_replay_mismatch_is_void(tmp_path):
     r = _verdict(tmp_path, d11=(0.20, 0.25), h_b=("ok", False))
-    assert r["verdict"] == "VOID (DESKTOP NOT REPRODUCIBLE)"
+    assert r["verdict"] == "VOID (NOT REPRODUCIBLE)"
 
 
 def test_gate_h_unavailable_is_said_not_passed(tmp_path):
@@ -681,7 +684,7 @@ def test_gate_h_unavailable_is_said_not_passed(tmp_path):
     assert "(b) unavailable" in line and "PASS" not in line.split("(b)")[1]
 
 
-@pytest.mark.parametrize("field,value", [("device", "cpu"), ("judge_updates", 20000),
+@pytest.mark.parametrize("field,value", [("device", OTHER), ("judge_updates", 20000),
                                          ("limit_states", 5), ("n", 199), ("judge", "C"),
                                          ("mode", "B")])
 def test_a_search_record_that_is_not_the_registered_cell_is_refused(tmp_path, field, value):
@@ -695,7 +698,7 @@ def test_a_search_record_that_is_not_the_registered_cell_is_refused(tmp_path, fi
         agg.run_all(out, e82_root=e82)
 
 
-@pytest.mark.parametrize("field,value", [("device", "cpu"), ("n_updates", 20000),
+@pytest.mark.parametrize("field,value", [("device", OTHER), ("n_updates", 20000),
                                          ("arm", "C"), ("max_len_schedule", "14")])
 def test_a_training_record_that_is_not_the_arm_at_24000_is_refused(tmp_path, field, value):
     out, e82 = _agg_world(tmp_path)
@@ -736,11 +739,28 @@ def test_chain_has_every_stage_in_spec_order():
         assert script in text
 
 
-def test_chain_checks_the_exp084_verdict():
-    """Spec section 4: the chain must not train on the desktop unless EXP-084 read GPU PORT
-    REPRODUCES."""
+def test_chain_runs_every_stage_on_the_laptop_cpu_without_exp084():
+    """Amendment 2026-11-06: the run moved to the laptop CPU, so no CUDA check, no EXP-084
+    precondition, and every stage on cells.DEVICE."""
     text = (EXP / "chain085.ps1").read_text()
-    assert "VERDICT: GPU PORT REPRODUCES" in text and "verdict084.txt" in text
+    assert "verdict084" not in text and "cuda" not in text.lower()
+    assert "C:\\Users\\mlgbr\\Desktop\\Projects\\neuromorphic-nn-snn-research-project" in text
+    stages = re.findall(r'Stage "(\w+)" "[\w.]+" @\(([^)]*)\)', text)
+    assert [s for s, _ in stages] == ["rebase", "preflight", "train", "search", "gateha", "gatehb"]
+    for s, argv in stages:
+        assert '"--device", "cpu"' in argv, s
+    assert '"train" "train.py" @("--device", "cpu", "--workers", "4")' in text
+    assert '"search" "evaluate.py" @("--device", "cpu", "--workers", "12")' in text
+
+
+def test_the_run_device_is_the_laptop_cpu_everywhere():
+    """Amendment 2026-11-06. Every driver defaults to cells.DEVICE, so a default never puts one
+    stage on another device."""
+    assert cells.DEVICE == "cpu"
+    for f in ("rebase.py", "preflight.py", "train.py", "evaluate.py", "gateh.py"):
+        text = (EXP / f).read_text()
+        assert 'ap.add_argument("--device", default=cells.DEVICE)' in text, f
+        assert '"cuda"' not in text.replace('dev.type == "cuda"', ""), f
 
 
 def test_drivers_have_no_em_dashes_or_backticks_in_strings():
@@ -751,14 +771,17 @@ def test_drivers_have_no_em_dashes_or_backticks_in_strings():
             assert not re.search(r'"[^"\n]*`[^"\n]*"', text), f
 
 
-def _watch(tmp_path, status, rounds, crashes=0):
+def _watch(tmp_path, status, rounds, crashes=0, boot=None):
     """Run watch085.sh against a stub ssh that answers `status` (None: unreachable, exit 255)
-    and records every launch, and a stub push that records every message."""
+    and records every launch, and a stub push that records every message. `boot` seeds the
+    last boot time the watcher saw. State persists in tmp_path across calls."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
     bin_ = tmp_path / "bin"
     bin_.mkdir(exist_ok=True)
     log = tmp_path / "calls.log"
     (bin_ / "ssh").write_text(
         "#!/usr/bin/env bash\n"
+        f'echo "$*" >> "{tmp_path / "ssh.log"}"\n'
         f'case "$*" in *launch085*) echo launch >> "{log}"; exit 0;; esac\n'
         + ("exit 255\n" if status is None else f"echo '{status}'\n"))
     (bin_ / "push").write_text(f'#!/usr/bin/env bash\necho "push $1" >> "{log}"\n')
@@ -768,6 +791,8 @@ def _watch(tmp_path, status, rounds, crashes=0):
     state.mkdir(exist_ok=True)
     if crashes:
         (state / "crashes").write_text(str(crashes))
+    if boot:
+        (state / "boot").write_text(boot)
     env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "WATCH085_SLEEP": "0",
            "WATCH085_ROUNDS": str(rounds), "WATCH085_STATE": str(state),
            "WATCH085_PUSH": str(bin_ / "push")}
@@ -778,7 +803,8 @@ def _watch(tmp_path, status, rounds, crashes=0):
         if (state / "crashes").exists() else "0"
 
 
-DEAD = "False|py 0|ch 0|T 3|S 0|H 0|2026-11-04 01:00:00 STOP: stage train failed"
+BOOT = "boot 2026-11-06 01:00:00"
+DEAD = f"False|py 0|ch 0|T 3|S 0|H 0|{BOOT}|2026-11-06 02:00:00 STOP: stage train failed"
 
 
 @needs_bash
@@ -789,35 +815,70 @@ def test_watcher_relaunches_a_crashed_chain_and_stops_after_three(tmp_path):
 
 
 @needs_bash
-def test_watcher_never_relaunches_on_an_unreachable_desktop(tmp_path):
-    """Catches an ssh failure read as a dead chain: after a bugcheck the desktop can be offline
-    for hours, and that must never use up the three relaunches."""
+def test_watcher_never_relaunches_on_an_unreachable_laptop(tmp_path):
+    """Catches an ssh failure read as a dead chain: a sleeping or rebooting laptop can be
+    offline for hours, and that must never use up the three relaunches."""
     code, calls, crashes = _watch(tmp_path, None, rounds=4)
     assert code == 5 and crashes == "0" and "launch" not in calls
-    assert calls == ["push EXP-085: desktop unreachable"]
+    assert calls == ["push EXP-085: laptop unreachable"]
 
 
 @needs_bash
 def test_watcher_leaves_a_running_chain_alone(tmp_path):
     """Catches a relaunch between two stages, when no python is running but the chain is."""
-    code, calls, _ = _watch(tmp_path, "False|py 0|ch 1|T 3|S 0|H 0|stage search", rounds=2)
+    code, calls, _ = _watch(tmp_path, f"False|py 0|ch 1|T 3|S 0|H 0|{BOOT}|stage search", rounds=2)
     assert code == 5 and calls == []
 
 
 @needs_bash
 def test_watcher_exits_on_a_deliberate_stop_and_on_a_verdict(tmp_path):
-    stop = "False|py 0|ch 0|T 0|S 0|H 0|2026-11-04 STOP: EXP-084 has not read GPU PORT REPRODUCES"
-    assert _watch(tmp_path, stop, rounds=2)[:2] == (3, [])
-    assert _watch(tmp_path, "True|py 0|ch 0|T 24|S 48|H 8|chain done", rounds=2)[0] == 0
+    stop = f"False|py 0|ch 0|T 0|S 0|H 0|{BOOT}|2026-11-06 STOP: tests failed on the laptop"
+    assert _watch(tmp_path / "a", stop, rounds=2)[:2] == (3, ["push EXP-085: chain stopped"])
+    code, calls, _ = _watch(tmp_path / "b", f"True|py 0|ch 0|T 24|S 48|H 8|{BOOT}|chain done",
+                            rounds=2)
+    assert code == 0 and calls == ["push EXP-085: verdict ready"]
+
+
+@needs_bash
+def test_watcher_relaunches_after_a_reboot_without_counting_a_crash(tmp_path):
+    """Amendment 2026-11-06: Windows Update restarts the laptop around 03:31 most nights. Four
+    nights of restarts counted as crashes would stop the run on the third; a new boot time is a
+    restart, not a crash."""
+    code, calls, crashes = _watch(tmp_path, DEAD, rounds=1, boot="boot 2026-11-05 01:00:00")
+    assert calls == ["launch"] and crashes == "0"
+    assert (tmp_path / "state" / "boot").read_text().strip() == BOOT
+
+
+@needs_bash
+def test_watcher_state_carries_across_one_round_runs(tmp_path):
+    """The VPS runs it as a timer, one round per run: the unreachable count, the crash count and
+    the finished mark must live in the state folder, and a finished run never pushes twice."""
+    tmp_path.joinpath("u").mkdir()
+    for _ in range(3):
+        _watch(tmp_path / "u", None, rounds=1)
+    assert (tmp_path / "u" / "calls.log").read_text().split().count("unreachable") == 1
+    tmp_path.joinpath("v").mkdir()
+    done = f"True|py 0|ch 0|T 24|S 48|H 8|{BOOT}|chain done"
+    _watch(tmp_path / "v", done, rounds=1)
+    code, calls, _ = _watch(tmp_path / "v", done, rounds=1)
+    assert code == 0 and calls == ["push EXP-085: verdict ready"]
+
+
+@needs_bash
+def test_watcher_polls_the_laptop_checkout(tmp_path):
+    _watch(tmp_path, f"False|py 4|ch 1|T 0|S 0|H 0|{BOOT}|stage train", rounds=1)
+    sent = (tmp_path / "ssh.log").read_text()
+    assert sent.split()[sent.split().index("BatchMode=yes") + 1] == "laptop"
+    assert "C:\\Users\\mlgbr\\Desktop\\Projects\\neuromorphic-nn-snn-research-project\\experiments\\085_outward_walks\\status085.ps1" in sent
 
 
 # Final review fixes.
 
 def test_watcher_tests_skip_where_there_is_no_bash():
-    """Final review, Critical 1. chain085.ps1 runs this file on the Windows desktop, where the
+    """Final review, Critical 1. chain085.ps1 runs this file on Windows, where the
     watcher tests cannot run bash; unskipped they stop the chain at its check stage."""
     for name in ("test_watcher_relaunches_a_crashed_chain_and_stops_after_three",
-                 "test_watcher_never_relaunches_on_an_unreachable_desktop",
+                 "test_watcher_never_relaunches_on_an_unreachable_laptop",
                  "test_watcher_leaves_a_running_chain_alone",
                  "test_watcher_exits_on_a_deliberate_stop_and_on_a_verdict"):
         marks = [m for m in getattr(globals()[name], "pytestmark", []) if m.name == "skipif"]
@@ -859,7 +920,7 @@ def test_every_record_must_come_from_one_checkout(tmp_path, name):
         agg.run_all(out, e82_root=e82)
 
 
-@pytest.mark.parametrize("field,value", [("device", "cpu"), ("arm", "X"), ("seed", 99)])
+@pytest.mark.parametrize("field,value", [("device", OTHER), ("arm", "X"), ("seed", 99)])
 def test_a_training_replay_record_that_is_not_the_pick_is_refused(tmp_path, field, value):
     """Final review, Important 4 (Review Focus 4 names replay records)."""
     out, e82 = _agg_world(tmp_path)
@@ -889,3 +950,35 @@ def test_the_verdict_line_says_when_gate_h_b_is_unavailable(tmp_path):
     assert line == "VERDICT: OUTWARD WALKS PAY AT DEPTH 11 (GATE H (b) UNAVAILABLE)"
     ok = _verdict(tmp_path / "ok", d11=(0.20, 0.25)) if (tmp_path / "ok").mkdir() is None else None
     assert next(x for x in ok["lines"] if x.startswith("VERDICT:")) == "VERDICT: OUTWARD WALKS PAY AT DEPTH 11"
+
+
+# Amendment 2026-11-06: the laptop runs training and the search in a worker pool.
+
+def _driver(tmp_path, script, *argv):
+    env = {**os.environ, "PYTHONPATH": str(EXP.parents[1] / "src")}
+    return subprocess.run([sys.executable, "-u", str(EXP / script), "--device", "cpu",
+                           "--out-dir", str(tmp_path), *argv], env=env, capture_output=True,
+                          text=True, timeout=240)
+
+
+def test_train_workers_run_each_arm_seed_in_a_spawned_process(tmp_path):
+    """Windows starts pool workers by spawn, which re-imports the driver and pickles the job;
+    the pool here is forced to spawn so the VPS runs the laptop's path. An unrebased folder makes
+    every job refuse, which proves each one reached train.run in a worker."""
+    r = _driver(tmp_path, "train.py", "--workers", "2")
+    assert "24 arm-seeds, 2 workers" in r.stdout
+    assert r.returncode != 0 and "is not rebased" in r.stderr, r.stderr[-2000:]
+    assert "Pickl" not in r.stderr
+
+
+def test_search_workers_run_each_cell_in_a_spawned_process(tmp_path):
+    r = _driver(tmp_path, "evaluate.py", "--workers", "2")
+    assert "48 cells, 2 workers" in r.stdout
+    assert r.returncode != 0 and "Pickl" not in r.stderr, r.stderr[-2000:]
+    assert str(tmp_path / "arm_") in r.stderr, r.stderr[-2000:]
+
+
+def test_both_pools_force_spawn():
+    for f in ("train.py", "evaluate.py"):
+        text = (EXP / f).read_text()
+        assert 'mp_context=multiprocessing.get_context("spawn")' in text, f

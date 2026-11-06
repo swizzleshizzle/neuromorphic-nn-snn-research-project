@@ -1,4 +1,5 @@
-"""EXP-085 rebase: move X16k's CPU checkpoint onto the device for one arm. Runs on the desktop.
+"""EXP-085 rebase: restart X16k's encoding stream on the run device for one arm (the laptop CPU
+since the 2026-11-06 amendment; the step was written to move the checkpoint onto the desktop GPU).
 
 X16k was trained on the laptop CPU, and train_judge refuses to resume a checkpoint whose
 generator_device differs from the device asked for. So each arm gets a copy of the Gate C start
@@ -8,8 +9,8 @@ An arm that already has a state.json is never touched again.
 
 Spec: docs/superpowers/specs/2026-11-03-exp085-outward-walks-design.md, section 5.
 
-Usage (desktop, repo root, PYTHONPATH=src):
-    python -u experiments/085_outward_walks/rebase.py --device cuda
+Usage (laptop, repo root, PYTHONPATH=src):
+    python -u experiments/085_outward_walks/rebase.py --device cpu
 """
 
 from __future__ import annotations
@@ -93,7 +94,7 @@ def rebase(arm: str, seed: int, device, out=cells.OUT) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=cells.DEVICE)
     ap.add_argument("--seeds", type=int, nargs="+", default=list(cells.SEEDS))
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()

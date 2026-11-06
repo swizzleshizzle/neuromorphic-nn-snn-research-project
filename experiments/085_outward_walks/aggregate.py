@@ -42,7 +42,7 @@ def verdict(c_ok: bool, h_ok: bool, t_ok: bool, c1: str, c2: str, guard: bool) -
     if not c_ok:
         return "VOID"
     if not h_ok:
-        return "VOID (DESKTOP NOT REPRODUCIBLE)"
+        return "VOID (NOT REPRODUCIBLE)"
     if not t_ok:
         return "UNRESOLVED (ARM UNTRAINED)"
     if c1 == "CONFIRMED" and guard:
@@ -82,7 +82,7 @@ def _expect(rec, name, checks) -> dict:
 def read_train(out, arm, update, seed) -> dict:
     name = cells.record_name(arm, update, seed)
     return _expect(_read(out / name), name, (
-        ("arm", arm), ("seed", seed), ("n_updates", update), ("device", "cuda"),
+        ("arm", arm), ("seed", seed), ("n_updates", update), ("device", cells.DEVICE),
         ("max_len_schedule", cells.schedule_label(arm))))
 
 
@@ -91,7 +91,7 @@ def read_search(out, arm, depth, seed, name=None) -> dict:
     return _expect(_read(out / name), name, (
         ("arm", f"J4V-{arm}"), ("judge", arm), ("depth", depth), ("seed", seed),
         ("judge_seed", seed), ("k", 4), ("k_goal", 4), ("mode", "C"), ("no_revisit", True),
-        ("judge_updates", cells.END), ("device", "cuda"), ("limit_states", None), ("n", 200)))
+        ("judge_updates", cells.END), ("device", cells.DEVICE), ("limit_states", None), ("n", 200)))
 
 
 def check_one_checkout(recs) -> str:
@@ -111,7 +111,7 @@ def gate_h(out) -> dict:
                                read_search(out, arm, d, s, cells.h_search_name(arm, d, s)))]
     pre = _read(out / cells.PREFLIGHT_NAME)
     b = [_expect(_read(out / cells.h_train_name(arm, s)), cells.h_train_name(arm, s),
-                 (("arm", arm), ("seed", s), ("device", "cuda"),
+                 (("arm", arm), ("seed", s), ("device", cells.DEVICE),
                   ("available", pre.get("deterministic") is True)))
          for arm, s in gateh.train_picks()]
     b_available = all(r.get("available") is True for r in b)
@@ -127,7 +127,7 @@ def _h_line(h) -> str:
     if h["b_available"]:
         b = "PASS" if not h["b_bad"] else f"FAIL on {h['b_bad']} of 4"
     else:
-        b = "unavailable (pre-flight found GPU training not deterministic)"
+        b = "unavailable (pre-flight found training not deterministic)"
     return f"GATE H (hardware): (a) search replay {a}; (b) {b}"
 
 

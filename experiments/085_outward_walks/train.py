@@ -9,8 +9,8 @@ its end, so a seed killed mid-leg resumes there and is never recorded at the wro
 
 Spec: docs/superpowers/specs/2026-11-03-exp085-outward-walks-design.md, sections 2 and 6.
 
-Usage (desktop, repo root, PYTHONPATH=src):
-    python -u experiments/085_outward_walks/train.py --device cuda
+Usage (laptop, repo root, PYTHONPATH=src):
+    python -u experiments/085_outward_walks/train.py --device cpu --workers 4
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import torch
@@ -127,16 +129,23 @@ def pending(out=cells.OUT) -> list[tuple[int, str]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=cells.DEVICE)
+    ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()
     setup_device(args.device)
     jobs = pending(args.out_dir)
-    print(f"EXP-085 train: {len(jobs)} arm-seeds on {args.device}, legs {cells.LEGS}", flush=True)
-    for i, (s, a) in enumerate(jobs, 1):
-        for r in run(a, s, args.device, args.out_dir):
-            print(f"  {i}/{len(jobs)}  {a} s{s} u{r['n_updates']} margin "
-                  f"{r['gate_l']['margin']:.4f} {r['s_per_update']:.3f} s/update", flush=True)
+    print(f"EXP-085 train: {len(jobs)} arm-seeds, {args.workers} workers, on {args.device}, "
+          f"legs {cells.LEGS}", flush=True)
+    # Spawn on every platform, so the VPS tests run the laptop's (Windows) start-up path.
+    with ProcessPoolExecutor(max_workers=args.workers,
+                             mp_context=multiprocessing.get_context("spawn")) as pool:
+        futs = {pool.submit(run, a, s, args.device, args.out_dir): (s, a) for s, a in jobs}
+        for i, f in enumerate(as_completed(futs), 1):
+            s, a = futs[f]
+            for r in f.result():
+                print(f"  {i}/{len(jobs)}  {a} s{s} u{r['n_updates']} margin "
+                      f"{r['gate_l']['margin']:.4f} {r['s_per_update']:.3f} s/update", flush=True)
     print("done.")
 
 

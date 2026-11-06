@@ -1,4 +1,4 @@
-"""EXP-085 cells: X16k (EXP-082) continued from update 16,000 to 24,000 on the device in two arms,
+"""EXP-085 cells: X16k (EXP-082) continued from update 16,000 to 24,000 on the laptop CPU in two arms,
 C on X's walks (max length 14) and O on outward walks (max length 14 rising to 30 by update
 20,000). Distance-to-solved is the probe's yardstick and the search's success test only; the
 lever is walk length, never true distance.
@@ -44,6 +44,9 @@ SYNC_EVERY = 100
 PROBE_EVERY = 250
 DRAWS = 1
 DEPTHS = (9, 11)
+# Amendment 2026-11-06: the run moved to the laptop CPU (spec section 13). Every driver defaults
+# to it and the aggregator checks every record against it.
+DEVICE = "cpu"
 SEEDS = c75.EVAL_SEEDS
 H_SEED = 85
 OUT = HERE / "outputs"
