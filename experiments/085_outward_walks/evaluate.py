@@ -5,8 +5,8 @@ section 8). EXP-084's Gate E showed this search gives the CPU's numbers exactly 
 
 Spec: docs/superpowers/specs/2026-11-03-exp085-outward-walks-design.md, section 7.
 
-Usage (desktop, repo root, PYTHONPATH=src):
-    python -u experiments/085_outward_walks/evaluate.py --device cuda
+Usage (laptop, repo root, PYTHONPATH=src):
+    python -u experiments/085_outward_walks/evaluate.py --device cpu --workers 12
 """
 
 from __future__ import annotations
@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import multiprocessing
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import torch
@@ -77,16 +79,24 @@ def pending(out=cells.OUT) -> list[tuple[str, int, int]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=cells.DEVICE)
+    ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()
     setup_device(args.device)
     jobs = pending(args.out_dir)
-    print(f"EXP-085 search: {len(jobs)} cells on {args.device}", flush=True)
-    for i, (a, d, s) in enumerate(jobs, 1):
-        r = run_cell(a, d, s, args.device, args.out_dir)
-        print(f"  {i}/{len(jobs)}  J4V-{a} d{d} s{s} solved {r['solved']}/{r['n']} "
-              f"wall {r['wall_s']}s", flush=True)
+    print(f"EXP-085 search: {len(jobs)} cells, {args.workers} workers, on {args.device}",
+          flush=True)
+    # Spawn on every platform, so the VPS tests run the laptop's (Windows) start-up path.
+    with ProcessPoolExecutor(max_workers=args.workers,
+                             mp_context=multiprocessing.get_context("spawn")) as pool:
+        futs = {pool.submit(run_cell, a, d, s, args.device, args.out_dir): (a, d, s)
+                for a, d, s in jobs}
+        for i, f in enumerate(as_completed(futs), 1):
+            a, d, s = futs[f]
+            r = f.result()
+            print(f"  {i}/{len(jobs)}  J4V-{a} d{d} s{s} solved {r['solved']}/{r['n']} "
+                  f"wall {r['wall_s']}s", flush=True)
     print("done.")
 
 

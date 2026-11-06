@@ -212,3 +212,36 @@ walks at update 20,000 have the measured distance shares within 0.02 of the tabl
 - Whether the gain, if any, keeps growing past 24,000 updates or with a longer max length.
 - A DO NOT MOVE reading with Claim 2 refuted says outward walks did not improve far ordering from
   X16k at this budget. It does not show the near band was not the bottleneck in EXP-079.
+
+## 13. Amendment 2026-11-06: the run moves to the laptop CPU
+
+Made before any EXP-085 number exists. The desktop is still faulting at stock memory speed
+(bugcheck 0x7A with status 0xC0000005 after D.O.C.P. was turned off, and 8 new bad pages logged
+2026-11-03 at 2133), so Michael chose section 11's fallback: "just send the exp on the laptop"
+(2026-11-06). What changes:
+
+- **Device.** Both arms and the search run on the laptop CPU (SwizzlesDuo), `cells.DEVICE = "cpu"`.
+  Every driver defaults to it, and the record checks (section 6) require `device` `cpu` on every
+  record. No record may mix devices, as before.
+- **Section 4's precondition is dropped.** It existed so GPU search numbers could be read against
+  EXP-082's CPU ones. This run is on EXP-082's own machine and device, so the section 9
+  comparisons need no port. EXP-084 is parked, not void: its Gate T waits on the desktop.
+- **Section 5's rebase still runs, on the CPU.** The encoding stream restarts from the same
+  formula, so both arms still share one start exactly. Continuing X16k's own stream would also
+  have been valid; keeping the step keeps one code path.
+- **Gate H stays, re-read.** On the laptop it checks that a cell and a training leg reproduce
+  across processes. EXP-082 measured seeded runs byte-identical on this machine, so it should
+  pass; a fail still voids. Its verdict label becomes **VOID (NOT REPRODUCIBLE)**, since naming
+  the desktop would be wrong. The pre-flight keeps its `--part gpu` name.
+- **Workers.** Training runs 4 arm-seeds at once (EXP-082's training pool), the search 12 cells
+  at once (EXP-082's search pool), each worker single-threaded, started by spawn.
+- **Gate T and Claim 1 bars are unchanged.** Both were measured on this laptop (EXP-080's bar,
+  EXP-082's paired sd), so they now sit in the regime they came from, not one removed from it.
+- **Watcher.** The VPS polls the laptop from a systemd timer, one round per run, with its counts
+  in a state folder. A changed boot time (Windows Update, most nights near 03:31) is a restart,
+  not a crash, and is relaunched without using up the three crash relaunches.
+- **Cost.** 24 arm-seeds x 8000 updates at EXP-082's 577 updates/h per worker is about 333
+  worker-hours, so about **83 h at 4 workers**; arm O's longer walks add some, and the first
+  20,000-update records give the real rate. The search adds about 8 to 12 h. **Budget about 4
+  days.** The laptop must stay awake and online for that span; a sleep pauses the run and the
+  watcher pushes after three unanswered polls.

@@ -1,16 +1,17 @@
-"""EXP-085 Gate H, hardware (voiding). The desktop has logged memory faults, so two replays:
+"""EXP-085 Gate H, hardware (voiding). Written for the desktop, which logged memory faults; on the
+laptop (amendment 2026-11-06) it is a cross-process determinism check. Two replays:
 
 (a) search: 2 cells per depth, picked by random.Random(85) before the run, are run again into
     their own records and must match the originals in every field but wall time and commit;
-(b) training: only when the pre-flight found GPU training deterministic. 2 seeds per arm replay
+(b) training: only when the pre-flight found training deterministic. 2 seeds per arm replay
     from the update-23,751 snapshot to 24,000 and the judge must be tensor-equal to the arm's.
     Otherwise each pick is recorded as unavailable.
 
 Spec: docs/superpowers/specs/2026-11-03-exp085-outward-walks-design.md, section 6.
 
-Usage (desktop, repo root, PYTHONPATH=src):
-    python -u experiments/085_outward_walks/gateh.py --part a --device cuda
-    python -u experiments/085_outward_walks/gateh.py --part b --device cuda
+Usage (laptop, repo root, PYTHONPATH=src):
+    python -u experiments/085_outward_walks/gateh.py --part a --device cpu
+    python -u experiments/085_outward_walks/gateh.py --part b --device cpu
 """
 
 from __future__ import annotations
@@ -98,7 +99,7 @@ def run_b(device, out=cells.OUT) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--part", choices=("a", "b"), required=True)
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=cells.DEVICE)
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()
     setup_device(args.device)

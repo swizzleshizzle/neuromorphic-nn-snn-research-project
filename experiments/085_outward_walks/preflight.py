@@ -1,7 +1,7 @@
 """EXP-085 pre-flight (spec section 10).
 
---part gpu (desktop): rebase seed 0 arm C twice into temporary folders, train each 100 updates on
-the device, and record whether the two judges are tensor-equal (it decides whether Gate H (b) is
+--part gpu (the run machine; the name predates the move to the laptop CPU): rebase seed 0 arm C
+twice into temporary folders, train each 100 updates on the device, and record whether the two judges are tensor-equal (it decides whether Gate H (b) is
 available) and the cost per update.
 
 --part walks (VPS): the share of each arm's training states by true distance at updates 16,000,
@@ -9,7 +9,7 @@ available) and the cost per update.
 only: true distance never reaches training.
 
 Usage (repo root, PYTHONPATH=src):
-    python -u experiments/085_outward_walks/preflight.py --part gpu --device cuda
+    python -u experiments/085_outward_walks/preflight.py --part gpu --device cpu
     .venv/bin/python -u experiments/085_outward_walks/preflight.py --part walks
 """
 
@@ -122,7 +122,7 @@ def main() -> None:
     ap.add_argument("--part", choices=("gpu", "walks", "train-once"), required=True)
     ap.add_argument("--ck", type=Path)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default=cells.DEVICE)
     ap.add_argument("--out-dir", type=Path, default=cells.OUT)
     args = ap.parse_args()
     if args.part == "train-once":
